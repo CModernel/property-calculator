@@ -9,31 +9,39 @@ const PropertyInvestmentCalculator = () => {
   const [utilities, setUtilities] = useState(200);
   const [councilRates, setCouncilRates] = useState(450);
   const [insurance, setInsurance] = useState(80);
-  
+
   // Rental options
   const [rentalOption, setRentalOption] = useState('single');
   const [singleRoomRent, setSingleRoomRent] = useState(240);
   const [sharedRoomRent, setSharedRoomRent] = useState(160);
-  
+
   // Your personal expenses
   const [fortnightlyIncome, setFortnightlyIncome] = useState(3228);
   const [foodExpenses, setFoodExpenses] = useState(100);
   const [transportExpenses, setTransportExpenses] = useState(50);
   const [otherExpenses, setOtherExpenses] = useState(50);
-  
+
   // Initial offset
   const [initialOffset, setInitialOffset] = useState(0);
-  const [depositStartMonth, setDepositStartMonth] = useState(0);
+
+  // Offset contributions state
+  const [offsetContributions, setOffsetContributions] = useState([]);
+  const [showAddContribution, setShowAddContribution] = useState(false);
+  const [newContribMonth, setNewContribMonth] = useState(1);
+  const [newContribAmount, setNewContribAmount] = useState(10000);
+
+  // Calculate total scheduled offset contributions
+  const totalScheduledOffset = offsetContributions.reduce((sum, contrib) => sum + contrib.amount, 0);
 
   // Helper function to format months in different ways
   const formatMonthsDetailed = (months) => {
     const totalYears = (months / 12).toFixed(1);
     const wholeYears = Math.floor(months / 12);
     const remainingMonths = months % 12;
-    const humanReadable = remainingMonths === 0 
+    const humanReadable = remainingMonths === 0
       ? `${wholeYears} ${wholeYears === 1 ? 'year' : 'years'}`
       : `${wholeYears} ${wholeYears === 1 ? 'year' : 'years'} ${remainingMonths} ${remainingMonths === 1 ? 'month' : 'months'}`;
-    
+
     return {
       decimal: totalYears,
       technical: months,
@@ -45,15 +53,15 @@ const PropertyInvestmentCalculator = () => {
   const loanAmount = propertyPrice - downPayment;
   const monthlyRate = interestRate / 100 / 12;
   const totalMonths = 30 * 12;
-  const monthlyPayment = loanAmount * (monthlyRate * Math.pow(1 + monthlyRate, totalMonths)) / 
+  const monthlyPayment = loanAmount * (monthlyRate * Math.pow(1 + monthlyRate, totalMonths)) /
                         (Math.pow(1 + monthlyRate, totalMonths) - 1);
-  
+
   // Monthly property expenses
   const monthlyStrata = strataFees / 4;
   const monthlyCouncil = councilRates / 4;
   const monthlyPropertyExpenses = monthlyStrata + utilities + monthlyCouncil + insurance;
   const totalPropertyCost = monthlyPayment + monthlyPropertyExpenses;
-  
+
   // Rental income
   let weeklyRentalIncome = 0;
   if (rentalOption === 'single') {
@@ -62,71 +70,76 @@ const PropertyInvestmentCalculator = () => {
     weeklyRentalIncome = sharedRoomRent * 2;
   }
   const monthlyRentalIncome = weeklyRentalIncome * 52 / 12;
-  
+
   // Property balance
   const monthlyPropertyBalance = monthlyRentalIncome - totalPropertyCost;
   const weeklyPropertyBalance = monthlyPropertyBalance * 12 / 52;
-  
+
   // Your personal expenses
   const weeklyPersonalExpenses = foodExpenses + transportExpenses + otherExpenses;
   const monthlyPersonalExpenses = weeklyPersonalExpenses * 52 / 12;
-  
+
   // Total cash flow
   const fortnightlyIncomeBiweekly = fortnightlyIncome;
   const weeklyIncome = fortnightlyIncome * 26 / 52;
   const monthlyIncome = fortnightlyIncome * 26 / 12;
-  
+
   // NET WEEKLY/MONTHLY BALANCE
   const weeklyNetBalance = weeklyIncome - weeklyPersonalExpenses - weeklyPropertyBalance;
   const monthlyNetBalance = monthlyIncome - monthlyPersonalExpenses - Math.abs(monthlyPropertyBalance);
   const fortnightlyNetBalance = weeklyNetBalance * 2;
-  
+
   // What you can deposit to offset
   const monthlyToOffset = Math.max(0, monthlyNetBalance);
   const weeklyToOffset = Math.max(0, weeklyNetBalance);
   const fortnightlyToOffset = Math.max(0, fortnightlyNetBalance);
-  
+
   // Complete loan simulation with offset
   const calculateLoanWithOffset = () => {
-    if (monthlyToOffset <= 0 && initialOffset === 0) {
+    if (monthlyToOffset <= 0 && totalScheduledOffset === 0) {
       return { years: 999, totalInterest: 999999, monthlyData: [] };
     }
-    
+
     let balance = loanAmount;
-    let offsetBalance = initialOffset;
+    let offsetBalance = 0;
     let totalInterest = 0;
     let months = 0;
     const maxMonths = 30 * 12;
     const monthlyData = [];
-    
+
     while (balance > 0.01 && months < maxMonths) {
       months++;
-      
-      // Add monthly deposit to offset ONLY after start month
-      if (months > depositStartMonth) {
-        offsetBalance += monthlyToOffset;
-      }
-      
+
+      // Apply any scheduled offset contributions for this month
+      offsetContributions.forEach(contrib => {
+        if (contrib.month === months) {
+          offsetBalance += contrib.amount;
+        }
+      });
+
+      // Add regular monthly deposit to offset
+      offsetBalance += monthlyToOffset;
+
       // Offset cannot exceed loan balance
       const effectiveOffset = Math.min(offsetBalance, balance);
-      
+
       // Balance on which interest is calculated
       const effectiveBalance = balance - effectiveOffset;
-      
+
       // Monthly interest on effective balance
       const monthlyInterest = effectiveBalance * monthlyRate;
       totalInterest += monthlyInterest;
-      
+
       // Pay the installment (interest + principal)
       const principalPayment = monthlyPayment - monthlyInterest;
       balance = Math.max(0, balance - principalPayment);
-      
+
       // If offset >= remaining balance, we're done
       if (effectiveOffset >= balance) {
         balance = 0;
         break;
       }
-      
+
       // Save data for chart (every 3 months)
       if (months % 3 === 0) {
         monthlyData.push({
@@ -137,7 +150,7 @@ const PropertyInvestmentCalculator = () => {
         });
       }
     }
-    
+
     return {
       years: months / 12,
       months: months,
@@ -145,9 +158,36 @@ const PropertyInvestmentCalculator = () => {
       monthlyData: monthlyData
     };
   };
-  
+
   const loanSimulation = calculateLoanWithOffset();
   const yearsToPayOff = loanSimulation.years;
+
+  // Functions for managing offset contributions
+  const addOffsetContribution = () => {
+    if (newContribAmount <= 0) return;
+
+    // Check if month already exists
+    const monthExists = offsetContributions.some(c => c.month === newContribMonth);
+    if (monthExists) {
+      alert('A contribution already exists for this month. Please remove it first or choose a different month.');
+      return;
+    }
+
+    const newContrib = {
+      id: Date.now(),
+      month: newContribMonth,
+      amount: newContribAmount
+    };
+
+    setOffsetContributions([...offsetContributions, newContrib].sort((a, b) => a.month - b.month));
+    setShowAddContribution(false);
+    setNewContribMonth(newContribMonth + 1);
+    setNewContribAmount(10000);
+  };
+
+  const removeOffsetContribution = (id) => {
+    setOffsetContributions(offsetContributions.filter(c => c.id !== id));
+  };
 
   const getBalanceColor = (value) => {
     if (value >= 300) return 'text-green-600';
@@ -174,14 +214,14 @@ const PropertyInvestmentCalculator = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* LEFT PANEL - Configuration */}
         <div className="lg:col-span-2 space-y-4">
-          
+
           {/* Property */}
           <div className="bg-white rounded-lg shadow-md p-5">
             <h2 className="text-xl font-bold text-gray-700 mb-4 flex items-center gap-2">
               <Home size={24} className="text-blue-600" />
               Property & Loan
             </h2>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -230,6 +270,12 @@ const PropertyInvestmentCalculator = () => {
                   className="w-full h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
+
+              <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-sm font-semibold text-gray-700">
+                  Monthly Payment: ${Math.round(monthlyPayment).toLocaleString()}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -239,7 +285,7 @@ const PropertyInvestmentCalculator = () => {
               <DollarSign size={24} className="text-orange-600" />
               Property Expenses
             </h2>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -317,14 +363,14 @@ const PropertyInvestmentCalculator = () => {
               <Users size={24} className="text-green-600" />
               Rental Income
             </h2>
-            
+
             <div className="space-y-4">
               <div className="flex gap-3">
                 <button
                   onClick={() => setRentalOption('none')}
                   className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-                    rentalOption === 'none' 
-                      ? 'bg-gray-600 text-white' 
+                    rentalOption === 'none'
+                      ? 'bg-gray-600 text-white'
                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
                 >
@@ -333,8 +379,8 @@ const PropertyInvestmentCalculator = () => {
                 <button
                   onClick={() => setRentalOption('single')}
                   className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-                    rentalOption === 'single' 
-                      ? 'bg-blue-600 text-white' 
+                    rentalOption === 'single'
+                      ? 'bg-blue-600 text-white'
                       : 'bg-blue-200 text-blue-700 hover:bg-blue-300'
                   }`}
                 >
@@ -343,8 +389,8 @@ const PropertyInvestmentCalculator = () => {
                 <button
                   onClick={() => setRentalOption('shared')}
                   className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-                    rentalOption === 'shared' 
-                      ? 'bg-green-600 text-white' 
+                    rentalOption === 'shared'
+                      ? 'bg-green-600 text-white'
                       : 'bg-green-200 text-green-700 hover:bg-green-300'
                   }`}
                 >
@@ -397,7 +443,7 @@ const PropertyInvestmentCalculator = () => {
               <ShoppingCart size={24} className="text-purple-600" />
               Your Personal Expenses (Weekly)
             </h2>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -415,48 +461,106 @@ const PropertyInvestmentCalculator = () => {
                 <p className="text-xs text-gray-500">≈ ${Math.round(weeklyIncome)}/week</p>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Initial Offset (day 1): ${initialOffset.toLocaleString()}
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="100000"
-                  step="5000"
-                  value={initialOffset}
-                  onChange={(e) => setInitialOffset(Number(e.target.value))}
-                  className="w-full h-2 bg-cyan-200 rounded-lg appearance-none cursor-pointer"
-                />
-                <p className="text-xs text-gray-500">
-                  {initialOffset > 0 
-                    ? `Already reducing ${((initialOffset/loanAmount)*100).toFixed(1)}% of loan from start`
-                    : 'Starting from zero in offset'
-                  }
-                </p>
-              </div>
+              {/* OFFSET CONTRIBUTIONS SECTION */}
+              <div className="border-t pt-4 mt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-md font-bold text-gray-700">💰 Offset Contributions Schedule</h3>
+                  <button
+                    onClick={() => setShowAddContribution(!showAddContribution)}
+                    className="px-3 py-1 bg-cyan-500 text-white rounded-lg text-sm hover:bg-cyan-600 transition-colors"
+                  >
+                    {showAddContribution ? '✕ Cancel' : '+ Add'}
+                  </button>
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Start Deposits at Month: {depositStartMonth === 0 ? 'Immediately' : `${depositStartMonth} (${formatMonthsDetailed(depositStartMonth).human})`}
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="24"
-                  step="1"
-                  value={depositStartMonth}
-                  onChange={(e) => setDepositStartMonth(Number(e.target.value))}
-                  className="w-full h-2 bg-teal-200 rounded-lg appearance-none cursor-pointer"
-                />
-                <p className="text-xs text-gray-500">
-                  {depositStartMonth === 0 
-                    ? 'Start depositing to offset from month 1'
-                    : depositStartMonth === 1
-                    ? 'First deposit at month 2 (settling time)'
-                    : `First deposit after ${depositStartMonth} months (${formatMonthsDetailed(depositStartMonth).human} settling time)`
-                  }
-                </p>
+                {/* Add contribution form */}
+                {showAddContribution && (
+                  <div className="mb-3 p-3 bg-cyan-50 rounded-lg border border-cyan-200">
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          At Month
+                        </label>
+                        <input
+                          type="range"
+                          min="1"
+                          max="360"
+                          value={newContribMonth}
+                          onChange={(e) => setNewContribMonth(Number(e.target.value))}
+                          className="w-full h-2 bg-cyan-200 rounded-lg appearance-none cursor-pointer"
+                        />
+                        <div className="text-center text-sm font-medium text-gray-700">
+                          {newContribMonth} months
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Amount ($)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="500000"
+                          step="1000"
+                          value={newContribAmount}
+                          onChange={(e) => setNewContribAmount(Number(e.target.value))}
+                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      onClick={addOffsetContribution}
+                      className="w-full py-3 bg-cyan-600 text-white rounded-lg font-medium hover:bg-cyan-700 transition-colors"
+                    >
+                      Add Contribution
+                    </button>
+                  </div>
+                )}
+
+                {/* List of contributions */}
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {offsetContributions.map((contrib) => (
+                    <div
+                      key={contrib.id}
+                      className="flex items-center justify-between p-3 bg-gradient-to-r from-cyan-50 to-blue-50 rounded-lg border border-cyan-200"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">🔵</span>
+                          <div>
+                            <p className="font-semibold text-gray-800">
+                              Month {contrib.month}
+                            </p>
+                            <p className="text-xs text-gray-600">
+                              {formatMonthsDetailed(contrib.month).human}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="text-lg font-bold text-cyan-700 mt-1 ml-7">
+                          ${contrib.amount.toLocaleString()}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => removeOffsetContribution(contrib.id)}
+                        className="ml-3 px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors text-sm"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Total scheduled */}
+                <div className="mt-3 p-3 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200">
+                  <p className="text-sm font-semibold text-gray-700">
+                    📊 Total Scheduled Offset: <span className="text-indigo-700 text-lg">${totalScheduledOffset.toLocaleString()}</span>
+                  </p>
+                  {totalScheduledOffset > 0 && (
+                    <p className="text-xs text-gray-600 mt-1">
+                      This reduces {((totalScheduledOffset/loanAmount)*100).toFixed(1)}% of your loan balance
+                    </p>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
@@ -508,7 +612,7 @@ const PropertyInvestmentCalculator = () => {
 
               <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
                 <p className="text-sm font-semibold text-gray-700">
-                  Total Personal Expenses: ${Math.round(weeklyPersonalExpenses)}/week 
+                  Total Personal Expenses: ${Math.round(weeklyPersonalExpenses)}/week
                   (≈ ${Math.round(monthlyPersonalExpenses)}/month)
                 </p>
               </div>
@@ -519,7 +623,7 @@ const PropertyInvestmentCalculator = () => {
 
         {/* RIGHT PANEL - Results */}
         <div className="space-y-4">
-          
+
           {/* Property Balance */}
           <div className="bg-white rounded-lg shadow-md p-5">
             <h2 className="text-lg font-bold text-gray-700 mb-3">🏠 Property Balance</h2>
@@ -539,7 +643,7 @@ const PropertyInvestmentCalculator = () => {
                 </span>
               </div>
               <p className="text-xs text-gray-500 text-center">
-                {monthlyPropertyBalance >= 0 
+                {monthlyPropertyBalance >= 0
                   ? '✅ Rent covers property costs'
                   : `❌ Need $${Math.round(Math.abs(monthlyPropertyBalance))}/month extra`
                 }
@@ -579,7 +683,7 @@ const PropertyInvestmentCalculator = () => {
             <h2 className="text-lg font-bold text-gray-700 mb-3 text-center">
               🎯 TO OFFSET (automatic)
             </h2>
-            
+
             <div className="text-center mb-4">
               <p className={`text-4xl font-bold ${getBalanceColor(monthlyNetBalance)}`}>
                 ${Math.round(monthlyToOffset)}
@@ -622,7 +726,7 @@ const PropertyInvestmentCalculator = () => {
           </div>
 
           {/* Estimated time */}
-          {(monthlyToOffset > 0 || initialOffset > 0) && (
+          {(monthlyToOffset > 0 || totalScheduledOffset > 0) && (
             <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg p-5 shadow-lg text-white">
               <h3 className="font-bold mb-3 text-lg">⏱️ Loan Simulation</h3>
               <div className="space-y-3">
@@ -642,21 +746,22 @@ const PropertyInvestmentCalculator = () => {
                     </>
                   )}
                 </div>
-                
+
                 <div className="bg-white/20 backdrop-blur rounded-lg p-3">
                   <p className="text-sm opacity-90">Total interest paid:</p>
                   <p className="text-2xl font-bold">
                     ${Math.round(loanSimulation.totalInterest).toLocaleString()}
                   </p>
                 </div>
-                
-                {depositStartMonth > 0 && (
-                  <div className="bg-yellow-400/30 backdrop-blur rounded-lg p-2 text-xs">
-                    <p className="font-semibold">⏳ Waiting period:</p>
-                    <p>First {depositStartMonth} months ({formatMonthsDetailed(depositStartMonth).human}) without offset deposits</p>
+
+
+                {offsetContributions.length > 1 && (
+                  <div className="bg-cyan-400/30 backdrop-blur rounded-lg p-2 text-xs">
+                    <p className="font-semibold">💰 Scheduled contributions:</p>
+                    <p>{offsetContributions.length} lump sum payments totaling ${totalScheduledOffset.toLocaleString()}</p>
                   </div>
                 )}
-                
+
                 <div className="bg-white/20 backdrop-blur rounded-lg p-3 text-xs">
                   <p className="font-semibold mb-1">💰 Savings vs no offset:</p>
                   <p>Without offset (30 years): ~$272,000</p>
