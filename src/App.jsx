@@ -54,13 +54,18 @@ const PropertyInvestmentCalculator = () => {
   const monthlyRate = interestRate / 100 / 12;
   const totalMonths = 30 * 12;
   const monthlyPayment = loanAmount * (monthlyRate * Math.pow(1 + monthlyRate, totalMonths)) /
-                        (Math.pow(1 + monthlyRate, totalMonths) - 1);
+    (Math.pow(1 + monthlyRate, totalMonths) - 1);
 
   // Monthly property expenses
   const monthlyStrata = strataFees / 4;
   const monthlyCouncil = councilRates / 4;
   const monthlyPropertyExpenses = monthlyStrata + utilities + monthlyCouncil + insurance;
   const totalPropertyCost = monthlyPayment + monthlyPropertyExpenses;
+
+  // Interest deduction - Check for Month 1 offset
+  const month1Offset = offsetContributions.find(c => c.month === 1)?.amount || 0;
+  const initialPrincipal = Math.max(0, loanAmount - month1Offset);
+  const initialMonthlyInterest = initialPrincipal * monthlyRate;
 
   // Rental income
   let weeklyRentalIncome = 0;
@@ -95,8 +100,8 @@ const PropertyInvestmentCalculator = () => {
   const fortnightlyToOffset = Math.max(0, fortnightlyNetBalance);
 
   // Complete loan simulation with offset
-  const calculateLoanWithOffset = () => {
-    if (monthlyToOffset <= 0 && totalScheduledOffset === 0) {
+  const calculateLoanWithOffset = (contributions = offsetContributions) => {
+    if (monthlyToOffset <= 0 && contributions.reduce((s, c) => s + c.amount, 0) === 0) {
       return { years: 999, totalInterest: 999999, monthlyData: [] };
     }
 
@@ -111,7 +116,7 @@ const PropertyInvestmentCalculator = () => {
       months++;
 
       // Apply any scheduled offset contributions for this month
-      offsetContributions.forEach(contrib => {
+      contributions.forEach(contrib => {
         if (contrib.month === months) {
           offsetBalance += contrib.amount;
         }
@@ -159,8 +164,16 @@ const PropertyInvestmentCalculator = () => {
     };
   };
 
-  const loanSimulation = calculateLoanWithOffset();
+  const loanSimulation = calculateLoanWithOffset(offsetContributions);
+  const baselineSimulation = calculateLoanWithOffset([]); // No offsets
+  const interestSaved = baselineSimulation.totalInterest - loanSimulation.totalInterest;
   const yearsToPayOff = loanSimulation.years;
+
+  // Helper to get next month
+  const getNextSuggestion = (list) => {
+    if (list.length === 0) return 1;
+    return Math.max(...list.map(c => c.month)) + 1;
+  };
 
   // Functions for managing offset contributions
   const addOffsetContribution = () => {
@@ -179,14 +192,17 @@ const PropertyInvestmentCalculator = () => {
       amount: newContribAmount
     };
 
-    setOffsetContributions([...offsetContributions, newContrib].sort((a, b) => a.month - b.month));
+    const updatedContributions = [...offsetContributions, newContrib].sort((a, b) => a.month - b.month);
+    setOffsetContributions(updatedContributions);
     setShowAddContribution(false);
-    setNewContribMonth(newContribMonth + 1);
+    setNewContribMonth(getNextSuggestion(updatedContributions));
     setNewContribAmount(10000);
   };
 
   const removeOffsetContribution = (id) => {
-    setOffsetContributions(offsetContributions.filter(c => c.id !== id));
+    const updatedContributions = offsetContributions.filter(c => c.id !== id);
+    setOffsetContributions(updatedContributions);
+    setNewContribMonth(getNextSuggestion(updatedContributions));
   };
 
   const getBalanceColor = (value) => {
@@ -252,7 +268,7 @@ const PropertyInvestmentCalculator = () => {
                   className="w-full h-2 bg-green-200 rounded-lg appearance-none cursor-pointer"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Loan: ${loanAmount.toLocaleString()} ({((loanAmount/propertyPrice)*100).toFixed(1)}% LVR)
+                  Loan: ${loanAmount.toLocaleString()} ({((loanAmount / propertyPrice) * 100).toFixed(1)}% LVR)
                 </p>
               </div>
 
@@ -300,7 +316,7 @@ const PropertyInvestmentCalculator = () => {
                   onChange={(e) => setStrataFees(Number(e.target.value))}
                   className="w-full h-2 bg-orange-200 rounded-lg appearance-none cursor-pointer"
                 />
-                <p className="text-xs text-gray-500">≈ ${Math.round(strataFees/4)}/month</p>
+                <p className="text-xs text-gray-500">≈ ${Math.round(strataFees / 4)}/month</p>
               </div>
 
               <div>
@@ -331,7 +347,7 @@ const PropertyInvestmentCalculator = () => {
                   onChange={(e) => setCouncilRates(Number(e.target.value))}
                   className="w-full h-2 bg-orange-200 rounded-lg appearance-none cursor-pointer"
                 />
-                <p className="text-xs text-gray-500">≈ ${Math.round(councilRates/4)}/month</p>
+                <p className="text-xs text-gray-500">≈ ${Math.round(councilRates / 4)}/month</p>
               </div>
 
               <div>
@@ -368,31 +384,28 @@ const PropertyInvestmentCalculator = () => {
               <div className="flex gap-3">
                 <button
                   onClick={() => setRentalOption('none')}
-                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-                    rentalOption === 'none'
-                      ? 'bg-gray-600 text-white'
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  }`}
+                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${rentalOption === 'none'
+                    ? 'bg-gray-600 text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
                 >
                   No Rental
                 </button>
                 <button
                   onClick={() => setRentalOption('single')}
-                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-                    rentalOption === 'single'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-blue-200 text-blue-700 hover:bg-blue-300'
-                  }`}
+                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${rentalOption === 'single'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-blue-200 text-blue-700 hover:bg-blue-300'
+                    }`}
                 >
                   1 Room
                 </button>
                 <button
                   onClick={() => setRentalOption('shared')}
-                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-                    rentalOption === 'shared'
-                      ? 'bg-green-600 text-white'
-                      : 'bg-green-200 text-green-700 hover:bg-green-300'
-                  }`}
+                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${rentalOption === 'shared'
+                    ? 'bg-green-600 text-white'
+                    : 'bg-green-200 text-green-700 hover:bg-green-300'
+                    }`}
                 >
                   2 Rooms
                 </button>
@@ -556,9 +569,14 @@ const PropertyInvestmentCalculator = () => {
                     📊 Total Scheduled Offset: <span className="text-indigo-700 text-lg">${totalScheduledOffset.toLocaleString()}</span>
                   </p>
                   {totalScheduledOffset > 0 && (
-                    <p className="text-xs text-gray-600 mt-1">
-                      This reduces {((totalScheduledOffset/loanAmount)*100).toFixed(1)}% of your loan balance
-                    </p>
+                    <div className="mt-1 space-y-1">
+                      <p className="text-xs text-gray-600">
+                        Reduces {((totalScheduledOffset / loanAmount) * 100).toFixed(1)}% of loan balance
+                      </p>
+                      <p className="text-xs font-semibold text-green-700">
+                        ~${Math.round(interestSaved).toLocaleString()} saved in interest
+                      </p>
+                    </div>
                   )}
                 </div>
               </div>
@@ -627,56 +645,147 @@ const PropertyInvestmentCalculator = () => {
           {/* Property Balance */}
           <div className="bg-white rounded-lg shadow-md p-5">
             <h2 className="text-lg font-bold text-gray-700 mb-3">🏠 Property Balance</h2>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Loan + expenses:</span>
-                <span className="font-semibold text-red-600">-${Math.round(totalPropertyCost)}</span>
+            <div className="space-y-4 text-sm"> {/* Increased spacing between sections */}
+
+              {/* Loan details section */}
+              <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                <h3 className="font-semibold text-gray-700 mb-2">🏠 Loan Information</h3>
+                <div className="space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Monthly Payment:</span>
+                    <span className="text-gray-700 font-medium">${Math.round(monthlyPayment).toLocaleString()}</span>
+                  </div>
+
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Interest Amount (monthly):</span>
+                    <span className="text-orange-600">-${Math.round(initialMonthlyInterest).toLocaleString()}</span>
+                    {month1Offset > 0 && <span className="text-xs text-green-600 ml-1 self-center">(offset applied)</span>}
+                  </div>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Rental income:</span>
-                <span className="font-semibold text-green-600">+${Math.round(monthlyRentalIncome)}</span>
+
+              {/* Monthly expenses section */}
+              <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
+                <h3 className="font-semibold text-gray-700 mb-2">💳 Monthly Expenses</h3>
+                <div className="space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Loan Payment (monthly):</span>
+                    <span className="font-semibold text-red-600">-${Math.round(monthlyPayment).toLocaleString()}</span>
+                  </div>
+
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Strata (monthly):</span>
+                    <span className="font-semibold text-red-600">-${Math.round(monthlyStrata).toLocaleString()}</span>
+                  </div>
+
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Council (monthly):</span>
+                    <span className="font-semibold text-red-600">-${Math.round(monthlyCouncil).toLocaleString()}</span>
+                  </div>
+
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Utilities (monthly):</span>
+                    <span className="font-semibold text-red-600">-${utilities.toLocaleString()}</span>
+                  </div>
+
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Insurance (monthly):</span>
+                    <span className="font-semibold text-red-600">-${insurance.toLocaleString()}</span>
+                  </div>
+
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Personal Expenses:</span>
+                    <span className="font-semibold text-red-600">-${Math.round(monthlyPersonalExpenses).toLocaleString()}</span>
+                  </div>
+
+                  <div className="border-t border-orange-200 pt-1 mt-1 font-bold">
+                    <div className="flex justify-between">
+                      <span className="text-gray-700">Total Monthly Expenses:</span>
+                      <span className="text-red-700">-${Math.round(totalPropertyCost + monthlyPersonalExpenses).toLocaleString()}/month</span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="border-t pt-2 flex justify-between font-bold">
-                <span>Difference:</span>
-                <span className={monthlyPropertyBalance >= 0 ? 'text-green-600' : 'text-red-600'}>
-                  {monthlyPropertyBalance >= 0 ? '+' : ''}${Math.round(monthlyPropertyBalance)}/month
-                </span>
+
+              {/* Income section */}
+              <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+                <h3 className="font-semibold text-gray-700 mb-2">💰 Monthly Income</h3>
+                <div className="space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Monthly Rental Income:</span>
+                    <span className="font-semibold text-green-600">+${Math.round(monthlyRentalIncome).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Total Personal Income:</span>
+                    <span className="font-semibold text-green-600">+${Math.round(monthlyIncome).toLocaleString()}</span>
+                  </div>
+                  <div className="border-t border-green-200 pt-1 mt-1 font-bold">
+                    <div className="flex justify-between">
+                      <span className="text-gray-700">Total Monthly Income:</span>
+                      <span className="text-green-700">+${Math.round(monthlyRentalIncome + monthlyIncome).toLocaleString()}/month</span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <p className="text-xs text-gray-500 text-center">
-                {monthlyPropertyBalance >= 0
-                  ? '✅ Rent covers property costs'
-                  : `❌ Need $${Math.round(Math.abs(monthlyPropertyBalance))}/month extra`
+
+              {/* Property Summary section */}
+              <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                <h3 className="font-semibold text-gray-700 mb-2">📊 Property Summary</h3>
+                <div className="space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Total Property Monthly Expenses:</span>
+                    <span className="font-semibold text-red-600">-${Math.round(totalPropertyCost).toLocaleString()}/month</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Total Property Monthly Income:</span>
+                    <span className="font-semibold text-green-600">+${Math.round(monthlyRentalIncome).toLocaleString()}/month</span>
+                  </div>
+                  <div className="border-t border-gray-300 pt-1 mt-1 font-bold">
+                    <div className="flex justify-between">
+                      <span className="text-gray-700">Net Property Monthly Balance:</span>
+                      <span className={(monthlyRentalIncome - totalPropertyCost) >= 0 ? 'text-green-600' : 'text-red-600'}>
+                        {(monthlyRentalIncome - totalPropertyCost) >= 0 ? '+' : ''}${Math.round(monthlyRentalIncome - totalPropertyCost).toLocaleString()}/month
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Total Summary section */}
+              <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 mt-4">
+                <h3 className="font-semibold text-gray-700 mb-2">🌎 Total Summary</h3>
+                <div className="space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Total Monthly Expenses:</span>
+                    <span className="font-semibold text-red-600">-${Math.round(totalPropertyCost + monthlyPersonalExpenses).toLocaleString()}/month</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Total Monthly Income:</span>
+                    <span className="font-semibold text-green-600">+${Math.round(monthlyRentalIncome + monthlyIncome).toLocaleString()}/month</span>
+                  </div>
+                  <div className="border-t border-slate-300 pt-1 mt-1 font-bold">
+                    <div className="flex justify-between">
+                      <span className="text-gray-700">Net Monthly Balance:</span>
+                      <span className={(monthlyRentalIncome + monthlyIncome) - (totalPropertyCost + monthlyPersonalExpenses) >= 0 ? 'text-green-600' : 'text-red-600'}>
+                        {(monthlyRentalIncome + monthlyIncome) - (totalPropertyCost + monthlyPersonalExpenses) >= 0 ? '+' : ''}
+                        ${Math.round((monthlyRentalIncome + monthlyIncome) - (totalPropertyCost + monthlyPersonalExpenses)).toLocaleString()}/month
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status message */}
+              <p className={`text-center text-xs px-2 py-1 rounded ${(monthlyRentalIncome + monthlyIncome) >= (totalPropertyCost + monthlyPersonalExpenses) ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                {(monthlyRentalIncome + monthlyIncome) >= (totalPropertyCost + monthlyPersonalExpenses)
+                  ? `✅ Income covers all expenses. (+$${Math.round((monthlyRentalIncome + monthlyIncome) - (totalPropertyCost + monthlyPersonalExpenses)).toLocaleString()})`
+                  : `❌ Need $${Math.round((totalPropertyCost + monthlyPersonalExpenses) - (monthlyRentalIncome + monthlyIncome))}/month extra`
                 }
               </p>
             </div>
           </div>
 
-          {/* COMPLETE CASH FLOW */}
-          <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-lg p-5 text-white">
-            <h2 className="text-lg font-bold mb-3">💰 Your Total Cash Flow</h2>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span>Fortnightly income:</span>
-                <span className="font-semibold">+${fortnightlyIncome}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Personal expenses:</span>
-                <span className="font-semibold">-${Math.round(weeklyPersonalExpenses * 2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Property balance:</span>
-                <span className="font-semibold">
-                  {monthlyPropertyBalance >= 0 ? '+' : ''}{Math.round(monthlyPropertyBalance * 2 / 4)}
-                </span>
-              </div>
-              <div className="border-t border-white/30 pt-2 flex justify-between font-bold text-base">
-                <span>YOU KEEP:</span>
-                <span className="text-yellow-300">
-                  ${Math.round(fortnightlyNetBalance)}/fortnight
-                </span>
-              </div>
-            </div>
-          </div>
+
 
           {/* WHAT GOES TO OFFSET */}
           <div className={`rounded-lg shadow-lg p-6 border-2 ${getBalanceBgColor(monthlyNetBalance)}`}>
