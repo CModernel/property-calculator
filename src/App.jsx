@@ -1278,6 +1278,89 @@ const PropertyInvestmentCalculator = () => {
                       (Green bar = Principal Paid + Money sitting in Offset)
                     </p>
                   </div>
+
+                  {/* EVENTS & STATUS LOG */}
+                  <div className="mt-6 pt-4 border-t border-gray-200">
+                    <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+                      📅 Financial Events Log <span className="text-xs font-normal text-gray-500">(at Month {timelineMonth})</span>
+                    </h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+
+                      {/* COLUMN 1: INCOME CONTEXT */}
+                      <div className="bg-green-50 rounded-lg p-3 border border-green-100">
+                        <p className="font-bold text-green-800 border-b border-green-200 pb-1 mb-2">Income Context</p>
+                        <div className="space-y-1 text-xs">
+                          <p className="flex justify-between">
+                            <span>Tenants Active:</span>
+                            <span className="font-medium">{tenants.length}</span>
+                          </p>
+                          <p className="flex justify-between">
+                            <span>Rental Income:</span>
+                            <span className="font-medium">${monthlyRentalIncome.toLocaleString()}/mo</span>
+                          </p>
+                          <div className="mt-2 pt-2 border-t border-green-200">
+                            {tenants.map(t => (
+                              <p key={t.id} className="text-green-700 truncate">• {t.type === 'single' ? 'Individual' : 'Shared ($' + Math.round(t.amount / 2) + ')'}</p>
+                            ))}
+                            {tenants.length === 0 && <span className="italic text-gray-400">No tenants</span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* COLUMN 2: OFFSET HISTORY */}
+                      <div className="bg-cyan-50 rounded-lg p-3 border border-cyan-100">
+                        <p className="font-bold text-cyan-800 border-b border-cyan-200 pb-1 mb-2">Offset History (Cumulative)</p>
+                        <div className="space-y-1 text-xs max-h-32 overflow-y-auto">
+                          {offsetContributions
+                            .filter(c => c.month <= timelineMonth)
+                            .sort((a, b) => b.month - a.month) // newest first
+                            .map(c => (
+                              <div key={c.id} className="flex justify-between items-center text-cyan-700">
+                                <span>Month {c.month}:</span>
+                                <span className="font-medium">+${c.amount.toLocaleString()}</span>
+                              </div>
+                            ))
+                          }
+                          {offsetContributions.filter(c => c.month <= timelineMonth).length === 0 && (
+                            <span className="italic text-gray-400">No contributions yet</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* COLUMN 3: EXPENSE CONTEXT */}
+                      <div className="bg-yellow-50 rounded-lg p-3 border border-yellow-100">
+                        <p className="font-bold text-yellow-800 border-b border-yellow-200 pb-1 mb-2">Expenses Status</p>
+                        <div className="space-y-1 text-xs max-h-32 overflow-y-auto">
+                          {exceptExpenses.map(exp => {
+                            let status = 'future';
+                            if (exp.type === 'one-time') {
+                              if (exp.month === timelineMonth) status = 'active';
+                              else if (exp.month < timelineMonth) status = 'past';
+                            } else {
+                              // Recurring
+                              if (exp.recurrence === 'forever') status = 'active'; // Simplified
+                              else if (timelineMonth >= exp.startMonth && timelineMonth <= exp.endMonth) status = 'active';
+                              else if (timelineMonth > exp.endMonth) status = 'past';
+                            }
+
+                            if (status === 'future') return null;
+
+                            return (
+                              <div key={exp.id} className={`flex justify-between items-center ${status === 'active' ? 'text-red-600 font-bold' : 'text-gray-400'}`}>
+                                <span>{exp.name} {status === 'past' && '(Done)'}</span>
+                                <span className="font-medium">${exp.amount}</span>
+                              </div>
+                            );
+                          })}
+                          {exceptExpenses.filter(e => e.month <= timelineMonth || e.startMonth <= timelineMonth).length === 0 && (
+                            <span className="italic text-gray-400">No expenses recorded</span>
+                          )}
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
                 </div>
               );
             })()}
