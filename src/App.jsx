@@ -11,9 +11,10 @@ const PropertyInvestmentCalculator = () => {
   const [insurance, setInsurance] = useState(80);
 
   // Rental options
-  const [rentalOption, setRentalOption] = useState('single');
-  const [singleRoomRent, setSingleRoomRent] = useState(240);
-  const [sharedRoomRent, setSharedRoomRent] = useState(160);
+  const [tenants, setTenants] = useState([]);
+  const [showAddTenant, setShowAddTenant] = useState(false);
+  const [newTenantType, setNewTenantType] = useState('single');
+  const [newTenantRent, setNewTenantRent] = useState(250);
 
   // Your personal expenses
   const [fortnightlyIncome, setFortnightlyIncome] = useState(3228);
@@ -29,6 +30,17 @@ const PropertyInvestmentCalculator = () => {
   const [showAddContribution, setShowAddContribution] = useState(false);
   const [newContribMonth, setNewContribMonth] = useState(1);
   const [newContribAmount, setNewContribAmount] = useState(10000);
+
+  // Exceptional Expenses State
+  const [exceptExpenses, setExceptExpenses] = useState([]);
+  const [showAddExceptExp, setShowAddExceptExp] = useState(false);
+  const [newExpName, setNewExpName] = useState('Rent');
+  const [newExpAmount, setNewExpAmount] = useState(920);
+  const [newExpType, setNewExpType] = useState('recurring'); // one-time | recurring
+  const [newExpMonth, setNewExpMonth] = useState(1); // for one-time
+  const [newExpRecurrence, setNewExpRecurrence] = useState('period'); // forever | period
+  const [newExpStart, setNewExpStart] = useState(1);
+  const [newExpEnd, setNewExpEnd] = useState(4);
 
   // Calculate total scheduled offset contributions
   const totalScheduledOffset = offsetContributions.reduce((sum, contrib) => sum + contrib.amount, 0);
@@ -68,12 +80,7 @@ const PropertyInvestmentCalculator = () => {
   const initialMonthlyInterest = initialPrincipal * monthlyRate;
 
   // Rental income
-  let weeklyRentalIncome = 0;
-  if (rentalOption === 'single') {
-    weeklyRentalIncome = singleRoomRent;
-  } else if (rentalOption === 'shared') {
-    weeklyRentalIncome = sharedRoomRent * 2;
-  }
+  const weeklyRentalIncome = tenants.reduce((sum, t) => sum + t.amount, 0);
   const monthlyRentalIncome = weeklyRentalIncome * 52 / 12;
 
   // Property balance
@@ -122,8 +129,24 @@ const PropertyInvestmentCalculator = () => {
         }
       });
 
-      // Add regular monthly deposit to offset
-      offsetBalance += monthlyToOffset;
+      // Calculate Exceptional Expenses for this month
+      let monthlyExceptionalCost = 0;
+      exceptExpenses.forEach(exp => {
+        if (exp.type === 'one-time' && exp.month === months) {
+          monthlyExceptionalCost += exp.amount;
+        } else if (exp.type === 'recurring') {
+          if (exp.recurrence === 'forever') {
+            monthlyExceptionalCost += exp.amount;
+          } else if (exp.recurrence === 'period' && months >= exp.startMonth && months <= exp.endMonth) {
+            monthlyExceptionalCost += exp.amount;
+          }
+        }
+      });
+
+      // Add regular monthly deposit to offset (reduced by exceptional expenses)
+      // We assume exceptional expenses come out of the surplus first.
+      const netMonthlyDeposit = Math.max(0, monthlyToOffset - monthlyExceptionalCost);
+      offsetBalance += netMonthlyDeposit;
 
       // Offset cannot exceed loan balance
       const effectiveOffset = Math.min(offsetBalance, balance);
@@ -203,6 +226,59 @@ const PropertyInvestmentCalculator = () => {
     const updatedContributions = offsetContributions.filter(c => c.id !== id);
     setOffsetContributions(updatedContributions);
     setNewContribMonth(getNextSuggestion(updatedContributions));
+  };
+
+  const addTenant = () => {
+    if (newTenantRent <= 0) return;
+    const newTenant = {
+      id: Date.now(),
+      type: newTenantType,
+      amount: newTenantRent
+    };
+    setTenants([...tenants, newTenant]);
+    setShowAddTenant(false);
+    setNewTenantRent(250);
+  };
+
+  const removeTenant = (id) => {
+    setTenants(tenants.filter(t => t.id !== id));
+  };
+
+  // Exceptional Expenses Functions
+  const addExceptionalExpense = () => {
+    if (!newExpName) {
+      alert('Please enter a name for the expense.');
+      return;
+    }
+    if (newExpAmount <= 0) {
+      alert('Please enter a valid amount.');
+      return;
+    }
+
+    if (newExpType === 'recurring' && newExpRecurrence === 'period' && newExpStart > newExpEnd) {
+      alert('Start month must be before end month.');
+      return;
+    }
+
+    const newExp = {
+      id: Date.now(),
+      name: newExpName,
+      amount: newExpAmount,
+      type: newExpType,
+      month: newExpMonth, // relevant if one-time
+      recurrence: newExpRecurrence, // relevant if recurring
+      startMonth: newExpStart,
+      endMonth: newExpEnd
+    };
+
+    setExceptExpenses([...exceptExpenses, newExp]);
+    setShowAddExceptExp(false);
+    setNewExpName('Rent');
+    setNewExpAmount(920);
+  };
+
+  const removeExceptionalExpense = (id) => {
+    setExceptExpenses(exceptExpenses.filter(e => e.id !== id));
   };
 
   const getBalanceColor = (value) => {
@@ -381,72 +457,102 @@ const PropertyInvestmentCalculator = () => {
             </h2>
 
             <div className="space-y-4">
-              <div className="flex gap-3">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-md font-bold text-gray-700">👥 Tenants</h3>
                 <button
-                  onClick={() => setRentalOption('none')}
-                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${rentalOption === 'none'
-                    ? 'bg-gray-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
+                  onClick={() => setShowAddTenant(!showAddTenant)}
+                  className="px-3 py-1 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600 transition-colors"
                 >
-                  No Rental
-                </button>
-                <button
-                  onClick={() => setRentalOption('single')}
-                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${rentalOption === 'single'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-blue-200 text-blue-700 hover:bg-blue-300'
-                    }`}
-                >
-                  1 Room
-                </button>
-                <button
-                  onClick={() => setRentalOption('shared')}
-                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${rentalOption === 'shared'
-                    ? 'bg-green-600 text-white'
-                    : 'bg-green-200 text-green-700 hover:bg-green-300'
-                    }`}
-                >
-                  2 Rooms
+                  {showAddTenant ? '✕ Cancel' : '+ Add'}
                 </button>
               </div>
 
-              {rentalOption === 'single' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Weekly Rent: ${singleRoomRent}/week
-                  </label>
-                  <input
-                    type="range"
-                    min="150"
-                    max="400"
-                    step="10"
-                    value={singleRoomRent}
-                    onChange={(e) => setSingleRoomRent(Number(e.target.value))}
-                    className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer"
-                  />
+              {/* Add tenant form */}
+              {showAddTenant && (
+                <div className="mb-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div className="col-span-2 flex gap-2">
+                      <button
+                        onClick={() => setNewTenantType('single')}
+                        className={`flex-1 py-1 px-2 rounded text-sm ${newTenantType === 'single'
+                          ? 'bg-green-600 text-white'
+                          : 'bg-green-200 text-green-800'
+                          }`}
+                      >
+                        Individual Room
+                      </button>
+                      <button
+                        onClick={() => setNewTenantType('shared')}
+                        className={`flex-1 py-1 px-2 rounded text-sm ${newTenantType === 'shared'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-blue-200 text-blue-800'
+                          }`}
+                      >
+                        Shared Room
+                      </button>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Weekly Rent ($): {newTenantRent}
+                      </label>
+                      <input
+                        type="range"
+                        min="50"
+                        max="600"
+                        step="10"
+                        value={newTenantRent}
+                        onChange={(e) => setNewTenantRent(Number(e.target.value))}
+                        className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${newTenantType === 'single' ? 'bg-green-200' : 'bg-blue-200'}`}
+                      />
+                    </div>
+                  </div>
+                  <button
+                    onClick={addTenant}
+                    className={`w-full py-2 text-white rounded-lg font-medium transition-colors ${newTenantType === 'single' ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                  >
+                    Add Tenant
+                  </button>
                 </div>
               )}
 
-              {rentalOption === 'shared' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Rent per Person: ${sharedRoomRent}/week
-                  </label>
-                  <input
-                    type="range"
-                    min="100"
-                    max="350"
-                    step="10"
-                    value={sharedRoomRent}
-                    onChange={(e) => setSharedRoomRent(Number(e.target.value))}
-                    className="w-full h-2 bg-green-200 rounded-lg appearance-none cursor-pointer"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Total: ${sharedRoomRent * 2}/week
-                  </p>
-                </div>
-              )}
+              {/* List of tenants */}
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {tenants.map((tenant) => (
+                  <div
+                    key={tenant.id}
+                    className={`flex items-center justify-between p-3 rounded-lg border ${tenant.type === 'single' ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        {tenant.type === 'single' ? '👤' : '👥'}
+                        <div>
+                          <p className="font-semibold text-gray-800">
+                            {tenant.type === 'single' ? 'Individual Room' : 'Shared Room'}
+                          </p>
+                          <p className="text-xs text-gray-600">
+                            ${tenant.amount}/week {tenant.type === 'shared' && <span className="text-blue-600 font-medium">(~${Math.round(tenant.amount / 2)} each)</span>}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => removeTenant(tenant.id)}
+                      className="ml-3 w-8 h-8 flex items-center justify-center bg-red-100 text-red-600 rounded hover:bg-red-200 transition-colors"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                {tenants.length === 0 && !showAddTenant && (
+                  <p className="text-sm text-gray-500 text-center italic py-2">No tenants added yet.</p>
+                )}
+              </div>
+
+              <div className="mt-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                <p className="text-sm font-semibold text-gray-700 text-center">
+                  Total Weekly Rent: <span className="text-green-700 text-lg">${weeklyRentalIncome.toLocaleString()}</span>
+                </p>
+              </div>
             </div>
           </div>
 
@@ -634,6 +740,139 @@ const PropertyInvestmentCalculator = () => {
                   (≈ ${Math.round(monthlyPersonalExpenses)}/month)
                 </p>
               </div>
+
+              {/* EXCEPTIONAL EXPENSES */}
+              <div className="bg-white rounded-lg shadow-md p-5 border-t-4 border-yellow-400">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-bold text-gray-700 flex items-center gap-2">
+                    <TrendingDown size={24} className="text-yellow-600" />
+                    Exceptional Expenses
+                  </h2>
+                  <button
+                    onClick={() => setShowAddExceptExp(!showAddExceptExp)}
+                    className="px-3 py-1 bg-yellow-500 text-white rounded-lg text-sm hover:bg-yellow-600 transition-colors"
+                  >
+                    {showAddExceptExp ? '✕ Cancel' : '+ Add'}
+                  </button>
+                </div>
+
+                {showAddExceptExp && (
+                  <div className="mb-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200 text-sm">
+                    <div className="grid gap-3">
+                      <div>
+                        <label className="block font-medium text-gray-700 mb-1">Expense Name</label>
+                        <input
+                          type="text"
+                          value={newExpName}
+                          onChange={(e) => setNewExpName(e.target.value)}
+                          className="w-full p-2 border rounded"
+                          placeholder="e.g. Wedding, Car Repair"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-medium text-gray-700 mb-1">Amount ($)</label>
+                        <input
+                          type="number"
+                          value={newExpAmount}
+                          onChange={(e) => setNewExpAmount(Number(e.target.value))}
+                          className="w-full p-2 border rounded"
+                        />
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setNewExpType('one-time')}
+                          className={`flex-1 py-1 rounded border ${newExpType === 'one-time' ? 'bg-yellow-200 border-yellow-400 font-bold' : 'bg-white'}`}
+                        >One-Time</button>
+                        <button
+                          onClick={() => setNewExpType('recurring')}
+                          className={`flex-1 py-1 rounded border ${newExpType === 'recurring' ? 'bg-yellow-200 border-yellow-400 font-bold' : 'bg-white'}`}
+                        >Recurring</button>
+                      </div>
+
+                      {newExpType === 'one-time' && (
+                        <div>
+                          <label className="block font-medium text-gray-700 mb-1">Occurs at Month: {newExpMonth}</label>
+                          <input
+                            type="range" min="1" max="360"
+                            value={newExpMonth}
+                            onChange={(e) => setNewExpMonth(Number(e.target.value))}
+                            className="w-full h-2 bg-yellow-200 rounded-lg appearance-none cursor-pointer"
+                          />
+                        </div>
+                      )}
+
+                      {newExpType === 'recurring' && (
+                        <div className="space-y-3">
+                          <div className="flex gap-2 text-xs">
+                            <button
+                              onClick={() => setNewExpRecurrence('forever')}
+                              className={`flex-1 py-1 rounded border ${newExpRecurrence === 'forever' ? 'bg-orange-200 border-orange-400 font-bold' : 'bg-white'}`}
+                            >Forever</button>
+                            <button
+                              onClick={() => setNewExpRecurrence('period')}
+                              className={`flex-1 py-1 rounded border ${newExpRecurrence === 'period' ? 'bg-orange-200 border-orange-400 font-bold' : 'bg-white'}`}
+                            >Specific Period</button>
+                          </div>
+
+                          {newExpRecurrence === 'period' && (
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="block text-xs font-medium mb-1">Start Month: {newExpStart}</label>
+                                <input
+                                  type="range" min="1" max="360"
+                                  value={newExpStart}
+                                  onChange={(e) => setNewExpStart(Number(e.target.value))}
+                                  className="w-full h-2 bg-orange-200 rounded-lg appearance-none cursor-pointer"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium mb-1">End Month: {newExpEnd}</label>
+                                <input
+                                  type="range" min={newExpStart} max="360"
+                                  value={newExpEnd}
+                                  onChange={(e) => setNewExpEnd(Number(e.target.value))}
+                                  className="w-full h-2 bg-orange-200 rounded-lg appearance-none cursor-pointer"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <button
+                        onClick={addExceptionalExpense}
+                        className="w-full py-2 bg-yellow-600 text-white rounded font-bold hover:bg-yellow-700"
+                      >
+                        Add Expense
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {exceptExpenses.length === 0 && !showAddExceptExp && (
+                    <p className="text-sm text-gray-500 italic text-center">No exceptional expenses added.</p>
+                  )}
+                  {exceptExpenses.map(exp => (
+                    <div key={exp.id} className="flex justify-between items-center p-2 bg-yellow-50 border border-yellow-200 rounded text-sm">
+                      <div className="flex-1">
+                        <p className="font-bold text-gray-800">{exp.name}</p>
+                        <p className="text-xs text-gray-600">
+                          ${exp.amount} • {exp.type === 'one-time' ? `Month ${exp.month}` : (exp.recurrence === 'forever' ? 'Forever' : `Months ${exp.startMonth}-${exp.endMonth}`)}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => removeExceptionalExpense(exp.id)}
+                        className="ml-3 w-8 h-8 flex items-center justify-center bg-red-100 text-red-600 rounded hover:bg-red-200 transition-colors"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -753,8 +992,25 @@ const PropertyInvestmentCalculator = () => {
 
               {/* Total Summary section */}
               <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 mt-4">
-                <h3 className="font-semibold text-gray-700 mb-2">🌎 Total Summary</h3>
-                <div className="space-y-1">
+                <h2 className="text-lg font-bold text-gray-700 mb-3">💵 Total Summary</h2>
+
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="relative w-16 h-16 rounded-full shadow-inner" style={{
+                    background: `conic-gradient(#ef4444 ${Math.min(100, ((totalPropertyCost + monthlyPersonalExpenses) / (monthlyIncome + monthlyRentalIncome)) * 100)}%, #22c55e 0)`
+                  }}>
+                    <div className="absolute inset-2 bg-white rounded-full flex items-center justify-center">
+                      <span className="text-[10px] font-bold text-gray-500">
+                        {Math.round(((totalPropertyCost + monthlyPersonalExpenses) / (monthlyIncome + monthlyRentalIncome)) * 100)}%
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-xs space-y-1">
+                    <div className="flex items-center gap-1"><div className="w-2 h-2 bg-green-500 rounded-full"></div> Income</div>
+                    <div className="flex items-center gap-1"><div className="w-2 h-2 bg-red-500 rounded-full"></div> Expenses</div>
+                  </div>
+                </div>
+
+                <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Total Monthly Expenses:</span>
                     <span className="font-semibold text-red-600">-${Math.round(totalPropertyCost + monthlyPersonalExpenses).toLocaleString()}/month</span>
