@@ -42,6 +42,9 @@ const PropertyInvestmentCalculator = () => {
   const [newExpStart, setNewExpStart] = useState(1);
   const [newExpEnd, setNewExpEnd] = useState(4);
 
+  // Timeline Explorer State
+  const [timelineMonth, setTimelineMonth] = useState(0);
+
   // Calculate total scheduled offset contributions
   const totalScheduledOffset = offsetContributions.reduce((sum, contrib) => sum + contrib.amount, 0);
 
@@ -162,20 +165,21 @@ const PropertyInvestmentCalculator = () => {
       const principalPayment = monthlyPayment - monthlyInterest;
       balance = Math.max(0, balance - principalPayment);
 
+      // Save data for Timeline Explorer (Every Month)
+      monthlyData.push({
+        month: months,
+        balance: Math.round(balance),
+        offset: Math.round(effectiveOffset),
+        effectiveBalance: Math.round(effectiveBalance),
+        monthlyInterestPaid: Math.round(monthlyInterest),
+        totalInterestPaid: Math.round(totalInterest),
+        totalPrincipalPaid: Math.round(loanAmount - balance)
+      });
+
       // If offset >= remaining balance, we're done
       if (effectiveOffset >= balance) {
         balance = 0;
         break;
-      }
-
-      // Save data for chart (every 3 months)
-      if (months % 3 === 0) {
-        monthlyData.push({
-          month: months,
-          balance: Math.round(balance),
-          offset: Math.round(effectiveOffset),
-          effectiveBalance: Math.round(effectiveBalance)
-        });
       }
     }
 
@@ -537,7 +541,7 @@ const PropertyInvestmentCalculator = () => {
                     </div>
                     <button
                       onClick={() => removeTenant(tenant.id)}
-                      className="ml-3 w-8 h-8 flex items-center justify-center bg-red-100 text-red-600 rounded hover:bg-red-200 transition-colors"
+                      className="ml-3 px-2 py-1 bg-red-400 text-white rounded hover:bg-red-500 transition-colors text-xs"
                     >
                       ✕
                     </button>
@@ -857,18 +861,13 @@ const PropertyInvestmentCalculator = () => {
                   )}
                   {exceptExpenses.map(exp => (
                     <div key={exp.id} className="flex justify-between items-center p-2 bg-yellow-50 border border-yellow-200 rounded text-sm">
-                      <div className="flex-1">
+                      <div>
                         <p className="font-bold text-gray-800">{exp.name}</p>
                         <p className="text-xs text-gray-600">
                           ${exp.amount} • {exp.type === 'one-time' ? `Month ${exp.month}` : (exp.recurrence === 'forever' ? 'Forever' : `Months ${exp.startMonth}-${exp.endMonth}`)}
                         </p>
                       </div>
-                      <button
-                        onClick={() => removeExceptionalExpense(exp.id)}
-                        className="ml-3 w-8 h-8 flex items-center justify-center bg-red-100 text-red-600 rounded hover:bg-red-200 transition-colors"
-                      >
-                        ✕
-                      </button>
+                      <button onClick={() => removeExceptionalExpense(exp.id)} className="text-red-500 font-bold px-2">✕</button>
                     </div>
                   ))}
                 </div>
@@ -1159,6 +1158,131 @@ const PropertyInvestmentCalculator = () => {
           <p className="mt-3 text-xs italic">
             💡 Tip: The loan calculation now includes the full offset effect. Monthly payment is always ${Math.round(monthlyPayment)}, but with offset you reduce interest and pay more principal each month, finishing the loan much sooner.
           </p>
+
+          {/* TIMELINE EXPLORER */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-xl font-bold text-gray-700 mb-4 flex items-center gap-2">
+              <Calendar size={24} className="text-purple-600" />
+              Timeline Explorer
+            </h2>
+
+            <div className="mb-6">
+              <div className="flex justify-between items-end mb-2">
+                <div>
+                  <span className="text-sm font-semibold text-gray-500 uppercase">Viewing Month</span>
+                  <p className="text-3xl font-bold text-purple-700">{timelineMonth}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-medium text-gray-600">
+                    {Math.floor(timelineMonth / 12)} Years, {timelineMonth % 12} Months
+                  </p>
+                </div>
+              </div>
+
+              <input
+                type="range"
+                min="0"
+                max={loanSimulation.months}
+                value={timelineMonth}
+                onChange={(e) => setTimelineMonth(Number(e.target.value))}
+                className="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+              />
+              <div className="flex justify-between text-xs text-gray-400 mt-1">
+                <span>Start</span>
+                <span>Middle ({Math.round(loanSimulation.months / 2)})</span>
+                <span>End ({loanSimulation.months})</span>
+              </div>
+            </div>
+
+            {(() => {
+              // Get data for selected month (handle month 0 case)
+              const snapshot = timelineMonth === 0
+                ? {
+                  balance: loanAmount,
+                  offset: 0,
+                  effectiveBalance: loanAmount,
+                  monthlyInterestPaid: Math.round(initialMonthlyInterest),
+                  totalInterestPaid: 0,
+                  totalPrincipalPaid: 0
+                }
+                : (loanSimulation.monthlyData.find(d => d.month === timelineMonth) || loanSimulation.monthlyData[loanSimulation.monthlyData.length - 1]);
+
+              if (!snapshot) return null;
+
+              const effectiveProgress = Math.min(100, ((loanAmount - snapshot.effectiveBalance) / loanAmount) * 100);
+              const monthsRemaining = loanSimulation.months - timelineMonth;
+              const yearsRem = Math.floor(Math.max(0, monthsRemaining) / 12);
+              const monthsRem = Math.max(0, monthsRemaining) % 12;
+
+              return (
+                <div className="space-y-6">
+                  {/* PRIMARY STAT: NET EFFECTIVE BALANCE */}
+                  <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-6 rounded-xl border border-gray-200 text-center shadow-sm">
+                    <p className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-1">Net Effective Balance</p>
+                    <p className="text-4xl font-extrabold text-blue-900 mb-2">
+                      ${snapshot.effectiveBalance.toLocaleString()}
+                    </p>
+                    <div className="flex justify-center gap-4 text-sm text-gray-500">
+                      <span className="flex items-center gap-1">🏦 Loan: ${snapshot.balance.toLocaleString()}</span>
+                      <span className="text-gray-300">|</span>
+                      <span className="flex items-center gap-1">💰 Offset: ${snapshot.offset.toLocaleString()}</span>
+                    </div>
+                  </div>
+
+                  {/* SECONDARY METRICS */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-4 bg-orange-50 rounded-lg border border-orange-100 text-center">
+                      <p className="text-xs font-bold text-orange-600 uppercase mb-1">Interest (Monthly)</p>
+                      <p className="text-xl font-bold text-gray-800">
+                        Paying ~${snapshot.monthlyInterestPaid.toLocaleString()}/mo
+                      </p>
+                      <p className="text-xs text-orange-400 mt-1">at this point in time</p>
+                    </div>
+
+                    <div className="p-4 bg-purple-50 rounded-lg border border-purple-100 text-center">
+                      <p className="text-xs font-bold text-purple-600 uppercase mb-1">Interest Paid (Total)</p>
+                      <p className="text-xl font-bold text-gray-800">
+                        ${snapshot.totalInterestPaid.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-purple-400 mt-1">accumulated so far</p>
+                    </div>
+
+                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-100 text-center">
+                      <p className="text-xs font-bold text-blue-600 uppercase mb-1">Time Remaining</p>
+                      <p className="text-xl font-bold text-gray-800">
+                        {yearsRem}y {monthsRem}m
+                      </p>
+                      <p className="text-xs text-blue-400 mt-1">until mortgage free</p>
+                    </div>
+                  </div>
+
+                  {/* PROGRESS BAR */}
+                  <div className="mt-2">
+                    <div className="flex justify-between text-xs font-bold text-gray-600 mb-1">
+                      <span>Effective Ownership</span>
+                      <span>{effectiveProgress.toFixed(1)}% Owned</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden relative">
+                      <div
+                        className="h-full bg-green-500 transition-all duration-300 absolute left-0"
+                        style={{ width: `${effectiveProgress}%` }}
+                      ></div>
+                      {/* Marker for where pure principal payment is */}
+                      <div
+                        className="h-full border-r-2 border-white/50 absolute top-0"
+                        style={{ left: `${(snapshot.totalPrincipalPaid / loanAmount) * 100}%` }}
+                        title="Principal Paid (Direct)"
+                      ></div>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1 text-center">
+                      (Green bar = Principal Paid + Money sitting in Offset)
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
         </div>
       </div>
     </div>
