@@ -100,8 +100,10 @@ const PropertyInvestmentCalculator = () => {
   const monthlyIncome = fortnightlyIncome * 26 / 12;
 
   // NET WEEKLY/MONTHLY BALANCE
-  const weeklyNetBalance = weeklyIncome - weeklyPersonalExpenses - weeklyPropertyBalance;
-  const monthlyNetBalance = monthlyIncome - monthlyPersonalExpenses - Math.abs(monthlyPropertyBalance);
+  // NET WEEKLY/MONTHLY BALANCE
+  // Logic: (Personal Income + Rental Income) - (Personal Expenses + Property Expenses)
+  const monthlyNetBalance = (monthlyIncome + monthlyRentalIncome) - (monthlyPersonalExpenses + totalPropertyCost);
+  const weeklyNetBalance = (weeklyIncome + weeklyRentalIncome) - (weeklyPersonalExpenses + (totalPropertyCost * 12 / 52));
   const fortnightlyNetBalance = weeklyNetBalance * 2;
 
   // What you can deposit to offset
