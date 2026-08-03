@@ -32,6 +32,10 @@ import {
 import { calculateLoanWithOffset } from './calculations/offsetSimulation';
 import { clampToRange } from './calculations/clampToRange';
 import { safePercentage } from './calculations/safePercentage';
+import { calculateStampDuty } from './calculations/stampDuty';
+import { estimateLmi } from './calculations/lmi';
+import { DEFAULT_CLOSING_COSTS, sumClosingCosts } from './calculations/closingCosts';
+import { calculateTotalCashRequired } from './calculations/totalCashRequired';
 
 const PropertyInvestmentCalculator = () => {
   const [propertyPrice, setPropertyPrice] = useState(500000);
@@ -41,6 +45,21 @@ const PropertyInvestmentCalculator = () => {
   const [utilities, setUtilities] = useState(200);
   const [councilRates, setCouncilRates] = useState(450);
   const [insurance, setInsurance] = useState(80);
+
+  // Upfront purchase costs (NSW)
+  const [isFirstHomeBuyer, setIsFirstHomeBuyer] = useState(false);
+  const [totalSavings, setTotalSavings] = useState(320000);
+  const [payLmiUpfront, setPayLmiUpfront] = useState(false);
+  const [showClosingCostsBreakdown, setShowClosingCostsBreakdown] = useState(false);
+  const [conveyancing, setConveyancing] = useState(DEFAULT_CLOSING_COSTS.conveyancing);
+  const [buildingInspection, setBuildingInspection] = useState(DEFAULT_CLOSING_COSTS.buildingInspection);
+  const [pestInspection, setPestInspection] = useState(DEFAULT_CLOSING_COSTS.pestInspection);
+  const [registrationFees, setRegistrationFees] = useState(DEFAULT_CLOSING_COSTS.registrationFees);
+  const [searches, setSearches] = useState(DEFAULT_CLOSING_COSTS.searches);
+  const [loanEstablishmentFee, setLoanEstablishmentFee] = useState(DEFAULT_CLOSING_COSTS.loanEstablishmentFee);
+  const [propertyValuation, setPropertyValuation] = useState(DEFAULT_CLOSING_COSTS.propertyValuation);
+  const [homeInsurance, setHomeInsurance] = useState(DEFAULT_CLOSING_COSTS.homeInsurance);
+  const [rateAdjustments, setRateAdjustments] = useState(DEFAULT_CLOSING_COSTS.rateAdjustments);
 
   // Rental options
   const [tenants, setTenants] = useState([]);
@@ -79,9 +98,33 @@ const PropertyInvestmentCalculator = () => {
 
   // Loan calculations
   const loanAmount = calculateLoanAmount(propertyPrice, downPayment);
+  const lvr = safePercentage(loanAmount, propertyPrice);
   const monthlyRate = calculateMonthlyRate(interestRate);
   const totalMonths = TOTAL_MONTHS;
   const monthlyPayment = calculateMonthlyPayment(loanAmount, monthlyRate, totalMonths);
+
+  // Upfront costs of buying (NSW)
+  const stampDuty = calculateStampDuty(propertyPrice, isFirstHomeBuyer);
+  const lmi = estimateLmi(loanAmount, lvr);
+  const closingCostsSubtotal = sumClosingCosts([
+    conveyancing,
+    buildingInspection,
+    pestInspection,
+    registrationFees,
+    searches,
+    loanEstablishmentFee,
+    propertyValuation,
+    homeInsurance,
+    rateAdjustments,
+  ]);
+  const totalCashRequired = calculateTotalCashRequired({
+    downPayment,
+    stampDuty,
+    closingCostsSubtotal,
+    lmi,
+    payLmiUpfront,
+  });
+  const cashRemaining = totalSavings - totalCashRequired;
 
   // Monthly property expenses
   const monthlyStrata = calculateMonthlyStrata(strataFees);
@@ -304,7 +347,34 @@ const PropertyInvestmentCalculator = () => {
                 suffix=" AUD"
                 formatBound={formatCompactMoney}
               >
-                Loan: ${loanAmount.toLocaleString()} ({safePercentage(loanAmount, propertyPrice).toFixed(1)}% LVR)
+                Loan: ${loanAmount.toLocaleString()} ({lvr.toFixed(1)}% LVR)
+              </NumberSliderField>
+
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={isFirstHomeBuyer}
+                  onChange={(e) => setIsFirstHomeBuyer(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                First Home Buyer (NSW stamp duty concession)
+              </label>
+
+              <NumberSliderField
+                label="Total Savings Available"
+                value={totalSavings}
+                onChange={setTotalSavings}
+                min={0}
+                max={10000000}
+                sliderMin={0}
+                sliderMax={3000000}
+                step={10000}
+                color="green"
+                prefix="$"
+                suffix=" AUD"
+                formatBound={formatCompactMoney}
+              >
+                The whole savings pool the deposit and upfront costs come out of.
               </NumberSliderField>
 
               {/* min must stay above 0: a 0% rate makes calculateMonthlyPayment
@@ -328,6 +398,149 @@ const PropertyInvestmentCalculator = () => {
                   Monthly Payment: ${Math.round(monthlyPayment).toLocaleString()}
                 </p>
               </div>
+            </div>
+          </div>
+
+          {/* Upfront Costs (NSW) */}
+          <div className="bg-white rounded-lg shadow-md p-5">
+            <h2 className="text-xl font-bold text-gray-700 mb-4 flex items-center gap-2">
+              <DollarSign size={24} className="text-purple-600" />
+              Upfront Costs (NSW)
+            </h2>
+
+            <div className="space-y-4">
+              {lvr > 80 && (
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={payLmiUpfront}
+                    onChange={(e) => setPayLmiUpfront(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  Pay LMI upfront in cash (instead of financing it into the loan)
+                </label>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setShowClosingCostsBreakdown(!showClosingCostsBreakdown)}
+                className="text-sm font-medium text-blue-600 hover:text-blue-700"
+              >
+                {showClosingCostsBreakdown ? '▾' : '▸'} Closing costs breakdown (subtotal: ${closingCostsSubtotal.toLocaleString()})
+              </button>
+
+              {showClosingCostsBreakdown && (
+                <div className="space-y-4 pl-3 border-l-2 border-gray-200">
+                  <NumberSliderField
+                    label="Conveyancing"
+                    value={conveyancing}
+                    onChange={setConveyancing}
+                    min={0}
+                    max={5000}
+                    sliderMin={0}
+                    sliderMax={3000}
+                    step={50}
+                    color="orange"
+                    prefix="$"
+                  />
+                  <NumberSliderField
+                    label="Building Inspection"
+                    value={buildingInspection}
+                    onChange={setBuildingInspection}
+                    min={0}
+                    max={2000}
+                    sliderMin={0}
+                    sliderMax={1000}
+                    step={25}
+                    color="orange"
+                    prefix="$"
+                  />
+                  <NumberSliderField
+                    label="Pest Inspection"
+                    value={pestInspection}
+                    onChange={setPestInspection}
+                    min={0}
+                    max={1000}
+                    sliderMin={0}
+                    sliderMax={600}
+                    step={25}
+                    color="orange"
+                    prefix="$"
+                  />
+                  <NumberSliderField
+                    label="Registration Fees"
+                    value={registrationFees}
+                    onChange={setRegistrationFees}
+                    min={0}
+                    max={1000}
+                    sliderMin={0}
+                    sliderMax={600}
+                    step={25}
+                    color="orange"
+                    prefix="$"
+                  />
+                  <NumberSliderField
+                    label="Searches"
+                    value={searches}
+                    onChange={setSearches}
+                    min={0}
+                    max={1000}
+                    sliderMin={0}
+                    sliderMax={500}
+                    step={25}
+                    color="orange"
+                    prefix="$"
+                  />
+                  <NumberSliderField
+                    label="Loan Establishment Fee"
+                    value={loanEstablishmentFee}
+                    onChange={setLoanEstablishmentFee}
+                    min={0}
+                    max={2000}
+                    sliderMin={0}
+                    sliderMax={800}
+                    step={25}
+                    color="orange"
+                    prefix="$"
+                  />
+                  <NumberSliderField
+                    label="Property Valuation"
+                    value={propertyValuation}
+                    onChange={setPropertyValuation}
+                    min={0}
+                    max={1000}
+                    sliderMin={0}
+                    sliderMax={500}
+                    step={25}
+                    color="orange"
+                    prefix="$"
+                  />
+                  <NumberSliderField
+                    label="Home Insurance (first payment)"
+                    value={homeInsurance}
+                    onChange={setHomeInsurance}
+                    min={0}
+                    max={3000}
+                    sliderMin={0}
+                    sliderMax={1500}
+                    step={25}
+                    color="orange"
+                    prefix="$"
+                  />
+                  <NumberSliderField
+                    label="Rate Adjustments"
+                    value={rateAdjustments}
+                    onChange={setRateAdjustments}
+                    min={0}
+                    max={2000}
+                    sliderMin={0}
+                    sliderMax={800}
+                    step={25}
+                    color="orange"
+                    prefix="$"
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -900,6 +1113,50 @@ const PropertyInvestmentCalculator = () => {
                     <div className="flex justify-between">
                       <span className="text-gray-700">Total Monthly Income:</span>
                       <span className="text-green-700">+${Math.round(monthlyRentalIncome + monthlyIncome).toLocaleString()}/month</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Upfront Costs section */}
+              <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
+                <h3 className="font-semibold text-gray-700 mb-2">🏛️ Upfront Costs (NSW)</h3>
+                <div className="space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">
+                      Stamp Duty{isFirstHomeBuyer && ' (FHB concession)'}:
+                    </span>
+                    <span className="font-semibold text-red-600">-${Math.round(stampDuty).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">LMI (estimate, {lvr.toFixed(1)}% LVR):</span>
+                    <span className="font-semibold text-red-600">
+                      {lmi > 0 ? `-$${Math.round(lmi).toLocaleString()}` : '$0'}
+                      {lmi > 0 && !payLmiUpfront && (
+                        <span className="text-xs text-gray-500 font-normal ml-1">(financed into loan)</span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Closing Costs:</span>
+                    <span className="font-semibold text-red-600">-${closingCostsSubtotal.toLocaleString()}</span>
+                  </div>
+                  <div className="border-t border-purple-200 pt-1 mt-1 font-bold">
+                    <div className="flex justify-between">
+                      <span className="text-gray-700">Total Cash Required:</span>
+                      <span className="text-red-700">${Math.round(totalCashRequired).toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Total Savings Available:</span>
+                    <span className="font-semibold text-gray-700">${totalSavings.toLocaleString()}</span>
+                  </div>
+                  <div className={`border-t pt-1 mt-1 font-bold ${getBalanceBgColor(cashRemaining)}`}>
+                    <div className="flex justify-between">
+                      <span className="text-gray-700">Cash Remaining:</span>
+                      <span className={getBalanceColor(cashRemaining)}>
+                        {cashRemaining >= 0 ? '+' : '-'}${Math.abs(Math.round(cashRemaining)).toLocaleString()}
+                      </span>
                     </div>
                   </div>
                 </div>

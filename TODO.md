@@ -5,6 +5,8 @@ Mark with `[x]` when complete. This numbering is independent of the git
 commit history — it's just a stable ID for each item, which you can
 optionally reuse in the commit message when you implement it.
 
+## ✅ Completed
+
 - [x] **TODO-1: Add unit tests**
   Added Vitest and extracted the pure financial calculations (loan amount,
   monthly payment, net balance — including the PCALC-6 fix — and the
@@ -33,20 +35,7 @@ optionally reuse in the commit message when you implement it.
   monthly payment), a zero loan amount printed `NaN`/`Infinity` in the progress
   bar and the offset summary, and clearing a field snapped it to 0 because
   `Number('')` is 0. Note the loan itself stays derived rather than editable —
-  see TODO-11 for making it an input in its own right.
-
-- [ ] **TODO-4: Rental income by date range (optional)**
-  Today each tenant's rental income is a fixed weekly amount applied across
-  the whole timeline (`tenants`, `calculateWeeklyRentalIncome` in
-  `src/calculations/loan.js`). Allow an optional start/end month per tenant
-  (similar to the pattern already used in `exceptExpenses` with
-  `startMonth`/`endMonth`, `src/App.jsx:217-218`). If no range is specified,
-  it should apply to the entire timeline (current behavior).
-
-- [ ] **TODO-5: Property expenses and personal expenses by date range (optional)**
-  Same concept as the previous item, applied to property expenses and
-  personal expenses (currently fixed monthly/weekly values with no dates).
-  Reuse the same optional month-range pattern.
+  see TODO-13 for making it an input in its own right.
 
 - [x] **TODO-6: Interest rate with fine-grained decimals (e.g. 5.85%)**
   Done as part of TODO-3. The rate is now a number field accepting 2 decimals,
@@ -64,6 +53,101 @@ optionally reuse in the commit message when you implement it.
   explanatory message instead of an empty scrubber whenever there's no
   month-by-month data — distinguishing "no loan at all" from "nothing going into
   the offset yet".
+
+- [x] **TODO-11: Model the upfront cost of buying (NSW)**
+  Added `src/calculations/stampDuty.js` (NSW 2026-27 progressive tiers +
+  First Home Buyer concession, linearly tapered between $800k-$1M), `lmi.js`
+  (LVR-banded estimate, triggered above 80%), `closingCosts.js` (9 editable
+  line items with NSW-average defaults, ~$4,750 subtotal), and
+  `totalCashRequired.js` (combines deposit + stamp duty + closing costs, with
+  LMI only counted if the user opts to pay it upfront instead of financing it
+  into the loan). New "Upfront Costs (NSW)" card in both panels: a First Home
+  Buyer checkbox, a "Total Savings Available" field, and a collapsible closing
+  costs breakdown on the input side; a Stamp Duty / LMI / Closing Costs /
+  Total Cash Required / Cash Remaining summary (red when negative, reusing
+  `getBalanceColor`/`getBalanceBgColor`) on the results side. Verified against
+  the worked example ($900k FHB purchase, $250k deposit → $274,344 total cash
+  required, $45,657 remaining from $320k savings) and the $500k/90% LVR LMI
+  case ($12,375 estimate) directly in the browser.
+
+---
+
+## 🔴 HIGH PRIORITY (User-facing impact or blockers)
+
+- [ ] **TODO-16: Externalize config defaults** ⭐ START HERE
+  Right now, all default values are hardcoded in `src/App.jsx:34-72`: property
+  price ($500k), down payment ($250k), interest rate (5.38%), all expenses, and
+  income. Anyone downloading the app has to edit the code to change them. Create
+  a `config.default.json` (or `.js`) in the repo root with all these values,
+  load it at startup, and allow an optional user-provided `config.local.json`
+  (git-ignored) to override them. This unblocks non-developers from using the
+  app and lets teams share calculation presets. **Values to externalize:**
+  `propertyPrice`, `downPayment`, `interestRate`, `strataFees`, `utilities`,
+  `councilRates`, `insurance`, `fortnightlyIncome`, `foodExpenses`,
+  `transportExpenses`, `otherExpenses`, `newTenantRent`, `newContribAmount`,
+  `newExpAmount`, `isFirstHomeBuyer`, `totalSavings`, `conveyancing`,
+  `buildingInspection`, `pestInspection`, `registrationFees`, `searches`,
+  `loanEstablishmentFee`, `propertyValuation`, `homeInsurance`,
+  `rateAdjustments` (the last 10 added by TODO-11).
+
+- [ ] **TODO-4: Rental income by date range (optional)**
+  Today each tenant's rental income is a fixed weekly amount applied across
+  the whole timeline (`tenants`, `calculateWeeklyRentalIncome` in
+  `src/calculations/loan.js`). Allow an optional start/end month per tenant
+  (similar to the pattern already used in `exceptExpenses` with
+  `startMonth`/`endMonth`, `src/App.jsx:217-218`). If no range is specified,
+  it should apply to the entire timeline (current behavior).
+
+- [ ] **TODO-5: Property expenses and personal expenses by date range (optional)**
+  Same concept as TODO-4, applied to property expenses and
+  personal expenses (currently fixed monthly/weekly values with no dates).
+  Reuse the same optional month-range pattern.
+
+---
+
+## 🟡 MEDIUM PRIORITY (Important, but not blocking)
+
+- [ ] **TODO-12: Link savings, deposit and offset**
+  `downPayment` and `offsetContributions` are independent pieces of state with
+  no cross-validation, so you can set a $250k deposit *and* a $250k month-1
+  offset contribution — spending the same money twice with no warning. Deciding
+  how to split a given pot of savings between deposit and offset is arguably
+  the core question this calculator should answer, and right now it can't even
+  detect the contradiction. TODO-11 added `totalSavings` as a standalone input
+  (used only for the "Cash Remaining" figure) but did **not** solve this — there
+  is still no cross-check between `totalSavings`, `downPayment` and
+  `offsetContributions`, so the double-counting warning remains to be built.
+
+- [ ] **TODO-15: Configurable loan term**
+  `TOTAL_MONTHS = 30 * 12` (`src/calculations/loan.js:1`) is hardcoded and feeds
+  the mortgage payment formula, the amortization loop's `maxMonths` cap, and the
+  no-offset baseline used in the savings card. Making it a
+  `NumberSliderField` (e.g. 1-30 years) means every one of those call sites
+  needs the term passed through explicitly instead of relying on the default
+  parameter, and the "30 years standard" / "30-year mortgage" wording sprinkled
+  through the UI and README would need to reflect the chosen term instead.
+
+- [ ] **TODO-13: Editable loan amount**
+  `Loan` is still a read-only derived value
+  (`loanAmount = propertyPrice - downPayment`). Making it directly editable
+  means deciding what gives when the user types into it — presumably the
+  deposit recalculates — and keeping the three fields consistent in every
+  direction.
+
+---
+
+## 🟢 LOW PRIORITY (Polish, refactoring, cleanup)
+
+- [ ] **TODO-14: Small display and input leftovers**
+  - "Net Property Monthly Balance" renders a negative as `$-642/month` instead
+    of `-$642/month` (`src/App.jsx:924`, from PCALC-2); every other figure in
+    the app uses the `-$X` form.
+  - The two remaining bare `type="number"` inputs (`newContribAmount`, and
+    `newExpAmount` which has no `min`/`max`/`step` at all) still snap to 0 when
+    cleared — they could reuse `NumberSliderField` in a number-only mode.
+  - `NumberSliderField` itself has no component tests; React Testing Library is
+    not installed, so its draft/commit typing behaviour is currently covered
+    only through the pure helpers plus manual verification.
 
 - [ ] **TODO-8: Extract and test the Timeline Explorer snapshot**
   Left out of scope of the tests work (TODO-1): the logic starting at
@@ -83,57 +167,3 @@ optionally reuse in the commit message when you implement it.
   longer have callers after TODO-2. They're tested and correct, so they were
   left in place rather than widening a bug-fix diff — decide whether the module
   should be a general formula library or contain only what the app uses.
-
-- [ ] **TODO-11: Model the upfront cost of buying**
-  The single biggest gap for an Australian calculator: the app models the loan
-  but nothing you have to pay *to get* the loan, so it overstates how much of
-  your savings can go into the deposit. There are several variables and they
-  interact, which is why this deserves its own analysis rather than being
-  bolted on:
-  - **Stamp duty** — a state tax on the purchase, with progressive thresholds
-    that differ per state. Tens of thousands of dollars on a typical purchase.
-  - **First home buyer concessions and exemptions** — threshold-based, and
-    they can remove the duty entirely below a cut-off. Needs the buyer type
-    and the state as inputs.
-  - **LMI (Lenders Mortgage Insurance)** — charged when the LVR exceeds 80%.
-    The app already computes and displays the LVR but gives no warning at all
-    when it crosses that line.
-  - **Legal / conveyancing, building and pest inspection, loan fees.**
-  - Then surface a **"total cash required"** figure, so the user can see that
-    "I have $250k" is not the same as "I can put $250k down".
-
-- [ ] **TODO-12: Link savings, deposit and offset**
-  `downPayment` and `offsetContributions` are independent pieces of state with
-  no cross-validation, so you can set a $250k deposit *and* a $250k month-1
-  offset contribution — spending the same money twice with no warning. Deciding
-  how to split a given pot of savings between deposit and offset is arguably
-  the core question this calculator should answer, and right now it can't even
-  detect the contradiction. Depends on TODO-11, since upfront costs come out of
-  the same pot.
-
-- [ ] **TODO-13: Editable loan amount**
-  `Loan` is still a read-only derived value
-  (`loanAmount = propertyPrice - downPayment`). Making it directly editable
-  means deciding what gives when the user types into it — presumably the
-  deposit recalculates — and keeping the three fields consistent in every
-  direction.
-
-- [ ] **TODO-14: Small display and input leftovers**
-  - "Net Property Monthly Balance" renders a negative as `$-642/month` instead
-    of `-$642/month` (`src/App.jsx:924`, from PCALC-2); every other figure in
-    the app uses the `-$X` form.
-  - The two remaining bare `type="number"` inputs (`newContribAmount`, and
-    `newExpAmount` which has no `min`/`max`/`step` at all) still snap to 0 when
-    cleared — they could reuse `NumberSliderField` in a number-only mode.
-  - `NumberSliderField` itself has no component tests; React Testing Library is
-    not installed, so its draft/commit typing behaviour is currently covered
-    only through the pure helpers plus manual verification.
-
-- [ ] **TODO-15: Configurable loan term**
-  `TOTAL_MONTHS = 30 * 12` (`src/calculations/loan.js:1`) is hardcoded and feeds
-  the mortgage payment formula, the amortization loop's `maxMonths` cap, and the
-  no-offset baseline used in the savings card. Making it a
-  `NumberSliderField` (e.g. 1-30 years) means every one of those call sites
-  needs the term passed through explicitly instead of relying on the default
-  parameter, and the "30 years standard" / "30-year mortgage" wording sprinkled
-  through the UI and README would need to reflect the chosen term instead.

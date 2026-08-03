@@ -42,6 +42,18 @@ This calculator helps you make **informed decisions** about property investments
 Every money field is a number box paired with a slider: drag to explore a typical
 range, or type an exact value such as `742,500` when the slider is too coarse.
 
+### 🏛️ Upfront Costs (NSW)
+- **Stamp Duty**: NSW 2026-27 progressive tiers, with a First Home Buyer
+  concession (full exemption up to $800k, tapering off by $1M)
+- **LMI (Lenders Mortgage Insurance)**: estimated automatically once the LVR
+  exceeds 80%, with an option to pay it upfront in cash instead of financing
+  it into the loan
+- **Closing costs**: conveyancing, building/pest inspections, registration,
+  searches, loan fees, valuation, insurance and rate adjustments — each
+  editable, with sensible NSW-average defaults (~$4,750 combined)
+- **Total Cash Required** and **Cash Remaining**: see at a glance whether your
+  savings cover the deposit *and* every cost of settling, not just the deposit
+
 ### 💵 Property Expenses
 - **Strata fees** (quarterly)
 - **Council rates** (quarterly)
