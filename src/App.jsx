@@ -12,13 +12,10 @@ import {
   calculateMonthlyCouncil,
   calculateMonthlyPropertyExpenses,
   calculateTotalPropertyCost,
-  getMonth1Offset,
-  calculateInitialPrincipal,
   calculateInitialMonthlyInterest,
+  calculateNoOffsetTotalInterest,
   calculateWeeklyRentalIncome,
   calculateMonthlyRentalIncome,
-  calculateMonthlyPropertyBalance,
-  calculateWeeklyPropertyBalance,
   calculateWeeklyPersonalExpenses,
   calculateMonthlyPersonalExpenses,
   calculateWeeklyIncome,
@@ -53,9 +50,6 @@ const PropertyInvestmentCalculator = () => {
   const [foodExpenses, setFoodExpenses] = useState(100);
   const [transportExpenses, setTransportExpenses] = useState(50);
   const [otherExpenses, setOtherExpenses] = useState(50);
-
-  // Initial offset
-  const [initialOffset, setInitialOffset] = useState(0);
 
   // Offset contributions state
   const [offsetContributions, setOffsetContributions] = useState([]);
@@ -92,25 +86,20 @@ const PropertyInvestmentCalculator = () => {
   const monthlyPropertyExpenses = calculateMonthlyPropertyExpenses(monthlyStrata, utilities, monthlyCouncil, insurance);
   const totalPropertyCost = calculateTotalPropertyCost(monthlyPayment, monthlyPropertyExpenses);
 
-  // Interest deduction - Check for Month 1 offset
-  const month1Offset = getMonth1Offset(offsetContributions);
-  const initialPrincipal = calculateInitialPrincipal(loanAmount, month1Offset);
-  const initialMonthlyInterest = calculateInitialMonthlyInterest(initialPrincipal, monthlyRate);
+  // Interest on the full balance, before any offset is applied.
+  // This is the Timeline Explorer's "month 0" figure: nothing has happened yet,
+  // so it must stay consistent with that snapshot's offset: 0 / effectiveBalance: loanAmount.
+  const monthZeroInterest = calculateInitialMonthlyInterest(loanAmount, monthlyRate);
 
   // Rental income
   const weeklyRentalIncome = calculateWeeklyRentalIncome(tenants);
   const monthlyRentalIncome = calculateMonthlyRentalIncome(weeklyRentalIncome);
-
-  // Property balance
-  const monthlyPropertyBalance = calculateMonthlyPropertyBalance(monthlyRentalIncome, totalPropertyCost);
-  const weeklyPropertyBalance = calculateWeeklyPropertyBalance(monthlyPropertyBalance);
 
   // Your personal expenses
   const weeklyPersonalExpenses = calculateWeeklyPersonalExpenses(foodExpenses, transportExpenses, otherExpenses);
   const monthlyPersonalExpenses = calculateMonthlyPersonalExpenses(weeklyPersonalExpenses);
 
   // Total cash flow
-  const fortnightlyIncomeBiweekly = fortnightlyIncome;
   const weeklyIncome = calculateWeeklyIncome(fortnightlyIncome);
   const monthlyIncome = calculateMonthlyIncome(fortnightlyIncome);
 
@@ -143,7 +132,18 @@ const PropertyInvestmentCalculator = () => {
     monthlyPayment,
   });
   const interestSaved = baselineSimulation.totalInterest - loanSimulation.totalInterest;
-  const yearsToPayOff = loanSimulation.years;
+
+  // First month of the simulation. Taken from the simulation itself so it accounts for
+  // everything the loop does in month 1: any scheduled lump sum, the recurring monthly
+  // surplus, and exceptional expenses. Falls back to the un-offset figure when the
+  // simulation can't run (no surplus and no contributions -> monthlyData is empty).
+  const firstMonth = loanSimulation.monthlyData[0];
+  const firstMonthInterest = firstMonth?.monthlyInterestPaid ?? Math.round(monthZeroInterest);
+  const firstMonthOffset = firstMonth?.offset ?? 0;
+
+  // Total interest on a plain 30-year loan with no offset at all, used as the
+  // comparison baseline in the savings card.
+  const noOffsetTotalInterest = calculateNoOffsetTotalInterest(monthlyPayment, loanAmount, totalMonths);
 
   // Functions for managing offset contributions
   const addOffsetContribution = () => {
@@ -827,8 +827,8 @@ const PropertyInvestmentCalculator = () => {
 
                   <div className="flex justify-between">
                     <span className="text-gray-600">Interest Amount (monthly):</span>
-                    <span className="text-orange-600">-${Math.round(initialMonthlyInterest).toLocaleString()}</span>
-                    {month1Offset > 0 && <span className="text-xs text-green-600 ml-1 self-center">(offset applied)</span>}
+                    <span className="text-orange-600">-${firstMonthInterest.toLocaleString()}</span>
+                    {firstMonthOffset > 0 && <span className="text-xs text-green-600 ml-1 self-center">(offset applied)</span>}
                   </div>
                 </div>
               </div>
@@ -1059,9 +1059,9 @@ const PropertyInvestmentCalculator = () => {
 
                 <div className="bg-white/20 backdrop-blur rounded-lg p-3 text-xs">
                   <p className="font-semibold mb-1">💰 Savings vs no offset:</p>
-                  <p>Without offset (30 years): ~$272,000</p>
+                  <p>Without offset (30 years): ~${Math.round(noOffsetTotalInterest).toLocaleString()}</p>
                   <p className="text-yellow-300 font-bold">
-                    You save: ~${Math.round(272000 - loanSimulation.totalInterest).toLocaleString()}
+                    You save: ~${Math.round(noOffsetTotalInterest - loanSimulation.totalInterest).toLocaleString()}
                   </p>
                 </div>
               </div>
@@ -1132,7 +1132,7 @@ const PropertyInvestmentCalculator = () => {
                   balance: loanAmount,
                   offset: 0,
                   effectiveBalance: loanAmount,
-                  monthlyInterestPaid: Math.round(initialMonthlyInterest),
+                  monthlyInterestPaid: Math.round(monthZeroInterest),
                   totalInterestPaid: 0,
                   totalPrincipalPaid: 0
                 }

@@ -58,8 +58,8 @@ This calculator helps you make **informed decisions** about property investments
 - **Other expenses** (weekly)
 
 ### 🎯 Offset Account Features
-- **Initial offset balance**: Start with existing savings
-- **Deposit start delay**: Simulate settling-in period (0-24 months)
+- **Scheduled contributions**: Add lump sum deposits at specific months
+- **Exceptional expenses**: One-off or recurring costs that eat into the surplus
 - **Automatic calculation**: Whatever is left after expenses goes to offset
 
 ### 📊 Real-Time Results
@@ -165,8 +165,8 @@ npm run test:watch
 4. Include **other expenses** (weekly)
 
 ### Step 5: Configure Offset Account
-1. Set **initial offset balance** (if you have savings)
-2. Choose when to **start deposits** (immediately or after settling in)
+1. Add **scheduled contributions** (lump sums at specific months, if you have savings)
+2. Add any **exceptional expenses** (one-off or recurring) that reduce your surplus
 
 ### Step 6: Analyze Results
 The calculator instantly shows:
@@ -208,9 +208,11 @@ Monthly Payment:    $1,401
 
 With Offset Strategy:
 ├─ Deposit $1,200/month to offset
-├─ Time to pay off: ~5.2 years
-├─ Total interest:  ~$35,000
-└─ Savings vs 30yr: ~$237,000 ✨
+├─ Time to pay off: ~10.5 years
+├─ Total interest:  ~$77,000
+└─ Savings vs 30yr: ~$177,000 ✨
+
+(Without any offset, the same loan costs ~$254,000 in interest over 30 years.)
 ```
 
 ---

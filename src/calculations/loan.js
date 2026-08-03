@@ -41,6 +41,12 @@ export function calculateInitialMonthlyInterest(initialPrincipal, monthlyRate) {
   return initialPrincipal * monthlyRate;
 }
 
+// Total interest on a plain loan with no offset at all: every installment is paid
+// in full over the whole term, so everything above the principal is interest.
+export function calculateNoOffsetTotalInterest(monthlyPayment, loanAmount, totalMonths = TOTAL_MONTHS) {
+  return monthlyPayment * totalMonths - loanAmount;
+}
+
 export function calculateWeeklyRentalIncome(tenants) {
   return tenants.reduce((sum, t) => sum + t.amount, 0);
 }

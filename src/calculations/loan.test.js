@@ -11,6 +11,7 @@ import {
   getMonth1Offset,
   calculateInitialPrincipal,
   calculateInitialMonthlyInterest,
+  calculateNoOffsetTotalInterest,
   calculateWeeklyRentalIncome,
   calculateMonthlyRentalIncome,
   calculateMonthlyPropertyBalance,
@@ -107,6 +108,39 @@ describe('getMonth1Offset / calculateInitialPrincipal / calculateInitialMonthlyI
   it('computes initial monthly interest from the initial principal', () => {
     const initialPrincipal = calculateInitialPrincipal(250000, 20000);
     expect(calculateInitialMonthlyInterest(initialPrincipal, 0.004483333333333333)).toBeCloseTo(1031.17, 1);
+  });
+});
+
+describe('calculateNoOffsetTotalInterest', () => {
+  it('computes the 30-year no-offset interest for the default loan', () => {
+    const loanAmount = calculateLoanAmount(DEFAULTS.propertyPrice, DEFAULTS.downPayment);
+    const monthlyRate = calculateMonthlyRate(DEFAULTS.interestRate);
+    const monthlyPayment = calculateMonthlyPayment(loanAmount, monthlyRate, TOTAL_MONTHS);
+    // Was hardcoded as 272000 in the UI, which was wrong by ~$18k and never
+    // responded to changes in price / down payment / rate.
+    expect(calculateNoOffsetTotalInterest(monthlyPayment, loanAmount, TOTAL_MONTHS)).toBeCloseTo(254255, 0);
+  });
+
+  it('scales with the loan amount', () => {
+    const monthlyRate = calculateMonthlyRate(DEFAULTS.interestRate);
+    const small = calculateNoOffsetTotalInterest(
+      calculateMonthlyPayment(250000, monthlyRate), 250000
+    );
+    const big = calculateNoOffsetTotalInterest(
+      calculateMonthlyPayment(600000, monthlyRate), 600000
+    );
+    expect(big).toBeGreaterThan(small);
+  });
+
+  it('scales with the interest rate', () => {
+    const loanAmount = 250000;
+    const cheap = calculateNoOffsetTotalInterest(
+      calculateMonthlyPayment(loanAmount, calculateMonthlyRate(4)), loanAmount
+    );
+    const pricey = calculateNoOffsetTotalInterest(
+      calculateMonthlyPayment(loanAmount, calculateMonthlyRate(8)), loanAmount
+    );
+    expect(pricey).toBeGreaterThan(cheap);
   });
 });
 

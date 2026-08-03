@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { calculateLoanWithOffset } from './offsetSimulation';
-import { getMonth1Offset, calculateInitialPrincipal, calculateInitialMonthlyInterest } from './loan';
 
 describe('calculateLoanWithOffset', () => {
   it('returns the sentinel result when there is no surplus and no contributions', () => {
@@ -133,31 +132,47 @@ describe('calculateLoanWithOffset', () => {
     expect(offsets).toEqual([0, 1000, 1000, 1000, 3000, 3000]);
   });
 
-  it('agrees with the standalone initialMonthlyInterest calculation when there is no ongoing surplus (month 1)', () => {
-    // These two computations (loan.js's initialMonthlyInterest, used for the
-    // Timeline Explorer's month-0 display, vs. this loop's own month-1 entry)
-    // are separate code paths that happen to agree here. If monthlyToOffset
-    // were nonzero, this month's extra deposit would push the loop's number
-    // below the standalone one - that's a known, accepted difference, not a
-    // bug, but this test acts as a tripwire in case the formulas drift apart
-    // unintentionally in the zero-surplus case.
-    const loanAmount = 100000;
+  // Regression guard for the bug where the "Interest Amount (monthly)" panel used
+  // (loanAmount - month1Offset) * monthlyRate, silently ignoring the recurring
+  // monthly surplus that this loop deposits into the offset in month 1. That made
+  // the panel disagree with the Timeline Explorer's own month-1 figure.
+  it('subtracts the recurring monthly surplus from month 1 interest, not just the lump sum', () => {
+    const loanAmount = 250000;
     const monthlyRate = 0.005;
+    const monthlyToOffset = 4000;
     const contributions = [{ month: 1, amount: 20000 }];
-
-    const month1Offset = getMonth1Offset(contributions);
-    const initialPrincipal = calculateInitialPrincipal(loanAmount, month1Offset);
-    const initialMonthlyInterest = calculateInitialMonthlyInterest(initialPrincipal, monthlyRate);
 
     const result = calculateLoanWithOffset({
       contributions,
       exceptExpenses: [],
-      monthlyToOffset: 0,
+      monthlyToOffset,
       loanAmount,
       monthlyRate,
-      monthlyPayment: 600,
+      monthlyPayment: 1400,
     });
 
-    expect(result.monthlyData[0].monthlyInterestPaid).toBe(Math.round(initialMonthlyInterest));
+    const lumpSumOnlyInterest = (loanAmount - 20000) * monthlyRate;
+    const expected = (loanAmount - 20000 - monthlyToOffset) * monthlyRate;
+
+    expect(result.monthlyData[0].monthlyInterestPaid).toBe(Math.round(expected));
+    expect(result.monthlyData[0].monthlyInterestPaid).toBeLessThan(Math.round(lumpSumOnlyInterest));
+    // The month-1 offset the UI reports must include both parts.
+    expect(result.monthlyData[0].offset).toBe(20000 + monthlyToOffset);
+  });
+
+  it('reports a month-1 offset even with no lump sum, when there is a monthly surplus', () => {
+    // With the app's defaults there are no contributions at all, yet the loop
+    // still deposits the surplus - so the panel's "(offset applied)" badge must
+    // key off this value, not off a month-1 lump sum.
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      exceptExpenses: [],
+      monthlyToOffset: 4084,
+      loanAmount: 250000,
+      monthlyRate: 0.004483333333333333,
+      monthlyPayment: 1400.71,
+    });
+
+    expect(result.monthlyData[0].offset).toBe(4084);
   });
 });
