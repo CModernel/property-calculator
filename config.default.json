@@ -1,5 +1,6 @@
 {
   "propertyPrice": 850000,
+  "propertyType": "house",
   "downPayment": 307000,
   "interestRate": 6.13,
   "loanTermYears": 30,

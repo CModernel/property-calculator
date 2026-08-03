@@ -242,14 +242,53 @@ optionally reuse in the commit message when you implement it.
   sibling sections (Fortnightly Income, Offset Contributions, Exceptional
   Expenses) were affected.
 
-- [ ] **TODO-18: Strata fees should only apply to units/apartments**
-  `strataFees` is currently just a generic slider with no concept of property
-  type, but strata only exists for units/apartments/townhouses on a shared
-  title - a standalone house has no strata at all (its default is now $0,
-  see `config.default.json`). Add a "Property Type" input (house vs
-  unit/apartment) and hide or zero out the strata field when "house" is
-  selected, so the UI itself makes the invalid combination impossible instead
-  of relying on the user to remember to set it to $0.
+- [x] **TODO-18: Strata fees should only apply to units/apartments**
+  Added a `propertyType` ('house' | 'unit') toggle right under Property Price
+  in the Property & Loan card. Rather than clearing `strataFeesField`'s
+  stored value when "house" is selected, strata is zeroed at the
+  **calculation level** in both places it matters - the static "now" value
+  (`const strataFees = propertyType === 'house' ? 0 : getSteppedValue(...)`)
+  and the simulation's `expenseFields.strataFees` (swapped for `{ base: 0,
+  changes: [] }` when propertyType is 'house') - and the Strata
+  `SteppedExpenseField` itself is hidden from the Property Expenses
+  breakdown for houses. This means switching back to "unit" restores
+  whatever the user had typed before, since nothing is destructively reset.
+  A small `handlePropertyTypeChange` bumps `strataFeesField.base` from $0 to
+  a sensible $1,000 default the first time a user switches to "unit" (so
+  they're not staring at a $0 field), but only if it's still at the
+  as-shipped $0 - it won't clobber a value they've already set. Verified in
+  the browser: "House" (default) shows "No strata..." and $0 everywhere;
+  switching to "Unit / Apartment" revealed Strata pre-filled at $1,000 and
+  correctly raised Total Monthly Expenses by $250/month; switching back to
+  "House" hid the field again and restored the exact original numbers.
+
+---
+
+## 🟡 MEDIUM PRIORITY (Important, but not blocking)
+
+- [ ] **TODO-21: Save scenarios to the browser (localStorage)**
+  Requested directly by the user. Right now every value resets to
+  `config.default.json` (optionally overridden by `config.local.json` at
+  build time - TODO-16) on every page load; there's no way to save a
+  session's inputs and come back to them later. Needs a design pass before
+  implementing (**"Analizar bien las opciones"**, per the user's own
+  framing) - at minimum: what triggers a save (explicit "Save" button vs.
+  autosave on every change - autosave is probably friendlier, but needs
+  debouncing so it isn't writing to `localStorage` on every keystroke);
+  what gets saved (all ~30 inputs including `tenants`/`exceptExpenses`/
+  `offsetContributions` arrays, or just the scalar fields); versioning
+  (what happens if a future release adds/renames a field - a saved blob
+  from an older version could crash a naive `JSON.parse` + spread onto
+  state); and multiple scenarios vs. a single autosaved slot (the existing
+  README roadmap already lists "Save scenarios to browser" as a future
+  idea, so there may be an implied expectation of *multiple* named saves,
+  not just one). **Explicit requirement from the user:** if saved data
+  exists in the browser, it should replace `config.default.json` (and
+  presumably `config.local.json`, whichever wins today) as the source of
+  initial state - i.e. the precedence becomes saved-in-browser >
+  `config.local.json` > `config.default.json`, not just "load defaults,
+  then overwrite from storage" after the fact, since the latter could
+  flash default values before the saved ones apply.
 
 ---
 

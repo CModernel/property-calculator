@@ -50,6 +50,7 @@ const config = { ...defaultConfig, ...localConfig };
 
 const PropertyInvestmentCalculator = () => {
   const [propertyPrice, setPropertyPrice] = useState(config.propertyPrice);
+  const [propertyType, setPropertyType] = useState(config.propertyType); // 'house' | 'unit'
   const [downPayment, setDownPayment] = useState(config.downPayment);
   const [interestRate, setInterestRate] = useState(config.interestRate);
   const [loanTermYears, setLoanTermYears] = useState(config.loanTermYears);
@@ -151,7 +152,9 @@ const PropertyInvestmentCalculator = () => {
   // Current ("month 1") value of each expense field - same convention as
   // tenants: a scheduled change that hasn't kicked in yet shouldn't affect
   // what these recurring-situation cards show right now.
-  const strataFees = getSteppedValue(strataFeesField.base, strataFeesField.changes, 1);
+  // Strata only exists for units/apartments on a shared title - a house has
+  // none, regardless of whatever value is stored (see handlePropertyTypeChange).
+  const strataFees = propertyType === 'house' ? 0 : getSteppedValue(strataFeesField.base, strataFeesField.changes, 1);
   const utilities = getSteppedValue(utilitiesField.base, utilitiesField.changes, 1);
   const councilRates = getSteppedValue(councilRatesField.base, councilRatesField.changes, 1);
   const insurance = getSteppedValue(insuranceField.base, insuranceField.changes, 1);
@@ -206,7 +209,9 @@ const PropertyInvestmentCalculator = () => {
   const baseMonthlySurplus = calculateMonthlyNetBalance(monthlyIncome, 0, 0, monthlyPayment);
 
   const expenseFields = {
-    strataFees: strataFeesField,
+    // A house has no strata for the whole simulation, no matter what's
+    // stored in strataFeesField - matches the static strataFees value above.
+    strataFees: propertyType === 'house' ? { base: 0, changes: [] } : strataFeesField,
     utilities: utilitiesField,
     councilRates: councilRatesField,
     insurance: insuranceField,
@@ -283,6 +288,18 @@ const PropertyInvestmentCalculator = () => {
   const handleLoanAmountChange = (nextLoanAmount) => {
     const clamped = clampToRange(nextLoanAmount, 0, propertyPrice);
     setDownPayment(propertyPrice - clamped);
+  };
+
+  // Houses have no strata (it only exists on a shared title). Switching to
+  // "unit" gives strata a sensible non-zero starting point if it's still at
+  // the house default of $0 - switching to "house" doesn't touch the stored
+  // value at all, since it's simply ignored (zeroed at the calculation level
+  // and hidden from the UI) rather than cleared, in case the user switches back.
+  const handlePropertyTypeChange = (nextType) => {
+    setPropertyType(nextType);
+    if (nextType === 'unit' && strataFeesField.base === 0) {
+      strataFeesField.setBase(1000);
+    }
   };
 
   // Functions for managing offset contributions
@@ -415,6 +432,31 @@ const PropertyInvestmentCalculator = () => {
                 suffix=" AUD"
                 formatBound={formatCompactMoney}
               />
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Property Type</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handlePropertyTypeChange('house')}
+                    className={`flex-1 py-1.5 px-2 rounded text-sm ${propertyType === 'house' ? 'bg-blue-600 text-white' : 'bg-blue-200 text-blue-800'
+                      }`}
+                  >
+                    House
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePropertyTypeChange('unit')}
+                    className={`flex-1 py-1.5 px-2 rounded text-sm ${propertyType === 'unit' ? 'bg-blue-600 text-white' : 'bg-blue-200 text-blue-800'
+                      }`}
+                  >
+                    Unit / Apartment
+                  </button>
+                </div>
+                {propertyType === 'house' && (
+                  <p className="text-xs text-gray-500 mt-1">No strata - houses aren't on a shared title.</p>
+                )}
+              </div>
 
               <NumberSliderField
                 label="Down Payment"
@@ -675,18 +717,20 @@ const PropertyInvestmentCalculator = () => {
 
             {showPropertyExpenses && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                <SteppedExpenseField
-                  field={strataFeesField}
-                  label="Strata (quarterly)"
-                  min={0}
-                  max={20000}
-                  sliderMax={5000}
-                  step={100}
-                  color="orange"
-                  prefix="$"
-                >
-                  ≈ ${Math.round(strataFees / 4)}/month
-                </SteppedExpenseField>
+                {propertyType !== 'house' && (
+                  <SteppedExpenseField
+                    field={strataFeesField}
+                    label="Strata (quarterly)"
+                    min={0}
+                    max={20000}
+                    sliderMax={5000}
+                    step={100}
+                    color="orange"
+                    prefix="$"
+                  >
+                    ≈ ${Math.round(strataFees / 4)}/month
+                  </SteppedExpenseField>
+                )}
 
                 <SteppedExpenseField
                   field={utilitiesField}
