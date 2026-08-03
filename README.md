@@ -111,6 +111,18 @@ npm run build
 npm run preview
 ```
 
+### Testing
+
+Unit tests cover the pure financial calculations (loan amount, monthly payment, net balance, offset/amortization simulation) under `src/calculations/`.
+
+```bash
+# Run all tests once
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+```
+
 ---
 
 ## 🛠️ Tech Stack
@@ -122,6 +134,7 @@ npm run preview
 | ![Tailwind CSS](https://img.shields.io/badge/Tailwind-3-38B2AC?logo=tailwind-css) | Styling |
 | ![Recharts](https://img.shields.io/badge/Recharts-2-8884D8) | Charts (future) |
 | ![Lucide React](https://img.shields.io/badge/Lucide-Icons-F56565) | Icons |
+| ![Vitest](https://img.shields.io/badge/Vitest-Testing-6E9F18?logo=vitest) | Unit Testing |
 
 ---
 

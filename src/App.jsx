@@ -1,5 +1,37 @@
 import React, { useState } from 'react';
 import { DollarSign, Home, Users, TrendingDown, Calendar, ShoppingCart, Car } from 'lucide-react';
+import { formatMonthsDetailed } from './calculations/formatting';
+import { getNextSuggestion } from './calculations/suggestions';
+import { getBalanceColor, getBalanceBgColor } from './calculations/ui';
+import {
+  TOTAL_MONTHS,
+  calculateLoanAmount,
+  calculateMonthlyRate,
+  calculateMonthlyPayment,
+  calculateMonthlyStrata,
+  calculateMonthlyCouncil,
+  calculateMonthlyPropertyExpenses,
+  calculateTotalPropertyCost,
+  getMonth1Offset,
+  calculateInitialPrincipal,
+  calculateInitialMonthlyInterest,
+  calculateWeeklyRentalIncome,
+  calculateMonthlyRentalIncome,
+  calculateMonthlyPropertyBalance,
+  calculateWeeklyPropertyBalance,
+  calculateWeeklyPersonalExpenses,
+  calculateMonthlyPersonalExpenses,
+  calculateWeeklyIncome,
+  calculateMonthlyIncome,
+  calculateMonthlyNetBalance,
+  calculateWeeklyNetBalance,
+  calculateFortnightlyNetBalance,
+  calculateMonthlyToOffset,
+  calculateWeeklyToOffset,
+  calculateFortnightlyToOffset,
+  calculateTotalScheduledOffset,
+} from './calculations/loan';
+import { calculateLoanWithOffset } from './calculations/offsetSimulation';
 
 const PropertyInvestmentCalculator = () => {
   const [propertyPrice, setPropertyPrice] = useState(500000);
@@ -46,163 +78,72 @@ const PropertyInvestmentCalculator = () => {
   const [timelineMonth, setTimelineMonth] = useState(0);
 
   // Calculate total scheduled offset contributions
-  const totalScheduledOffset = offsetContributions.reduce((sum, contrib) => sum + contrib.amount, 0);
-
-  // Helper function to format months in different ways
-  const formatMonthsDetailed = (months) => {
-    const totalYears = (months / 12).toFixed(1);
-    const wholeYears = Math.floor(months / 12);
-    const remainingMonths = months % 12;
-    const humanReadable = remainingMonths === 0
-      ? `${wholeYears} ${wholeYears === 1 ? 'year' : 'years'}`
-      : `${wholeYears} ${wholeYears === 1 ? 'year' : 'years'} ${remainingMonths} ${remainingMonths === 1 ? 'month' : 'months'}`;
-
-    return {
-      decimal: totalYears,
-      technical: months,
-      human: humanReadable
-    };
-  };
+  const totalScheduledOffset = calculateTotalScheduledOffset(offsetContributions);
 
   // Loan calculations
-  const loanAmount = propertyPrice - downPayment;
-  const monthlyRate = interestRate / 100 / 12;
-  const totalMonths = 30 * 12;
-  const monthlyPayment = loanAmount * (monthlyRate * Math.pow(1 + monthlyRate, totalMonths)) /
-    (Math.pow(1 + monthlyRate, totalMonths) - 1);
+  const loanAmount = calculateLoanAmount(propertyPrice, downPayment);
+  const monthlyRate = calculateMonthlyRate(interestRate);
+  const totalMonths = TOTAL_MONTHS;
+  const monthlyPayment = calculateMonthlyPayment(loanAmount, monthlyRate, totalMonths);
 
   // Monthly property expenses
-  const monthlyStrata = strataFees / 4;
-  const monthlyCouncil = councilRates / 4;
-  const monthlyPropertyExpenses = monthlyStrata + utilities + monthlyCouncil + insurance;
-  const totalPropertyCost = monthlyPayment + monthlyPropertyExpenses;
+  const monthlyStrata = calculateMonthlyStrata(strataFees);
+  const monthlyCouncil = calculateMonthlyCouncil(councilRates);
+  const monthlyPropertyExpenses = calculateMonthlyPropertyExpenses(monthlyStrata, utilities, monthlyCouncil, insurance);
+  const totalPropertyCost = calculateTotalPropertyCost(monthlyPayment, monthlyPropertyExpenses);
 
   // Interest deduction - Check for Month 1 offset
-  const month1Offset = offsetContributions.find(c => c.month === 1)?.amount || 0;
-  const initialPrincipal = Math.max(0, loanAmount - month1Offset);
-  const initialMonthlyInterest = initialPrincipal * monthlyRate;
+  const month1Offset = getMonth1Offset(offsetContributions);
+  const initialPrincipal = calculateInitialPrincipal(loanAmount, month1Offset);
+  const initialMonthlyInterest = calculateInitialMonthlyInterest(initialPrincipal, monthlyRate);
 
   // Rental income
-  const weeklyRentalIncome = tenants.reduce((sum, t) => sum + t.amount, 0);
-  const monthlyRentalIncome = weeklyRentalIncome * 52 / 12;
+  const weeklyRentalIncome = calculateWeeklyRentalIncome(tenants);
+  const monthlyRentalIncome = calculateMonthlyRentalIncome(weeklyRentalIncome);
 
   // Property balance
-  const monthlyPropertyBalance = monthlyRentalIncome - totalPropertyCost;
-  const weeklyPropertyBalance = monthlyPropertyBalance * 12 / 52;
+  const monthlyPropertyBalance = calculateMonthlyPropertyBalance(monthlyRentalIncome, totalPropertyCost);
+  const weeklyPropertyBalance = calculateWeeklyPropertyBalance(monthlyPropertyBalance);
 
   // Your personal expenses
-  const weeklyPersonalExpenses = foodExpenses + transportExpenses + otherExpenses;
-  const monthlyPersonalExpenses = weeklyPersonalExpenses * 52 / 12;
+  const weeklyPersonalExpenses = calculateWeeklyPersonalExpenses(foodExpenses, transportExpenses, otherExpenses);
+  const monthlyPersonalExpenses = calculateMonthlyPersonalExpenses(weeklyPersonalExpenses);
 
   // Total cash flow
   const fortnightlyIncomeBiweekly = fortnightlyIncome;
-  const weeklyIncome = fortnightlyIncome * 26 / 52;
-  const monthlyIncome = fortnightlyIncome * 26 / 12;
+  const weeklyIncome = calculateWeeklyIncome(fortnightlyIncome);
+  const monthlyIncome = calculateMonthlyIncome(fortnightlyIncome);
 
-  // NET WEEKLY/MONTHLY BALANCE
   // NET WEEKLY/MONTHLY BALANCE
   // Logic: (Personal Income + Rental Income) - (Personal Expenses + Property Expenses)
-  const monthlyNetBalance = (monthlyIncome + monthlyRentalIncome) - (monthlyPersonalExpenses + totalPropertyCost);
-  const weeklyNetBalance = (weeklyIncome + weeklyRentalIncome) - (weeklyPersonalExpenses + (totalPropertyCost * 12 / 52));
-  const fortnightlyNetBalance = weeklyNetBalance * 2;
+  const monthlyNetBalance = calculateMonthlyNetBalance(monthlyIncome, monthlyRentalIncome, monthlyPersonalExpenses, totalPropertyCost);
+  const weeklyNetBalance = calculateWeeklyNetBalance(weeklyIncome, weeklyRentalIncome, weeklyPersonalExpenses, totalPropertyCost);
+  const fortnightlyNetBalance = calculateFortnightlyNetBalance(weeklyNetBalance);
 
   // What you can deposit to offset
-  const monthlyToOffset = Math.max(0, monthlyNetBalance);
-  const weeklyToOffset = Math.max(0, weeklyNetBalance);
-  const fortnightlyToOffset = Math.max(0, fortnightlyNetBalance);
+  const monthlyToOffset = calculateMonthlyToOffset(monthlyNetBalance);
+  const weeklyToOffset = calculateWeeklyToOffset(weeklyNetBalance);
+  const fortnightlyToOffset = calculateFortnightlyToOffset(fortnightlyNetBalance);
 
   // Complete loan simulation with offset
-  const calculateLoanWithOffset = (contributions = offsetContributions) => {
-    if (monthlyToOffset <= 0 && contributions.reduce((s, c) => s + c.amount, 0) === 0) {
-      return { years: 999, totalInterest: 999999, monthlyData: [] };
-    }
-
-    let balance = loanAmount;
-    let offsetBalance = 0;
-    let totalInterest = 0;
-    let months = 0;
-    const maxMonths = 30 * 12;
-    const monthlyData = [];
-
-    while (balance > 0.01 && months < maxMonths) {
-      months++;
-
-      // Apply any scheduled offset contributions for this month
-      contributions.forEach(contrib => {
-        if (contrib.month === months) {
-          offsetBalance += contrib.amount;
-        }
-      });
-
-      // Calculate Exceptional Expenses for this month
-      let monthlyExceptionalCost = 0;
-      exceptExpenses.forEach(exp => {
-        if (exp.type === 'one-time' && exp.month === months) {
-          monthlyExceptionalCost += exp.amount;
-        } else if (exp.type === 'recurring') {
-          if (exp.recurrence === 'forever') {
-            monthlyExceptionalCost += exp.amount;
-          } else if (exp.recurrence === 'period' && months >= exp.startMonth && months <= exp.endMonth) {
-            monthlyExceptionalCost += exp.amount;
-          }
-        }
-      });
-
-      // Add regular monthly deposit to offset (reduced by exceptional expenses)
-      // We assume exceptional expenses come out of the surplus first.
-      const netMonthlyDeposit = Math.max(0, monthlyToOffset - monthlyExceptionalCost);
-      offsetBalance += netMonthlyDeposit;
-
-      // Offset cannot exceed loan balance
-      const effectiveOffset = Math.min(offsetBalance, balance);
-
-      // Balance on which interest is calculated
-      const effectiveBalance = balance - effectiveOffset;
-
-      // Monthly interest on effective balance
-      const monthlyInterest = effectiveBalance * monthlyRate;
-      totalInterest += monthlyInterest;
-
-      // Pay the installment (interest + principal)
-      const principalPayment = monthlyPayment - monthlyInterest;
-      balance = Math.max(0, balance - principalPayment);
-
-      // Save data for Timeline Explorer (Every Month)
-      monthlyData.push({
-        month: months,
-        balance: Math.round(balance),
-        offset: Math.round(effectiveOffset),
-        effectiveBalance: Math.round(effectiveBalance),
-        monthlyInterestPaid: Math.round(monthlyInterest),
-        totalInterestPaid: Math.round(totalInterest),
-        totalPrincipalPaid: Math.round(loanAmount - balance)
-      });
-
-      // If offset >= remaining balance, we're done
-      if (effectiveOffset >= balance) {
-        balance = 0;
-        break;
-      }
-    }
-
-    return {
-      years: months / 12,
-      months: months,
-      totalInterest: totalInterest,
-      monthlyData: monthlyData
-    };
-  };
-
-  const loanSimulation = calculateLoanWithOffset(offsetContributions);
-  const baselineSimulation = calculateLoanWithOffset([]); // No offsets
+  const loanSimulation = calculateLoanWithOffset({
+    contributions: offsetContributions,
+    exceptExpenses,
+    monthlyToOffset,
+    loanAmount,
+    monthlyRate,
+    monthlyPayment,
+  });
+  const baselineSimulation = calculateLoanWithOffset({
+    contributions: [], // No offsets
+    exceptExpenses,
+    monthlyToOffset,
+    loanAmount,
+    monthlyRate,
+    monthlyPayment,
+  });
   const interestSaved = baselineSimulation.totalInterest - loanSimulation.totalInterest;
   const yearsToPayOff = loanSimulation.years;
-
-  // Helper to get next month
-  const getNextSuggestion = (list) => {
-    if (list.length === 0) return 1;
-    return Math.max(...list.map(c => c.month)) + 1;
-  };
 
   // Functions for managing offset contributions
   const addOffsetContribution = () => {
@@ -285,18 +226,6 @@ const PropertyInvestmentCalculator = () => {
 
   const removeExceptionalExpense = (id) => {
     setExceptExpenses(exceptExpenses.filter(e => e.id !== id));
-  };
-
-  const getBalanceColor = (value) => {
-    if (value >= 300) return 'text-green-600';
-    if (value >= 0) return 'text-yellow-600';
-    return 'text-red-600';
-  };
-
-  const getBalanceBgColor = (value) => {
-    if (value >= 300) return 'bg-green-50 border-green-300';
-    if (value >= 0) return 'bg-yellow-50 border-yellow-300';
-    return 'bg-red-50 border-red-300';
   };
 
   return (
