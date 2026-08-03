@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DollarSign, Home, Users, TrendingDown, Calendar, ShoppingCart, Car } from 'lucide-react';
+import { DollarSign, Home, Users, TrendingDown, Calendar, ShoppingCart, Car, RotateCcw } from 'lucide-react';
 import { formatMonthsDetailed, formatCompactMoney } from './calculations/formatting';
 import NumberSliderField from './components/NumberSliderField';
 import { getNextSuggestion } from './calculations/suggestions';
@@ -121,6 +121,10 @@ const PropertyInvestmentCalculator = () => {
   // Whether the current inputs are backed by a saved-in-browser scenario -
   // drives the Save/Reset bar's copy and whether "Reset" is even offered.
   const [hasSavedScenario, setHasSavedScenario] = useState(savedScenario !== null);
+  // savedAt travels inside the scenario payload itself (just another field,
+  // like propertyPrice) rather than as separate storage-envelope metadata -
+  // no changes needed to scenarioStorage.js's save/load/parse functions.
+  const [lastSavedAt, setLastSavedAt] = useState(savedScenario?.savedAt ?? null);
 
   // Calculate total scheduled offset contributions
   const totalScheduledOffset = calculateTotalScheduledOffset(offsetContributions);
@@ -315,6 +319,7 @@ const PropertyInvestmentCalculator = () => {
   // sections, in-progress "Add" form drafts, the Timeline Explorer's
   // selected month) isn't part of a scenario.
   const handleSaveScenario = () => {
+    const savedAt = Date.now();
     const scenario = {
       propertyPrice, propertyType, downPayment, interestRate, loanTermYears,
       strataFees: strataFeesField.base, strataFeesChanges: strataFeesField.changes,
@@ -331,9 +336,11 @@ const PropertyInvestmentCalculator = () => {
       otherExpenses: otherExpensesField.base, otherExpensesChanges: otherExpensesField.changes,
       offsetContributions,
       exceptExpenses,
+      savedAt,
     };
     if (saveScenario(scenario)) {
       setHasSavedScenario(true);
+      setLastSavedAt(savedAt);
     } else {
       alert('Could not save - your browser may be blocking local storage (e.g. private browsing).');
     }
@@ -454,9 +461,12 @@ const PropertyInvestmentCalculator = () => {
 
       <div className="bg-white rounded-lg shadow-md p-4 mb-4 flex items-center justify-between gap-3 flex-wrap">
         <p className="text-sm text-gray-600">
-          {hasSavedScenario
-            ? '💾 This scenario is saved in your browser.'
-            : "Your inputs aren't saved yet — they reset if you reload the page."}
+          {!hasSavedScenario
+            ? "Your inputs aren't saved yet — they reset if you reload the page."
+            : lastSavedAt
+              // A scenario saved before TODO-22 shipped won't have a savedAt yet.
+              ? `💾 Saved ${new Date(lastSavedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`
+              : '💾 This scenario is saved in your browser.'}
         </p>
         <div className="flex gap-2">
           <button
@@ -470,8 +480,9 @@ const PropertyInvestmentCalculator = () => {
             <button
               type="button"
               onClick={handleClearSavedScenario}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300"
+              className="flex items-center gap-1.5 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300"
             >
+              <RotateCcw size={14} />
               Reset to defaults
             </button>
           )}

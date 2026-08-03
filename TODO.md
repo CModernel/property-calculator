@@ -293,21 +293,26 @@ optionally reuse in the commit message when you implement it.
   can't safely be automated) correctly reverted everything to
   `config.default.json` on reload.
 
+- [x] **TODO-22: Show last-saved date/time, next to the Save bar**
+  Requested by the user right after TODO-21 shipped, along with a look at
+  the "Reset to defaults" button (it was plain gray text with no icon).
+  `savedAt` (`Date.now()`) travels as just another field inside the scenario
+  payload itself - no changes needed to `scenarioStorage.js`'s save/load/
+  parse functions, since it's opaque data to them either way. A new
+  `lastSavedAt` state (seeded from `savedScenario?.savedAt` at load, updated
+  by `handleSaveScenario`) renders as "Saved 4 Aug 2026, 09:41"
+  (`toLocaleString` with `dateStyle: 'medium', timeStyle: 'short'`) in place
+  of the old static "This scenario is saved..." copy; a scenario saved
+  before this shipped (no `savedAt` yet) falls back to that original static
+  copy instead of showing a bogus Jan 1 1970 date. The Reset button also
+  picked up a `RotateCcw` icon (lucide-react, already a project dependency)
+  next to its label for a more intuitive "undo" affordance. Verified in the
+  browser: saved and confirmed the timestamp appeared and read correctly,
+  reloaded and confirmed it persisted unchanged.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
-
-- [ ] **TODO-22: Show last-saved date/time, next to the Save bar**
-  Requested by the user right after TODO-21 shipped. The Save bar currently
-  only shows a boolean "saved in your browser" / "not saved yet" state -
-  add a human-readable timestamp of the last successful save (e.g. "Saved
-  Aug 3, 2026, 4:12 PM") so the user has some confidence about how fresh
-  the saved scenario is. Needs a `savedAt` (or similar) field added to the
-  persisted payload in `scenarioStorage.js`'s `data` (or alongside it in the
-  envelope, next to `version`), set by `handleSaveScenario` in `App.jsx` at
-  save time, and read back into a new bit of state (or derived from
-  `savedScenario`) to render next to the existing "This scenario is saved
-  in your browser." copy.
 
 ---
 
