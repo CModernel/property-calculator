@@ -37,7 +37,7 @@ This calculator helps you make **informed decisions** about property investments
 - **Property price**: type any exact figure (the slider covers 200k - 3M AUD)
 - **Down payment**: anything from 0 up to the full purchase price
 - **Interest rate**: 2 decimal places, e.g. 5.85%
-- **Loan term**: 30 years standard
+- **Loan term**: configurable, 1-30 years (default 30)
 
 Every money field is a number box paired with a slider: drag to explore a typical
 range, or type an exact value such as `742,500` when the slider is too coarse.
@@ -80,7 +80,7 @@ range, or type an exact value such as `742,500` when the slider is too coarse.
 ### 📊 Real-Time Results
 - ⏱️ **Time to pay off loan**: Years, months, and human-readable format
 - 💰 **Total interest paid**: Complete interest calculation
-- 📉 **Savings comparison**: vs traditional 30-year mortgage
+- 📉 **Savings comparison**: vs a traditional mortgage with no offset, over your chosen term
 - 💵 **Weekly/fortnightly cash flow**: Know exactly what you need
 
 ---
@@ -239,13 +239,14 @@ Loan Amount:        $250,000
 Interest Rate:      5.38%
 Monthly Payment:    $1,401
 
-With Offset Strategy:
+With Offset Strategy (30-year term):
 ├─ Deposit $1,200/month to offset
 ├─ Time to pay off: ~10.5 years
 ├─ Total interest:  ~$77,000
-└─ Savings vs 30yr: ~$177,000 ✨
+└─ Savings vs no offset: ~$177,000 ✨
 
-(Without any offset, the same loan costs ~$254,000 in interest over 30 years.)
+(Without any offset, the same loan costs ~$254,000 in interest over its
+30-year term. Loan term is configurable - these figures assume the default.)
 ```
 
 ---

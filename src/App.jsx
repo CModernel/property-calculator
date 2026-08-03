@@ -5,7 +5,6 @@ import NumberSliderField from './components/NumberSliderField';
 import { getNextSuggestion } from './calculations/suggestions';
 import { getBalanceColor, getBalanceBgColor } from './calculations/ui';
 import {
-  TOTAL_MONTHS,
   calculateLoanAmount,
   calculateMonthlyRate,
   calculateMonthlyPayment,
@@ -53,6 +52,7 @@ const PropertyInvestmentCalculator = () => {
   const [propertyPrice, setPropertyPrice] = useState(config.propertyPrice);
   const [downPayment, setDownPayment] = useState(config.downPayment);
   const [interestRate, setInterestRate] = useState(config.interestRate);
+  const [loanTermYears, setLoanTermYears] = useState(config.loanTermYears);
   const strataFeesField = useSteppedValue(config.strataFees);
   const utilitiesField = useSteppedValue(config.utilities);
   const councilRatesField = useSteppedValue(config.councilRates);
@@ -115,7 +115,7 @@ const PropertyInvestmentCalculator = () => {
   const loanAmount = calculateLoanAmount(propertyPrice, downPayment);
   const lvr = safePercentage(loanAmount, propertyPrice);
   const monthlyRate = calculateMonthlyRate(interestRate);
-  const totalMonths = TOTAL_MONTHS;
+  const totalMonths = loanTermYears * 12;
   const monthlyPayment = calculateMonthlyPayment(loanAmount, monthlyRate, totalMonths);
 
   // Upfront costs of buying (NSW)
@@ -211,7 +211,10 @@ const PropertyInvestmentCalculator = () => {
     otherExpenses: otherExpensesField,
   };
 
-  // Complete loan simulation with offset
+  // Complete loan simulation with offset. maxMonths must match the chosen
+  // term explicitly - otherwise the loop would keep the old 30-year cap
+  // baked into offsetSimulation.js's default, inconsistent with a shorter
+  // term's monthlyPayment.
   const loanSimulation = calculateLoanWithOffset({
     contributions: offsetContributions,
     exceptExpenses,
@@ -221,6 +224,7 @@ const PropertyInvestmentCalculator = () => {
     loanAmount,
     monthlyRate,
     monthlyPayment,
+    maxMonths: totalMonths,
   });
   const baselineSimulation = calculateLoanWithOffset({
     contributions: [], // No offsets
@@ -231,6 +235,7 @@ const PropertyInvestmentCalculator = () => {
     loanAmount,
     monthlyRate,
     monthlyPayment,
+    maxMonths: totalMonths,
   });
   const interestSaved = baselineSimulation.totalInterest - loanSimulation.totalInterest;
 
@@ -453,6 +458,19 @@ const PropertyInvestmentCalculator = () => {
                 color="purple"
                 suffix="% p.a."
                 formatValue={(v) => v.toFixed(2)}
+              />
+
+              <NumberSliderField
+                label="Loan Term"
+                value={loanTermYears}
+                onChange={setLoanTermYears}
+                min={1}
+                max={30}
+                sliderMin={5}
+                sliderMax={30}
+                step={1}
+                color="indigo"
+                suffix=" years"
               />
 
               <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
@@ -1425,7 +1443,7 @@ const PropertyInvestmentCalculator = () => {
 
                 <div className="bg-white/20 backdrop-blur rounded-lg p-3 text-xs">
                   <p className="font-semibold mb-1">💰 Savings vs no offset:</p>
-                  <p>Without offset (30 years): ~${Math.round(noOffsetTotalInterest).toLocaleString()}</p>
+                  <p>Without offset ({loanTermYears} years): ~${Math.round(noOffsetTotalInterest).toLocaleString()}</p>
                   <p className="text-yellow-300 font-bold">
                     You save: ~${Math.round(noOffsetTotalInterest - loanSimulation.totalInterest).toLocaleString()}
                   </p>

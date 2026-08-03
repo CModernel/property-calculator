@@ -147,18 +147,30 @@ optionally reuse in the commit message when you implement it.
   (months 19-20, post-change) - a $387.50/mo difference, matching
   `(2000-450)/4` exactly.
 
+- [x] **TODO-15: Configurable loan term**
+  No calculation logic needed to change - `calculateMonthlyPayment` and
+  `calculateNoOffsetTotalInterest` (`src/calculations/loan.js`) already take
+  `totalMonths` as a generic parameter (with `= TOTAL_MONTHS` only as a
+  fallback default), and their tests already exercise other terms via that
+  same parameter, so this was mostly wiring: a new "Loan Term" `NumberSliderField`
+  (1-30 years) in the Property & Loan card, `totalMonths = loanTermYears * 12`
+  replacing the `TOTAL_MONTHS` constant, and a new `loanTermYears` key in
+  `config.default.json`. The investigation surfaced one real bug worth
+  fixing along the way: both `calculateLoanWithOffset` call sites omitted
+  `maxMonths` entirely, silently falling back to its own independent
+  `30 * 12` default - so a 15-year term would've correctly raised the
+  monthly payment while leaving the amortization loop capped at 360 months
+  regardless. Now `maxMonths: totalMonths` is passed explicitly at both call
+  sites. Also fixed the one hardcoded UI string ("Without offset (30
+  years)") to interpolate the chosen term, and updated 3 README mentions of
+  a fixed 30-year term. Verified in the browser: dropping to 15 years raised
+  Monthly Payment from $3,301 to $4,620 and the savings card correctly read
+  "Without offset (15 years)"; returning to 30 restored the exact original
+  numbers.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
-
-- [ ] **TODO-15: Configurable loan term**
-  `TOTAL_MONTHS = 30 * 12` (`src/calculations/loan.js:1`) is hardcoded and feeds
-  the mortgage payment formula, the amortization loop's `maxMonths` cap, and the
-  no-offset baseline used in the savings card. Making it a
-  `NumberSliderField` (e.g. 1-30 years) means every one of those call sites
-  needs the term passed through explicitly instead of relying on the default
-  parameter, and the "30 years standard" / "30-year mortgage" wording sprinkled
-  through the UI and README would need to reflect the chosen term instead.
 
 - [ ] **TODO-13: Editable loan amount**
   `Loan` is still a read-only derived value

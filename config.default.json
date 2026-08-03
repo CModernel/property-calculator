@@ -2,6 +2,7 @@
   "propertyPrice": 850000,
   "downPayment": 307000,
   "interestRate": 6.13,
+  "loanTermYears": 30,
   "strataFees": 0,
   "utilities": 200,
   "councilRates": 450,
