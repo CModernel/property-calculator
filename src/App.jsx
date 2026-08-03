@@ -78,9 +78,10 @@ const PropertyInvestmentCalculator = () => {
   const [showAddTenant, setShowAddTenant] = useState(false);
   const [newTenantType, setNewTenantType] = useState('single');
   const [newTenantRent, setNewTenantRent] = useState(config.newTenantRent);
-  const [newTenantHasDateRange, setNewTenantHasDateRange] = useState(false);
-  const [newTenantStartMonth, setNewTenantStartMonth] = useState(1);
-  const [newTenantEndMonth, setNewTenantEndMonth] = useState(12);
+  const [newTenantHasDateRange, setNewTenantHasDateRange] = useState(true);
+  const [newTenantStartMonth, setNewTenantStartMonth] = useState(config.newTenantStartMonth);
+  const [newTenantHasEndMonth, setNewTenantHasEndMonth] = useState(false);
+  const [newTenantEndMonth, setNewTenantEndMonth] = useState(24);
 
   // Your personal expenses
   const [fortnightlyIncome, setFortnightlyIncome] = useState(config.fortnightlyIncome);
@@ -305,7 +306,7 @@ const PropertyInvestmentCalculator = () => {
 
   const addTenant = () => {
     if (newTenantRent <= 0) return;
-    if (newTenantHasDateRange && newTenantStartMonth > newTenantEndMonth) {
+    if (newTenantHasDateRange && newTenantHasEndMonth && newTenantStartMonth > newTenantEndMonth) {
       alert('Start month must be before end month.');
       return;
     }
@@ -314,12 +315,16 @@ const PropertyInvestmentCalculator = () => {
       type: newTenantType,
       amount: newTenantRent,
       startMonth: newTenantHasDateRange ? newTenantStartMonth : null,
-      endMonth: newTenantHasDateRange ? newTenantEndMonth : null,
+      // No end date ticked means "ongoing" - open-ended, not "always active
+      // regardless of start" (see isMonthInRange).
+      endMonth: newTenantHasDateRange && newTenantHasEndMonth ? newTenantEndMonth : null,
     };
     setTenants([...tenants, newTenant]);
     setShowAddTenant(false);
-    setNewTenantRent(250);
-    setNewTenantHasDateRange(false);
+    setNewTenantRent(config.newTenantRent);
+    setNewTenantHasDateRange(true);
+    setNewTenantStartMonth(config.newTenantStartMonth);
+    setNewTenantHasEndMonth(false);
   };
 
   const removeTenant = (id) => {
@@ -756,7 +761,7 @@ const PropertyInvestmentCalculator = () => {
                       </label>
                     </div>
                     {newTenantHasDateRange && (
-                      <div className="col-span-2 grid grid-cols-2 gap-2">
+                      <div className="col-span-2 space-y-2">
                         <div>
                           <label className="block text-xs font-medium mb-1">Start Month: {newTenantStartMonth}</label>
                           <input
@@ -766,15 +771,26 @@ const PropertyInvestmentCalculator = () => {
                             className="w-full h-2 bg-green-200 rounded-lg appearance-none cursor-pointer"
                           />
                         </div>
-                        <div>
-                          <label className="block text-xs font-medium mb-1">End Month: {newTenantEndMonth}</label>
+                        <label className="flex items-center gap-2 text-xs font-medium text-gray-700">
                           <input
-                            type="range" min={newTenantStartMonth} max="360"
-                            value={newTenantEndMonth}
-                            onChange={(e) => setNewTenantEndMonth(Number(e.target.value))}
-                            className="w-full h-2 bg-green-200 rounded-lg appearance-none cursor-pointer"
+                            type="checkbox"
+                            checked={newTenantHasEndMonth}
+                            onChange={(e) => setNewTenantHasEndMonth(e.target.checked)}
+                            className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
                           />
-                        </div>
+                          Has an end date? (leave unchecked for ongoing)
+                        </label>
+                        {newTenantHasEndMonth && (
+                          <div>
+                            <label className="block text-xs font-medium mb-1">End Month: {newTenantEndMonth}</label>
+                            <input
+                              type="range" min={newTenantStartMonth} max="360"
+                              value={newTenantEndMonth}
+                              onChange={(e) => setNewTenantEndMonth(Number(e.target.value))}
+                              className="w-full h-2 bg-green-200 rounded-lg appearance-none cursor-pointer"
+                            />
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -803,7 +819,13 @@ const PropertyInvestmentCalculator = () => {
                           </p>
                           <p className="text-xs text-gray-600">
                             ${tenant.amount}/week {tenant.type === 'shared' && <span className="text-blue-600 font-medium">(~${Math.round(tenant.amount / 2)} each)</span>}
-                            {tenant.startMonth != null && <span className="text-gray-500"> (Months {tenant.startMonth}-{tenant.endMonth})</span>}
+                            {tenant.startMonth != null && (
+                              <span className="text-gray-500">
+                                {tenant.endMonth != null
+                                  ? ` (Months ${tenant.startMonth}-${tenant.endMonth})`
+                                  : ` (From month ${tenant.startMonth})`}
+                              </span>
+                            )}
                           </p>
                         </div>
                       </div>
@@ -1638,17 +1660,21 @@ const PropertyInvestmentCalculator = () => {
                           })()}
                           <div className="mt-2 pt-2 border-t border-green-200">
                             {tenants.map(t => {
-                              let status = 'active'; // no date range = always active
-                              if (t.startMonth != null) {
-                                if (timelineMonth < t.startMonth) status = 'future';
-                                else if (timelineMonth > t.endMonth) status = 'past';
-                              }
+                              // No bound at all = always active. An unset endMonth
+                              // means "ongoing" - never past, not "compare against null".
+                              let status = 'active';
+                              if (t.startMonth != null && timelineMonth < t.startMonth) status = 'future';
+                              else if (t.endMonth != null && timelineMonth > t.endMonth) status = 'past';
                               if (status === 'future') return null;
                               return (
                                 <p key={t.id} className={`truncate ${status === 'past' ? 'text-gray-400' : 'text-green-700'}`}>
                                   • {t.type === 'single' ? 'Individual' : 'Shared ($' + Math.round(t.amount / 2) + ')'}
                                   {status === 'past' && ' (Done)'}
-                                  {t.startMonth != null && <span className="text-gray-400"> (M{t.startMonth}-{t.endMonth})</span>}
+                                  {t.startMonth != null && (
+                                    <span className="text-gray-400">
+                                      {t.endMonth != null ? ` (M${t.startMonth}-${t.endMonth})` : ` (from M${t.startMonth})`}
+                                    </span>
+                                  )}
                                 </p>
                               );
                             })}

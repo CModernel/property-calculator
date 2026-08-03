@@ -11,10 +11,16 @@ describe('isMonthInRange', () => {
     expect(isMonthInRange(1, undefined, undefined)).toBe(true);
   });
 
-  it('is always active when only one bound is set', () => {
-    // A partial range is treated as no restriction at all, not an open-ended range.
-    expect(isMonthInRange(1, 5, null)).toBe(true);
+  it('is active from startMonth onward, indefinitely, when there is no end bound', () => {
+    expect(isMonthInRange(4, 5, null)).toBe(false);
+    expect(isMonthInRange(5, 5, null)).toBe(true);
+    expect(isMonthInRange(1000, 5, null)).toBe(true);
+  });
+
+  it('is active up to endMonth, with no defined start, when there is no start bound', () => {
     expect(isMonthInRange(1, null, 10)).toBe(true);
+    expect(isMonthInRange(10, null, 10)).toBe(true);
+    expect(isMonthInRange(11, null, 10)).toBe(false);
   });
 
   it('is active on the inclusive start and end boundaries', () => {

@@ -107,6 +107,21 @@ optionally reuse in the commit message when you implement it.
   converting each into an editable list first. Split into its own TODO below
   if it's ever needed.
 
+  **Update:** tenant ranges originally required both `startMonth` and
+  `endMonth` together, but real scenarios are often open-ended (e.g. "starts
+  renting after year 1, ongoing indefinitely"). `isMonthInRange` now treats
+  each bound independently (`null` = unbounded in that direction) instead of
+  treating any single missing bound as "no restriction at all" - this also
+  fixed a real bug in the Timeline Explorer's status classification, which
+  compared `timelineMonth > t.endMonth` directly and would coerce a `null`
+  endMonth to `0`, marking an ongoing tenant as "(Done)" almost immediately.
+  The "Add Tenant" form now has an independent "Has an end date?" checkbox
+  (default unchecked = ongoing) instead of requiring both bounds whenever
+  "Limited period?" is on. The form also now pre-fills from config
+  (`newTenantRent: 600`, `newTenantStartMonth: 13`) to match the common
+  "rent out a room starting after year 1" scenario, without auto-adding
+  anything - the user still confirms with "Add Tenant".
+
 - [x] **TODO-12: Link savings, deposit and offset**
   Added `calculateCashRemaining({ totalSavings, totalCashRequired,
   totalScheduledOffset })` to `src/calculations/totalCashRequired.js`, which

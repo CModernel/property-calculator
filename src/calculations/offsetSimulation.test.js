@@ -208,6 +208,22 @@ describe('calculateLoanWithOffset', () => {
     expect(offsets).toEqual([0, 0, 1300, 2600, 3900, 3900]);
   });
 
+  it('adds an open-ended tenant\'s rent from startMonth onward, with no end', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      exceptExpenses: [],
+      tenants: [{ id: 1, amount: 300, startMonth: 3, endMonth: null }],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 5,
+    });
+    const offsets = result.monthlyData.map(d => d.offset);
+    // Nothing in months 1-2, then $1,300/month indefinitely from month 3 on.
+    expect(offsets).toEqual([0, 0, 1300, 2600, 3900]);
+  });
+
   it('adds a tenant with no date range every month, matching the previous always-on behavior', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
