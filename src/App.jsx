@@ -889,7 +889,7 @@ const PropertyInvestmentCalculator = () => {
                 {/* Add contribution form */}
                 {showAddContribution && (
                   <div className="mb-3 p-3 bg-cyan-50 rounded-lg border border-cyan-200">
-                    <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">
                           At Month
@@ -1102,7 +1102,7 @@ const PropertyInvestmentCalculator = () => {
                           </div>
 
                           {newExpRecurrence === 'period' && (
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                               <div>
                                 <label className="block text-xs font-medium mb-1">Start Month: {newExpStart}</label>
                                 <input

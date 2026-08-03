@@ -183,6 +183,25 @@ optionally reuse in the commit message when you implement it.
   "Without offset (15 years)"; returning to 30 restored the exact original
   numbers.
 
+- [x] **TODO-17: Make it mobile responsive**
+  Found 3 bare `grid-cols-2` sections with no mobile fallback (tenant
+  Start/End Month, offset contribution "At Month"/"Amount", exceptional
+  expense Start/End Month) - all now `grid-cols-1 sm:grid-cols-2` (or plain
+  `space-y-2` for the tenant one, since it also gained a new "Has an end
+  date?" checkbox as part of the tenant open-ended-range work, making a
+  stacked layout the natural fit anyway). Audited the rest of the file for
+  fixed pixel widths, tables, and `nowrap` that could force horizontal
+  scroll on a phone - none found. **Caveat worth flagging:** this session's
+  browser automation couldn't actually shrink the viewport below ~980px
+  (the `resize_window` tool reported success but the real window never went
+  under that - confirmed via `window.innerWidth`, and CSS `zoom` doesn't
+  affect Tailwind's media-query breakpoints either), so true sub-640px
+  behavior was verified by code review against Tailwind's fixed breakpoints
+  and the same `sm:`/`md:` mobile-first pattern already proven correct
+  elsewhere in this file (e.g. `src/App.jsx`'s existing `md:grid-cols-2`),
+  not by looking at a real phone-width render. Worth a follow-up pass with
+  actual device/DevTools emulation if that becomes available.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -194,19 +213,21 @@ optionally reuse in the commit message when you implement it.
   deposit recalculates — and keeping the three fields consistent in every
   direction.
 
-- [ ] **TODO-17: Make it mobile responsive**
-  The top-level layout already collapses to one column below `lg`
-  (`grid-cols-1 lg:grid-cols-3`, `src/App.jsx:317`), but several inner
-  sections don't: the rental option cards and the two "add contribution" /
-  "add exceptional expense" forms use a bare `grid-cols-2`
-  (`src/App.jsx:644`, `:768`, `:984`) with no `grid-cols-1` mobile fallback,
-  so those controls get cramped on narrow phone screens instead of stacking.
-  Needs a pass across the whole page on an actual small viewport (not just
-  resizing a desktop browser window) to catch anything else that doesn't
-  reflow - tap target sizes on the sliders/number inputs, and the Timeline
-  Explorer scrubber are worth checking too. The README's Roadmap already
-  claims "Responsive design" as done, which should be corrected either way
-  once this is scoped.
+- [ ] **TODO-20: Collapse Property Expenses, Rental Income, and Personal Expenses like the Closing Costs breakdown**
+  TODO-11's "Closing costs breakdown" (`src/App.jsx`, the `showClosingCostsBreakdown`
+  toggle) collapses 9 fields behind a single "▸ Closing costs breakdown
+  (subtotal: $X)" link, showing just the subtotal until the user opts in.
+  The "Property Expenses" (strata/utilities/council/insurance) and "Your
+  Personal Expenses" (food/transport/other) cards don't follow that pattern -
+  all fields are always visible, even though each already has its own
+  subtotal line (`Property Subtotal: $X/month`, `Total Personal Expenses:
+  $X/week`) that could anchor a collapsed summary the same way. Rental
+  Income (the Tenants list/form) already has a "+ Add" toggle for the form
+  itself, but the section as a whole doesn't collapse behind its own
+  subtotal (`Total Weekly Rent: $X`) the way Closing Costs does. Reusing the
+  same collapsed-by-default pattern across all three would make the page
+  shorter by default and more consistent, especially relevant alongside
+  TODO-17 (mobile).
 
 - [ ] **TODO-18: Strata fees should only apply to units/apartments**
   `strataFees` is currently just a generic slider with no concept of property
