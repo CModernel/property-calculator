@@ -1,17 +1,22 @@
+import { isMonthInRange } from './dateRange';
+import { calculateMonthlyRentalIncome } from './loan';
+
 export function calculateLoanWithOffset({
   contributions,
   exceptExpenses,
+  tenants = [],
   monthlyToOffset,
   loanAmount,
   monthlyRate,
   monthlyPayment,
   maxMonths = 30 * 12,
 }) {
-  // Nothing to offset: no surplus and no scheduled contributions. The sentinel
-  // years/interest values mean "does not pay off early". `months` must be
-  // present and match the full term - callers read it for the timeline bounds,
-  // and omitting it used to render "Middle (NaN)" / "End (undefined)".
-  if (monthlyToOffset <= 0 && contributions.reduce((s, c) => s + c.amount, 0) === 0) {
+  // Nothing to offset: no surplus, no scheduled contributions, and no tenants
+  // that could contribute rent in some future month. The sentinel years/
+  // interest values mean "does not pay off early". `months` must be present
+  // and match the full term - callers read it for the timeline bounds, and
+  // omitting it used to render "Middle (NaN)" / "End (undefined)".
+  if (monthlyToOffset <= 0 && tenants.length === 0 && contributions.reduce((s, c) => s + c.amount, 0) === 0) {
     return { years: 999, months: maxMonths, totalInterest: 999999, monthlyData: [] };
   }
 
@@ -45,9 +50,20 @@ export function calculateLoanWithOffset({
       }
     });
 
-    // Add regular monthly deposit to offset (reduced by exceptional expenses)
-    // We assume exceptional expenses come out of the surplus first.
-    const netMonthlyDeposit = Math.max(0, monthlyToOffset - monthlyExceptionalCost);
+    // Rent from tenants active this month. Tenants with no startMonth/endMonth
+    // are always active; those with a range only contribute within it.
+    const activeWeeklyRent = tenants.reduce(
+      (sum, t) => (isMonthInRange(months, t.startMonth, t.endMonth) ? sum + t.amount : sum),
+      0
+    );
+    const monthlyRentalIncomeThisMonth = calculateMonthlyRentalIncome(activeWeeklyRent);
+
+    // Add regular monthly deposit to offset (this month's rent, minus
+    // exceptional expenses). We assume exceptional expenses come out of the
+    // surplus first. `monthlyToOffset` here excludes tenant rent - it's added
+    // per month above instead, since a tenant's date range means it can't be
+    // pre-collapsed into a single constant the way it used to be.
+    const netMonthlyDeposit = Math.max(0, monthlyToOffset + monthlyRentalIncomeThisMonth - monthlyExceptionalCost);
     offsetBalance += netMonthlyDeposit;
 
     // Offset cannot exceed loan balance

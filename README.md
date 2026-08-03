@@ -116,6 +116,24 @@ npm run dev
 
 The app will be available at `http://localhost:5173`
 
+### Configuration
+
+Every default value shown on first load (property price, down payment, expenses,
+income, NSW closing costs, etc.) lives in [`config.default.json`](config.default.json)
+at the repo root, instead of being hardcoded in the source.
+
+To use your own defaults without touching the code:
+
+```bash
+# Copy the defaults and edit the values you want to change
+cp config.default.json config.local.json
+```
+
+`config.local.json` is git-ignored and overrides `config.default.json` on a
+per-key basis (you only need to include the keys you want to change). It's
+resolved at build time, so restart `npm run dev` (or re-run `npm run build`)
+after editing it for the new values to take effect.
+
 ### Build for Production
 
 ```bash

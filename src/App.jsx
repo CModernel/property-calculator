@@ -34,56 +34,68 @@ import { clampToRange } from './calculations/clampToRange';
 import { safePercentage } from './calculations/safePercentage';
 import { calculateStampDuty } from './calculations/stampDuty';
 import { estimateLmi } from './calculations/lmi';
-import { DEFAULT_CLOSING_COSTS, sumClosingCosts } from './calculations/closingCosts';
+import { sumClosingCosts } from './calculations/closingCosts';
 import { calculateTotalCashRequired } from './calculations/totalCashRequired';
+import { isMonthInRange } from './calculations/dateRange';
+import defaultConfig from '../config.default.json';
+
+// config.local.json is git-ignored and optional - import.meta.glob resolves to
+// an empty object (not a build error) when the file doesn't exist, so no
+// runtime fetch or fallback branching is needed for the common case.
+const localConfigModules = import.meta.glob('../config.local.json', { eager: true });
+const localConfig = Object.values(localConfigModules)[0]?.default ?? {};
+const config = { ...defaultConfig, ...localConfig };
 
 const PropertyInvestmentCalculator = () => {
-  const [propertyPrice, setPropertyPrice] = useState(500000);
-  const [downPayment, setDownPayment] = useState(250000);
-  const [interestRate, setInterestRate] = useState(5.38);
-  const [strataFees, setStrataFees] = useState(1000);
-  const [utilities, setUtilities] = useState(200);
-  const [councilRates, setCouncilRates] = useState(450);
-  const [insurance, setInsurance] = useState(80);
+  const [propertyPrice, setPropertyPrice] = useState(config.propertyPrice);
+  const [downPayment, setDownPayment] = useState(config.downPayment);
+  const [interestRate, setInterestRate] = useState(config.interestRate);
+  const [strataFees, setStrataFees] = useState(config.strataFees);
+  const [utilities, setUtilities] = useState(config.utilities);
+  const [councilRates, setCouncilRates] = useState(config.councilRates);
+  const [insurance, setInsurance] = useState(config.insurance);
 
   // Upfront purchase costs (NSW)
-  const [isFirstHomeBuyer, setIsFirstHomeBuyer] = useState(false);
-  const [totalSavings, setTotalSavings] = useState(320000);
+  const [isFirstHomeBuyer, setIsFirstHomeBuyer] = useState(config.isFirstHomeBuyer);
+  const [totalSavings, setTotalSavings] = useState(config.totalSavings);
   const [payLmiUpfront, setPayLmiUpfront] = useState(false);
   const [showClosingCostsBreakdown, setShowClosingCostsBreakdown] = useState(false);
-  const [conveyancing, setConveyancing] = useState(DEFAULT_CLOSING_COSTS.conveyancing);
-  const [buildingInspection, setBuildingInspection] = useState(DEFAULT_CLOSING_COSTS.buildingInspection);
-  const [pestInspection, setPestInspection] = useState(DEFAULT_CLOSING_COSTS.pestInspection);
-  const [registrationFees, setRegistrationFees] = useState(DEFAULT_CLOSING_COSTS.registrationFees);
-  const [searches, setSearches] = useState(DEFAULT_CLOSING_COSTS.searches);
-  const [loanEstablishmentFee, setLoanEstablishmentFee] = useState(DEFAULT_CLOSING_COSTS.loanEstablishmentFee);
-  const [propertyValuation, setPropertyValuation] = useState(DEFAULT_CLOSING_COSTS.propertyValuation);
-  const [homeInsurance, setHomeInsurance] = useState(DEFAULT_CLOSING_COSTS.homeInsurance);
-  const [rateAdjustments, setRateAdjustments] = useState(DEFAULT_CLOSING_COSTS.rateAdjustments);
+  const [conveyancing, setConveyancing] = useState(config.conveyancing);
+  const [buildingInspection, setBuildingInspection] = useState(config.buildingInspection);
+  const [pestInspection, setPestInspection] = useState(config.pestInspection);
+  const [registrationFees, setRegistrationFees] = useState(config.registrationFees);
+  const [searches, setSearches] = useState(config.searches);
+  const [loanEstablishmentFee, setLoanEstablishmentFee] = useState(config.loanEstablishmentFee);
+  const [propertyValuation, setPropertyValuation] = useState(config.propertyValuation);
+  const [homeInsurance, setHomeInsurance] = useState(config.homeInsurance);
+  const [rateAdjustments, setRateAdjustments] = useState(config.rateAdjustments);
 
   // Rental options
   const [tenants, setTenants] = useState([]);
   const [showAddTenant, setShowAddTenant] = useState(false);
   const [newTenantType, setNewTenantType] = useState('single');
-  const [newTenantRent, setNewTenantRent] = useState(250);
+  const [newTenantRent, setNewTenantRent] = useState(config.newTenantRent);
+  const [newTenantHasDateRange, setNewTenantHasDateRange] = useState(false);
+  const [newTenantStartMonth, setNewTenantStartMonth] = useState(1);
+  const [newTenantEndMonth, setNewTenantEndMonth] = useState(12);
 
   // Your personal expenses
-  const [fortnightlyIncome, setFortnightlyIncome] = useState(3228);
-  const [foodExpenses, setFoodExpenses] = useState(100);
-  const [transportExpenses, setTransportExpenses] = useState(50);
-  const [otherExpenses, setOtherExpenses] = useState(50);
+  const [fortnightlyIncome, setFortnightlyIncome] = useState(config.fortnightlyIncome);
+  const [foodExpenses, setFoodExpenses] = useState(config.foodExpenses);
+  const [transportExpenses, setTransportExpenses] = useState(config.transportExpenses);
+  const [otherExpenses, setOtherExpenses] = useState(config.otherExpenses);
 
   // Offset contributions state
   const [offsetContributions, setOffsetContributions] = useState([]);
   const [showAddContribution, setShowAddContribution] = useState(false);
   const [newContribMonth, setNewContribMonth] = useState(1);
-  const [newContribAmount, setNewContribAmount] = useState(10000);
+  const [newContribAmount, setNewContribAmount] = useState(config.newContribAmount);
 
   // Exceptional Expenses State
   const [exceptExpenses, setExceptExpenses] = useState([]);
   const [showAddExceptExp, setShowAddExceptExp] = useState(false);
   const [newExpName, setNewExpName] = useState('Rent');
-  const [newExpAmount, setNewExpAmount] = useState(920);
+  const [newExpAmount, setNewExpAmount] = useState(config.newExpAmount);
   const [newExpType, setNewExpType] = useState('recurring'); // one-time | recurring
   const [newExpMonth, setNewExpMonth] = useState(1); // for one-time
   const [newExpRecurrence, setNewExpRecurrence] = useState('period'); // forever | period
@@ -137,8 +149,11 @@ const PropertyInvestmentCalculator = () => {
   // so it must stay consistent with that snapshot's offset: 0 / effectiveBalance: loanAmount.
   const monthZeroInterest = calculateInitialMonthlyInterest(loanAmount, monthlyRate);
 
-  // Rental income
-  const weeklyRentalIncome = calculateWeeklyRentalIncome(tenants);
+  // Rental income. These static cards describe the recurring situation "right
+  // now" (month 1), same as exceptional expenses never touch them either -
+  // a tenant who hasn't moved in yet, or already moved out, shouldn't count.
+  const activeTenantsNow = tenants.filter(t => isMonthInRange(1, t.startMonth, t.endMonth));
+  const weeklyRentalIncome = calculateWeeklyRentalIncome(activeTenantsNow);
   const monthlyRentalIncome = calculateMonthlyRentalIncome(weeklyRentalIncome);
 
   // Your personal expenses
@@ -155,16 +170,25 @@ const PropertyInvestmentCalculator = () => {
   const weeklyNetBalance = calculateWeeklyNetBalance(weeklyIncome, weeklyRentalIncome, weeklyPersonalExpenses, totalPropertyCost);
   const fortnightlyNetBalance = calculateFortnightlyNetBalance(weeklyNetBalance);
 
-  // What you can deposit to offset
+  // What you can deposit to offset. These stay based on the "right now" rental
+  // figure above - they're the recurring-situation display, not the simulation.
   const monthlyToOffset = calculateMonthlyToOffset(monthlyNetBalance);
   const weeklyToOffset = calculateWeeklyToOffset(weeklyNetBalance);
   const fortnightlyToOffset = calculateFortnightlyToOffset(fortnightlyNetBalance);
+
+  // Surplus feeding the simulation, EXCLUDING tenant rent (rentalIncome: 0) and
+  // left unclamped. The loop adds each tenant's rent back in per month instead,
+  // since a tenant's date range means it can no longer be pre-collapsed into a
+  // single constant - clamping here first would lose information once rent is
+  // summed in afterwards (see offsetSimulation.js).
+  const baseMonthlySurplus = calculateMonthlyNetBalance(monthlyIncome, 0, monthlyPersonalExpenses, totalPropertyCost);
 
   // Complete loan simulation with offset
   const loanSimulation = calculateLoanWithOffset({
     contributions: offsetContributions,
     exceptExpenses,
-    monthlyToOffset,
+    tenants,
+    monthlyToOffset: baseMonthlySurplus,
     loanAmount,
     monthlyRate,
     monthlyPayment,
@@ -172,7 +196,8 @@ const PropertyInvestmentCalculator = () => {
   const baselineSimulation = calculateLoanWithOffset({
     contributions: [], // No offsets
     exceptExpenses,
-    monthlyToOffset,
+    tenants,
+    monthlyToOffset: baseMonthlySurplus,
     loanAmount,
     monthlyRate,
     monthlyPayment,
@@ -245,14 +270,21 @@ const PropertyInvestmentCalculator = () => {
 
   const addTenant = () => {
     if (newTenantRent <= 0) return;
+    if (newTenantHasDateRange && newTenantStartMonth > newTenantEndMonth) {
+      alert('Start month must be before end month.');
+      return;
+    }
     const newTenant = {
       id: Date.now(),
       type: newTenantType,
-      amount: newTenantRent
+      amount: newTenantRent,
+      startMonth: newTenantHasDateRange ? newTenantStartMonth : null,
+      endMonth: newTenantHasDateRange ? newTenantEndMonth : null,
     };
     setTenants([...tenants, newTenant]);
     setShowAddTenant(false);
     setNewTenantRent(250);
+    setNewTenantHasDateRange(false);
   };
 
   const removeTenant = (id) => {
@@ -668,6 +700,39 @@ const PropertyInvestmentCalculator = () => {
                         prefix="$"
                       />
                     </div>
+                    <div className="col-span-2">
+                      <label className="flex items-center gap-2 text-xs font-medium text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={newTenantHasDateRange}
+                          onChange={(e) => setNewTenantHasDateRange(e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                        />
+                        Limited period? (e.g. moves out, or moves in later)
+                      </label>
+                    </div>
+                    {newTenantHasDateRange && (
+                      <div className="col-span-2 grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs font-medium mb-1">Start Month: {newTenantStartMonth}</label>
+                          <input
+                            type="range" min="1" max="360"
+                            value={newTenantStartMonth}
+                            onChange={(e) => setNewTenantStartMonth(Number(e.target.value))}
+                            className="w-full h-2 bg-green-200 rounded-lg appearance-none cursor-pointer"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium mb-1">End Month: {newTenantEndMonth}</label>
+                          <input
+                            type="range" min={newTenantStartMonth} max="360"
+                            value={newTenantEndMonth}
+                            onChange={(e) => setNewTenantEndMonth(Number(e.target.value))}
+                            className="w-full h-2 bg-green-200 rounded-lg appearance-none cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <button
                     onClick={addTenant}
@@ -694,6 +759,7 @@ const PropertyInvestmentCalculator = () => {
                           </p>
                           <p className="text-xs text-gray-600">
                             ${tenant.amount}/week {tenant.type === 'shared' && <span className="text-blue-600 font-medium">(~${Math.round(tenant.amount / 2)} each)</span>}
+                            {tenant.startMonth != null && <span className="text-gray-500"> (Months {tenant.startMonth}-{tenant.endMonth})</span>}
                           </p>
                         </div>
                       </div>
@@ -1501,18 +1567,38 @@ const PropertyInvestmentCalculator = () => {
                       <div className="bg-green-50 rounded-lg p-3 border border-green-100">
                         <p className="font-bold text-green-800 border-b border-green-200 pb-1 mb-2">Income Context</p>
                         <div className="space-y-1 text-xs">
-                          <p className="flex justify-between">
-                            <span>Tenants Active:</span>
-                            <span className="font-medium">{tenants.length}</span>
-                          </p>
-                          <p className="flex justify-between">
-                            <span>Rental Income:</span>
-                            <span className="font-medium">${monthlyRentalIncome.toLocaleString()}/mo</span>
-                          </p>
+                          {(() => {
+                            const tenantsActiveHere = tenants.filter(t => isMonthInRange(timelineMonth, t.startMonth, t.endMonth));
+                            const rentalIncomeHere = calculateMonthlyRentalIncome(calculateWeeklyRentalIncome(tenantsActiveHere));
+                            return (
+                              <>
+                                <p className="flex justify-between">
+                                  <span>Tenants Active:</span>
+                                  <span className="font-medium">{tenantsActiveHere.length}</span>
+                                </p>
+                                <p className="flex justify-between">
+                                  <span>Rental Income:</span>
+                                  <span className="font-medium">${Math.round(rentalIncomeHere).toLocaleString()}/mo</span>
+                                </p>
+                              </>
+                            );
+                          })()}
                           <div className="mt-2 pt-2 border-t border-green-200">
-                            {tenants.map(t => (
-                              <p key={t.id} className="text-green-700 truncate">• {t.type === 'single' ? 'Individual' : 'Shared ($' + Math.round(t.amount / 2) + ')'}</p>
-                            ))}
+                            {tenants.map(t => {
+                              let status = 'active'; // no date range = always active
+                              if (t.startMonth != null) {
+                                if (timelineMonth < t.startMonth) status = 'future';
+                                else if (timelineMonth > t.endMonth) status = 'past';
+                              }
+                              if (status === 'future') return null;
+                              return (
+                                <p key={t.id} className={`truncate ${status === 'past' ? 'text-gray-400' : 'text-green-700'}`}>
+                                  • {t.type === 'single' ? 'Individual' : 'Shared ($' + Math.round(t.amount / 2) + ')'}
+                                  {status === 'past' && ' (Done)'}
+                                  {t.startMonth != null && <span className="text-gray-400"> (M{t.startMonth}-{t.endMonth})</span>}
+                                </p>
+                              );
+                            })}
                             {tenants.length === 0 && <span className="italic text-gray-400">No tenants</span>}
                           </div>
                         </div>

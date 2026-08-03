@@ -70,42 +70,56 @@ optionally reuse in the commit message when you implement it.
   required, $45,657 remaining from $320k savings) and the $500k/90% LVR LMI
   case ($12,375 estimate) directly in the browser.
 
----
+- [x] **TODO-16: Externalize config defaults**
+  Added `config.default.json` at the repo root with all 24 previously-hardcoded
+  default values (property, expenses, income, and the NSW upfront-cost fields
+  from TODO-11). `src/App.jsx` imports it and merges in an optional, git-ignored
+  `config.local.json` via `import.meta.glob('../config.local.json', { eager:
+  true })`, which resolves to an empty object rather than a build error when
+  the file doesn't exist - no runtime fetch or fallback branching needed.
+  Verified end-to-end: created a `config.local.json` overriding `propertyPrice`
+  and `isFirstHomeBuyer`, rebuilt, and confirmed both the bundled JS and the
+  running app reflected the override; removed the file afterwards so the repo
+  defaults ship normally.
 
-## 🔴 HIGH PRIORITY (User-facing impact or blockers)
-
-- [ ] **TODO-16: Externalize config defaults** ⭐ START HERE
-  Right now, all default values are hardcoded in `src/App.jsx:34-72`: property
-  price ($500k), down payment ($250k), interest rate (5.38%), all expenses, and
-  income. Anyone downloading the app has to edit the code to change them. Create
-  a `config.default.json` (or `.js`) in the repo root with all these values,
-  load it at startup, and allow an optional user-provided `config.local.json`
-  (git-ignored) to override them. This unblocks non-developers from using the
-  app and lets teams share calculation presets. **Values to externalize:**
-  `propertyPrice`, `downPayment`, `interestRate`, `strataFees`, `utilities`,
-  `councilRates`, `insurance`, `fortnightlyIncome`, `foodExpenses`,
-  `transportExpenses`, `otherExpenses`, `newTenantRent`, `newContribAmount`,
-  `newExpAmount`, `isFirstHomeBuyer`, `totalSavings`, `conveyancing`,
-  `buildingInspection`, `pestInspection`, `registrationFees`, `searches`,
-  `loanEstablishmentFee`, `propertyValuation`, `homeInsurance`,
-  `rateAdjustments` (the last 10 added by TODO-11).
-
-- [ ] **TODO-4: Rental income by date range (optional)**
-  Today each tenant's rental income is a fixed weekly amount applied across
-  the whole timeline (`tenants`, `calculateWeeklyRentalIncome` in
-  `src/calculations/loan.js`). Allow an optional start/end month per tenant
-  (similar to the pattern already used in `exceptExpenses` with
-  `startMonth`/`endMonth`, `src/App.jsx:217-218`). If no range is specified,
-  it should apply to the entire timeline (current behavior).
-
-- [ ] **TODO-5: Property expenses and personal expenses by date range (optional)**
-  Same concept as TODO-4, applied to property expenses and
-  personal expenses (currently fixed monthly/weekly values with no dates).
-  Reuse the same optional month-range pattern.
+- [x] **TODO-4: Tenant rental income by date range (optional)** (reduced scope: tenants only)
+  Added `src/calculations/dateRange.js` (`isMonthInRange`, null bounds = always
+  active) and gave each tenant an optional `startMonth`/`endMonth`, using the
+  same shape already established by `exceptExpenses`. The harder part was
+  `offsetSimulation.js`: rental income used to be collapsed into the constant
+  `monthlyToOffset` *before* the loop ran, which can't work once a tenant's
+  income depends on the month - it's now computed **inside** the loop instead
+  (mirroring how `exceptExpenses` already works), with `monthlyToOffset`
+  redefined to mean "surplus excluding tenant rent". Verified this doesn't
+  regress the existing 12 tests: for `y >= 0`, `max(0, max(0,x)-y) ==
+  max(0,x-y)`, so with the default `tenants: []` the new math is provably
+  identical to the old one. Also fixed a latent bug this surfaced: the
+  sentinel short-circuit only checked the base surplus, so a tenant whose rent
+  alone would produce a real surplus used to get masked by the "999 years"
+  placeholder - it now requires `tenants.length === 0` too. The static summary
+  cards (Property Balance, Property Summary) show tenants active "right now"
+  (month 1), matching how `exceptExpenses` already don't affect those cards;
+  the Timeline Explorer's Income Context panel got the same future/active/past
+  classification `exceptExpenses` already has. **Scope note:** property and
+  personal expenses (strata, utilities, council, insurance, food, transport,
+  other) were deliberately left out - unlike tenants and exceptExpenses,
+  they're flat scalars with no array behind them, so date-ranging them means
+  converting each into an editable list first. Split into its own TODO below
+  if it's ever needed.
 
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
+
+- [ ] **TODO-19: Property and personal expenses by date range (optional)**
+  Split out of the original TODO-4 scope. Unlike tenants, `strataFees`,
+  `utilities`, `councilRates`, `insurance`, `foodExpenses`,
+  `transportExpenses`, and `otherExpenses` are flat scalars with no array
+  behind them - giving any of them a date range means first converting it into
+  a list of entries (amount + optional start/end), the same shape `tenants`
+  and `exceptExpenses` already use. That's a bigger UI change than TODO-4
+  turned out to be, which is why it was split off rather than done at the same
+  time.
 
 - [ ] **TODO-12: Link savings, deposit and offset**
   `downPayment` and `offsetContributions` are independent pieces of state with
@@ -133,6 +147,29 @@ optionally reuse in the commit message when you implement it.
   means deciding what gives when the user types into it — presumably the
   deposit recalculates — and keeping the three fields consistent in every
   direction.
+
+- [ ] **TODO-17: Make it mobile responsive**
+  The top-level layout already collapses to one column below `lg`
+  (`grid-cols-1 lg:grid-cols-3`, `src/App.jsx:317`), but several inner
+  sections don't: the rental option cards and the two "add contribution" /
+  "add exceptional expense" forms use a bare `grid-cols-2`
+  (`src/App.jsx:644`, `:768`, `:984`) with no `grid-cols-1` mobile fallback,
+  so those controls get cramped on narrow phone screens instead of stacking.
+  Needs a pass across the whole page on an actual small viewport (not just
+  resizing a desktop browser window) to catch anything else that doesn't
+  reflow - tap target sizes on the sliders/number inputs, and the Timeline
+  Explorer scrubber are worth checking too. The README's Roadmap already
+  claims "Responsive design" as done, which should be corrected either way
+  once this is scoped.
+
+- [ ] **TODO-18: Strata fees should only apply to units/apartments**
+  `strataFees` is currently just a generic slider with no concept of property
+  type, but strata only exists for units/apartments/townhouses on a shared
+  title - a standalone house has no strata at all (its default is now $0,
+  see `config.default.json`). Add a "Property Type" input (house vs
+  unit/apartment) and hide or zero out the strata field when "house" is
+  selected, so the UI itself makes the invalid combination impossible instead
+  of relying on the user to remember to set it to $0.
 
 ---
 

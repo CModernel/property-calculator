@@ -191,4 +191,72 @@ describe('calculateLoanWithOffset', () => {
 
     expect(result.monthlyData[0].offset).toBe(4084);
   });
+
+  it('adds a tenant\'s rent only within its [startMonth, endMonth] range', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      exceptExpenses: [],
+      tenants: [{ id: 1, amount: 300, startMonth: 3, endMonth: 5 }],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000, // large enough that effectiveOffset is never capped by balance
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 6,
+    });
+    const offsets = result.monthlyData.map(d => d.offset);
+    // $300/week -> $1,300/month, deposited only in months 3-5 (inclusive).
+    expect(offsets).toEqual([0, 0, 1300, 2600, 3900, 3900]);
+  });
+
+  it('adds a tenant with no date range every month, matching the previous always-on behavior', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      exceptExpenses: [],
+      tenants: [{ id: 1, amount: 300, startMonth: null, endMonth: null }],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 3,
+    });
+    const offsets = result.monthlyData.map(d => d.offset);
+    expect(offsets).toEqual([1300, 2600, 3900]);
+  });
+
+  it('sums rent from multiple tenants, some ranged and some not, per month', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      exceptExpenses: [],
+      tenants: [
+        { id: 1, amount: 300, startMonth: null, endMonth: null }, // always active
+        { id: 2, amount: 300, startMonth: 2, endMonth: 3 },
+      ],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 4,
+    });
+    const offsets = result.monthlyData.map(d => d.offset);
+    // Month 1 & 4: only the always-on tenant ($1,300). Months 2-3: both ($2,600).
+    expect(offsets).toEqual([1300, 3900, 6500, 7800]);
+  });
+
+  it('does not take the sentinel shortcut when a tenant is present, even if the base surplus is <= 0', () => {
+    // Before this fix, a tenant whose rent alone could produce a real surplus
+    // would be masked by the sentinel, which only looked at the base surplus.
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      exceptExpenses: [],
+      tenants: [{ id: 1, amount: 0, startMonth: null, endMonth: null }],
+      monthlyToOffset: 0,
+      loanAmount: 1000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 5,
+    });
+    expect(result.monthlyData).toHaveLength(5);
+    expect(result.totalInterest).toBe(0);
+    expect(result.years).not.toBe(999);
+  });
 });
