@@ -11,7 +11,23 @@ describe('calculateLoanWithOffset', () => {
       monthlyRate: 0.005,
       monthlyPayment: 500,
     });
-    expect(result).toEqual({ years: 999, totalInterest: 999999, monthlyData: [] });
+    expect(result).toEqual({ years: 999, months: 360, totalInterest: 999999, monthlyData: [] });
+  });
+
+  it('always reports a numeric months, on the sentinel path too', () => {
+    // The timeline reads `months` for its slider bounds. When the sentinel
+    // omitted the key the UI rendered "Middle (NaN)" and "End (undefined)".
+    const sentinel = calculateLoanWithOffset({
+      contributions: [],
+      exceptExpenses: [],
+      monthlyToOffset: 0,
+      loanAmount: 100000,
+      monthlyRate: 0.005,
+      monthlyPayment: 500,
+      maxMonths: 240,
+    });
+    expect(Number.isFinite(sentinel.months)).toBe(true);
+    expect(sentinel.months).toBe(240);
   });
 
   it('does not hit the sentinel when contributions are scheduled even with zero surplus', () => {

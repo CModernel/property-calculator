@@ -26,7 +26,7 @@ This calculator helps you make **informed decisions** about property investments
 - 💰 **Real Cash Flow Analysis**: See exactly how much you need from your pocket after rent and expenses
 - 🏦 **Offset Account Simulation**: Calculate how quickly you'll pay off your loan with offset deposits
 - 📈 **Interest Savings**: Compare total interest paid vs traditional mortgage
-- ⚡ **Interactive**: Adjust all parameters with sliders and see results instantly
+- ⚡ **Interactive**: Type an exact figure or drag a slider, and see results instantly
 - 🎯 **Comprehensive**: Includes property expenses, personal expenses, and rental income
 
 ---
@@ -34,10 +34,13 @@ This calculator helps you make **informed decisions** about property investments
 ## ✨ Features
 
 ### 🏡 Property & Loan Configuration
-- **Property price** slider (300k - 800k AUD)
-- **Down payment** adjustment
-- **Interest rate** customization (4% - 8%)
+- **Property price**: type any exact figure (the slider covers 200k - 3M AUD)
+- **Down payment**: anything from 0 up to the full purchase price
+- **Interest rate**: 2 decimal places, e.g. 5.85%
 - **Loan term**: 30 years standard
+
+Every money field is a number box paired with a slider: drag to explore a typical
+range, or type an exact value such as `742,500` when the slider is too coarse.
 
 ### 💵 Property Expenses
 - **Strata fees** (quarterly)

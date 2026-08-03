@@ -1,5 +1,31 @@
 import { describe, it, expect } from 'vitest';
-import { formatMonthsDetailed } from './formatting';
+import { formatMonthsDetailed, formatCompactMoney } from './formatting';
+
+describe('formatCompactMoney', () => {
+  it('abbreviates millions', () => {
+    expect(formatCompactMoney(3000000)).toBe('3M');
+    expect(formatCompactMoney(1500000)).toBe('1.5M');
+  });
+
+  it('abbreviates thousands', () => {
+    expect(formatCompactMoney(200000)).toBe('200k');
+    expect(formatCompactMoney(1000)).toBe('1k');
+  });
+
+  it('leaves values under a thousand alone', () => {
+    expect(formatCompactMoney(0)).toBe('0');
+    expect(formatCompactMoney(600)).toBe('600');
+  });
+
+  it('drops trailing zeros rather than padding decimals', () => {
+    expect(formatCompactMoney(2000000)).toBe('2M');
+    expect(formatCompactMoney(12000)).toBe('12k');
+  });
+
+  it('handles negatives', () => {
+    expect(formatCompactMoney(-5000)).toBe('-5k');
+  });
+});
 
 describe('formatMonthsDetailed', () => {
   it('formats 0 months', () => {

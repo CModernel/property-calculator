@@ -7,8 +7,12 @@ export function calculateLoanWithOffset({
   monthlyPayment,
   maxMonths = 30 * 12,
 }) {
+  // Nothing to offset: no surplus and no scheduled contributions. The sentinel
+  // years/interest values mean "does not pay off early". `months` must be
+  // present and match the full term - callers read it for the timeline bounds,
+  // and omitting it used to render "Middle (NaN)" / "End (undefined)".
   if (monthlyToOffset <= 0 && contributions.reduce((s, c) => s + c.amount, 0) === 0) {
-    return { years: 999, totalInterest: 999999, monthlyData: [] };
+    return { years: 999, months: maxMonths, totalInterest: 999999, monthlyData: [] };
   }
 
   let balance = loanAmount;

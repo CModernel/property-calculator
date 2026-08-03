@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { DollarSign, Home, Users, TrendingDown, Calendar, ShoppingCart, Car } from 'lucide-react';
-import { formatMonthsDetailed } from './calculations/formatting';
+import { formatMonthsDetailed, formatCompactMoney } from './calculations/formatting';
+import NumberSliderField from './components/NumberSliderField';
 import { getNextSuggestion } from './calculations/suggestions';
 import { getBalanceColor, getBalanceBgColor } from './calculations/ui';
 import {
@@ -29,6 +30,8 @@ import {
   calculateTotalScheduledOffset,
 } from './calculations/loan';
 import { calculateLoanWithOffset } from './calculations/offsetSimulation';
+import { clampToRange } from './calculations/clampToRange';
+import { safePercentage } from './calculations/safePercentage';
 
 const PropertyInvestmentCalculator = () => {
   const [propertyPrice, setPropertyPrice] = useState(500000);
@@ -145,6 +148,28 @@ const PropertyInvestmentCalculator = () => {
   // comparison baseline in the savings card.
   const noOffsetTotalInterest = calculateNoOffsetTotalInterest(monthlyPayment, loanAmount, totalMonths);
 
+  // Share of income consumed by expenses, driving the Total Summary donut.
+  // With no income at all, everything is consumed - falling back to 0 would
+  // paint a reassuring all-green ring for someone earning nothing.
+  const expenseRatio = Math.min(
+    100,
+    safePercentage(totalPropertyCost + monthlyPersonalExpenses, monthlyIncome + monthlyRentalIncome, 100)
+  );
+
+  // Invariant: downPayment never exceeds propertyPrice, enforced in both
+  // directions. Without this, lowering the price below the current deposit
+  // leaves a stale deposit behind (the range input clamps its own display but
+  // never fires onChange), producing a negative loan and a negative payment.
+  // React batches both setState calls into a single re-render.
+  const handlePropertyPriceChange = (nextPrice) => {
+    setPropertyPrice(nextPrice);
+    if (downPayment > nextPrice) setDownPayment(nextPrice);
+  };
+
+  const handleDownPaymentChange = (nextDeposit) => {
+    setDownPayment(clampToRange(nextDeposit, 0, propertyPrice));
+  };
+
   // Functions for managing offset contributions
   const addOffsetContribution = () => {
     if (newContribAmount <= 0) return;
@@ -250,53 +275,53 @@ const PropertyInvestmentCalculator = () => {
             </h2>
 
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Property Price: ${propertyPrice.toLocaleString()} AUD
-                </label>
-                <input
-                  type="range"
-                  min="300000"
-                  max="800000"
-                  step="10000"
-                  value={propertyPrice}
-                  onChange={(e) => setPropertyPrice(Number(e.target.value))}
-                  className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer"
-                />
-              </div>
+              <NumberSliderField
+                label="Property Price"
+                value={propertyPrice}
+                onChange={handlePropertyPriceChange}
+                min={50000}
+                max={10000000}
+                sliderMin={200000}
+                sliderMax={3000000}
+                step={10000}
+                color="blue"
+                prefix="$"
+                suffix=" AUD"
+                formatBound={formatCompactMoney}
+              />
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Down Payment: ${downPayment.toLocaleString()} AUD
-                </label>
-                <input
-                  type="range"
-                  min="50000"
-                  max={Math.min(propertyPrice, 400000)}
-                  step="10000"
-                  value={downPayment}
-                  onChange={(e) => setDownPayment(Number(e.target.value))}
-                  className="w-full h-2 bg-green-200 rounded-lg appearance-none cursor-pointer"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Loan: ${loanAmount.toLocaleString()} ({((loanAmount / propertyPrice) * 100).toFixed(1)}% LVR)
-                </p>
-              </div>
+              <NumberSliderField
+                label="Down Payment"
+                value={downPayment}
+                onChange={handleDownPaymentChange}
+                min={0}
+                max={propertyPrice}
+                sliderMax={propertyPrice}
+                sliderMin={0}
+                step={10000}
+                color="green"
+                prefix="$"
+                suffix=" AUD"
+                formatBound={formatCompactMoney}
+              >
+                Loan: ${loanAmount.toLocaleString()} ({safePercentage(loanAmount, propertyPrice).toFixed(1)}% LVR)
+              </NumberSliderField>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Interest Rate: {interestRate}% p.a.
-                </label>
-                <input
-                  type="range"
-                  min="4.0"
-                  max="8.0"
-                  step="0.1"
-                  value={interestRate}
-                  onChange={(e) => setInterestRate(Number(e.target.value))}
-                  className="w-full h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer"
-                />
-              </div>
+              {/* min must stay above 0: a 0% rate makes calculateMonthlyPayment
+                  divide 0 by 0, turning every figure on the page into NaN. */}
+              <NumberSliderField
+                label="Interest Rate"
+                value={interestRate}
+                onChange={setInterestRate}
+                min={0.1}
+                max={20}
+                sliderMin={3}
+                sliderMax={10}
+                step={0.01}
+                color="purple"
+                suffix="% p.a."
+                formatValue={(v) => v.toFixed(2)}
+              />
 
               <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
                 <p className="text-sm font-semibold text-gray-700">
@@ -313,68 +338,58 @@ const PropertyInvestmentCalculator = () => {
               Property Expenses
             </h2>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Strata (quarterly): ${strataFees}
-                </label>
-                <input
-                  type="range"
-                  min="600"
-                  max="3000"
-                  step="100"
-                  value={strataFees}
-                  onChange={(e) => setStrataFees(Number(e.target.value))}
-                  className="w-full h-2 bg-orange-200 rounded-lg appearance-none cursor-pointer"
-                />
-                <p className="text-xs text-gray-500">≈ ${Math.round(strataFees / 4)}/month</p>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <NumberSliderField
+                label="Strata (quarterly)"
+                value={strataFees}
+                onChange={setStrataFees}
+                min={0}
+                max={20000}
+                sliderMax={5000}
+                step={100}
+                color="orange"
+                prefix="$"
+              >
+                ≈ ${Math.round(strataFees / 4)}/month
+              </NumberSliderField>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Utilities (monthly): ${utilities}
-                </label>
-                <input
-                  type="range"
-                  min="50"
-                  max="400"
-                  step="10"
-                  value={utilities}
-                  onChange={(e) => setUtilities(Number(e.target.value))}
-                  className="w-full h-2 bg-orange-200 rounded-lg appearance-none cursor-pointer"
-                />
-              </div>
+              <NumberSliderField
+                label="Utilities (monthly)"
+                value={utilities}
+                onChange={setUtilities}
+                min={0}
+                max={2000}
+                sliderMax={600}
+                step={10}
+                color="orange"
+                prefix="$"
+              />
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Council Rates (quarterly): ${councilRates}
-                </label>
-                <input
-                  type="range"
-                  min="200"
-                  max="800"
-                  step="50"
-                  value={councilRates}
-                  onChange={(e) => setCouncilRates(Number(e.target.value))}
-                  className="w-full h-2 bg-orange-200 rounded-lg appearance-none cursor-pointer"
-                />
-                <p className="text-xs text-gray-500">≈ ${Math.round(councilRates / 4)}/month</p>
-              </div>
+              <NumberSliderField
+                label="Council Rates (quarterly)"
+                value={councilRates}
+                onChange={setCouncilRates}
+                min={0}
+                max={10000}
+                sliderMax={2000}
+                step={50}
+                color="orange"
+                prefix="$"
+              >
+                ≈ ${Math.round(councilRates / 4)}/month
+              </NumberSliderField>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Insurance (monthly): ${insurance}
-                </label>
-                <input
-                  type="range"
-                  min="40"
-                  max="200"
-                  step="10"
-                  value={insurance}
-                  onChange={(e) => setInsurance(Number(e.target.value))}
-                  className="w-full h-2 bg-orange-200 rounded-lg appearance-none cursor-pointer"
-                />
-              </div>
+              <NumberSliderField
+                label="Insurance (monthly)"
+                value={insurance}
+                onChange={setInsurance}
+                min={0}
+                max={2000}
+                sliderMax={500}
+                step={10}
+                color="orange"
+                prefix="$"
+              />
             </div>
 
             <div className="mt-3 p-3 bg-orange-50 rounded-lg border border-orange-200">
@@ -427,17 +442,17 @@ const PropertyInvestmentCalculator = () => {
                       </button>
                     </div>
                     <div className="col-span-2">
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Weekly Rent ($): {newTenantRent}
-                      </label>
-                      <input
-                        type="range"
-                        min="50"
-                        max="600"
-                        step="10"
+                      <NumberSliderField
+                        label="Weekly Rent"
                         value={newTenantRent}
-                        onChange={(e) => setNewTenantRent(Number(e.target.value))}
-                        className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${newTenantType === 'single' ? 'bg-green-200' : 'bg-blue-200'}`}
+                        onChange={setNewTenantRent}
+                        min={0}
+                        max={5000}
+                        sliderMin={50}
+                        sliderMax={1200}
+                        step={10}
+                        color={newTenantType === 'single' ? 'green' : 'blue'}
+                        prefix="$"
                       />
                     </div>
                   </div>
@@ -499,21 +514,20 @@ const PropertyInvestmentCalculator = () => {
             </h2>
 
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Fortnightly Income: ${fortnightlyIncome}
-                </label>
-                <input
-                  type="range"
-                  min="2000"
-                  max="5000"
-                  step="100"
-                  value={fortnightlyIncome}
-                  onChange={(e) => setFortnightlyIncome(Number(e.target.value))}
-                  className="w-full h-2 bg-indigo-200 rounded-lg appearance-none cursor-pointer"
-                />
-                <p className="text-xs text-gray-500">≈ ${Math.round(weeklyIncome)}/week</p>
-              </div>
+              <NumberSliderField
+                label="Fortnightly Income"
+                value={fortnightlyIncome}
+                onChange={setFortnightlyIncome}
+                min={0}
+                max={100000}
+                sliderMin={1000}
+                sliderMax={12000}
+                step={100}
+                color="indigo"
+                prefix="$"
+              >
+                ≈ ${Math.round(weeklyIncome)}/week
+              </NumberSliderField>
 
               {/* OFFSET CONTRIBUTIONS SECTION */}
               <div className="border-t pt-4 mt-4">
@@ -611,9 +625,12 @@ const PropertyInvestmentCalculator = () => {
                   </p>
                   {totalScheduledOffset > 0 && (
                     <div className="mt-1 space-y-1">
-                      <p className="text-xs text-gray-600">
-                        Reduces {((totalScheduledOffset / loanAmount) * 100).toFixed(1)}% of loan balance
-                      </p>
+                      {/* "% of loan balance" reads as nonsense with no loan, so drop the line entirely. */}
+                      {loanAmount > 0 && (
+                        <p className="text-xs text-gray-600">
+                          Reduces {safePercentage(totalScheduledOffset, loanAmount).toFixed(1)}% of loan balance
+                        </p>
+                      )}
                       <p className="text-xs font-semibold text-green-700">
                         ~${Math.round(interestSaved).toLocaleString()} saved in interest
                       </p>
@@ -622,51 +639,42 @@ const PropertyInvestmentCalculator = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Food: ${foodExpenses}
-                  </label>
-                  <input
-                    type="range"
-                    min="50"
-                    max="400"
-                    step="10"
-                    value={foodExpenses}
-                    onChange={(e) => setFoodExpenses(Number(e.target.value))}
-                    className="w-full h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <NumberSliderField
+                  label="Food"
+                  value={foodExpenses}
+                  onChange={setFoodExpenses}
+                  min={0}
+                  max={5000}
+                  sliderMax={600}
+                  step={10}
+                  color="purple"
+                  prefix="$"
+                />
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Transport: ${transportExpenses}
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="300"
-                    step="10"
-                    value={transportExpenses}
-                    onChange={(e) => setTransportExpenses(Number(e.target.value))}
-                    className="w-full h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
+                <NumberSliderField
+                  label="Transport"
+                  value={transportExpenses}
+                  onChange={setTransportExpenses}
+                  min={0}
+                  max={5000}
+                  sliderMax={400}
+                  step={10}
+                  color="purple"
+                  prefix="$"
+                />
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Other: ${otherExpenses}
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="500"
-                    step="10"
-                    value={otherExpenses}
-                    onChange={(e) => setOtherExpenses(Number(e.target.value))}
-                    className="w-full h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
+                <NumberSliderField
+                  label="Other"
+                  value={otherExpenses}
+                  onChange={setOtherExpenses}
+                  min={0}
+                  max={10000}
+                  sliderMax={800}
+                  step={10}
+                  color="purple"
+                  prefix="$"
+                />
               </div>
 
               <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
@@ -926,11 +934,11 @@ const PropertyInvestmentCalculator = () => {
 
                 <div className="flex items-center gap-4 mb-4">
                   <div className="relative w-16 h-16 rounded-full shadow-inner" style={{
-                    background: `conic-gradient(#ef4444 ${Math.min(100, ((totalPropertyCost + monthlyPersonalExpenses) / (monthlyIncome + monthlyRentalIncome)) * 100)}%, #22c55e 0)`
+                    background: `conic-gradient(#ef4444 ${expenseRatio}%, #22c55e 0)`
                   }}>
                     <div className="absolute inset-2 bg-white rounded-full flex items-center justify-center">
                       <span className="text-[10px] font-bold text-gray-500">
-                        {Math.round(((totalPropertyCost + monthlyPersonalExpenses) / (monthlyIncome + monthlyRentalIncome)) * 100)}%
+                        {Math.round(expenseRatio)}%
                       </span>
                     </div>
                   </div>
@@ -1097,6 +1105,16 @@ const PropertyInvestmentCalculator = () => {
               Timeline Explorer
             </h2>
 
+            {/* No month-by-month data means there is nothing to scrub through:
+                either there is no loan, or no surplus and no contributions. */}
+            {loanSimulation.monthlyData.length === 0 ? (
+              <p className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                {loanAmount <= 0
+                  ? 'No loan to simulate — the deposit covers the full purchase price.'
+                  : 'Nothing going into the offset yet, so there is no timeline to explore. Add income, reduce expenses, or schedule a contribution.'}
+              </p>
+            ) : (
+            <>
             <div className="mb-6">
               <div className="flex justify-between items-end mb-2">
                 <div>
@@ -1140,7 +1158,11 @@ const PropertyInvestmentCalculator = () => {
 
               if (!snapshot) return null;
 
-              const effectiveProgress = Math.min(100, ((loanAmount - snapshot.effectiveBalance) / loanAmount) * 100);
+              // No loan at all means the property is owned outright, so the bar is full.
+              const effectiveProgress = Math.min(
+                100,
+                safePercentage(loanAmount - snapshot.effectiveBalance, loanAmount, 100)
+              );
               const monthsRemaining = loanSimulation.months - timelineMonth;
               const yearsRem = Math.floor(Math.max(0, monthsRemaining) / 12);
               const monthsRem = Math.max(0, monthsRemaining) % 12;
@@ -1201,7 +1223,7 @@ const PropertyInvestmentCalculator = () => {
                       {/* Marker for where pure principal payment is */}
                       <div
                         className="h-full border-r-2 border-white/50 absolute top-0"
-                        style={{ left: `${(snapshot.totalPrincipalPaid / loanAmount) * 100}%` }}
+                        style={{ left: `${safePercentage(snapshot.totalPrincipalPaid, loanAmount, 100)}%` }}
                         title="Principal Paid (Direct)"
                       ></div>
                     </div>
@@ -1295,6 +1317,8 @@ const PropertyInvestmentCalculator = () => {
                 </div>
               );
             })()}
+            </>
+            )}
           </div>
 
         </div>
