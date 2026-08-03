@@ -107,6 +107,22 @@ optionally reuse in the commit message when you implement it.
   converting each into an editable list first. Split into its own TODO below
   if it's ever needed.
 
+- [x] **TODO-12: Link savings, deposit and offset**
+  Added `calculateCashRemaining({ totalSavings, totalCashRequired,
+  totalScheduledOffset })` to `src/calculations/totalCashRequired.js`, which
+  `cashRemaining` in `App.jsx` now uses instead of the old plain
+  `totalSavings - totalCashRequired` subtraction. Scope was deliberately kept
+  to **detecting and surfacing** the contradiction (what the TODO actually
+  asked for), not building an allocator that decides how to split savings.
+  The "Upfront Costs (NSW)" card gets a new conditional "Scheduled Offset
+  Contributions" line (only shown when non-zero, to avoid cluttering the
+  common no-contributions case) and a red warning banner under Cash Remaining
+  when it goes negative. No input is blocked - a shortfall is still a valid,
+  visible scenario, same as everywhere else in the app. Verified in the
+  browser: baseline (no contributions) unchanged; scheduling a $100,000
+  month-1 contribution against $350k savings correctly dropped Cash Remaining
+  to -$71,547 and surfaced the warning.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -120,17 +136,6 @@ optionally reuse in the commit message when you implement it.
   and `exceptExpenses` already use. That's a bigger UI change than TODO-4
   turned out to be, which is why it was split off rather than done at the same
   time.
-
-- [ ] **TODO-12: Link savings, deposit and offset**
-  `downPayment` and `offsetContributions` are independent pieces of state with
-  no cross-validation, so you can set a $250k deposit *and* a $250k month-1
-  offset contribution — spending the same money twice with no warning. Deciding
-  how to split a given pot of savings between deposit and offset is arguably
-  the core question this calculator should answer, and right now it can't even
-  detect the contradiction. TODO-11 added `totalSavings` as a standalone input
-  (used only for the "Cash Remaining" figure) but did **not** solve this — there
-  is still no cross-check between `totalSavings`, `downPayment` and
-  `offsetContributions`, so the double-counting warning remains to be built.
 
 - [ ] **TODO-15: Configurable loan term**
   `TOTAL_MONTHS = 30 * 12` (`src/calculations/loan.js:1`) is hardcoded and feeds

@@ -35,7 +35,7 @@ import { safePercentage } from './calculations/safePercentage';
 import { calculateStampDuty } from './calculations/stampDuty';
 import { estimateLmi } from './calculations/lmi';
 import { sumClosingCosts } from './calculations/closingCosts';
-import { calculateTotalCashRequired } from './calculations/totalCashRequired';
+import { calculateTotalCashRequired, calculateCashRemaining } from './calculations/totalCashRequired';
 import { isMonthInRange } from './calculations/dateRange';
 import defaultConfig from '../config.default.json';
 
@@ -136,7 +136,10 @@ const PropertyInvestmentCalculator = () => {
     lmi,
     payLmiUpfront,
   });
-  const cashRemaining = totalSavings - totalCashRequired;
+  // Scheduled offset contributions draw from the same savings pool as the
+  // deposit and upfront costs - without this, a $250k deposit and a $250k
+  // month-1 contribution could both look affordable in isolation.
+  const cashRemaining = calculateCashRemaining({ totalSavings, totalCashRequired, totalScheduledOffset });
 
   // Monthly property expenses
   const monthlyStrata = calculateMonthlyStrata(strataFees);
@@ -1213,6 +1216,12 @@ const PropertyInvestmentCalculator = () => {
                       <span className="text-red-700">${Math.round(totalCashRequired).toLocaleString()}</span>
                     </div>
                   </div>
+                  {totalScheduledOffset > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Scheduled Offset Contributions:</span>
+                      <span className="font-semibold text-red-600">-${totalScheduledOffset.toLocaleString()}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-gray-600">Total Savings Available:</span>
                     <span className="font-semibold text-gray-700">${totalSavings.toLocaleString()}</span>
@@ -1224,6 +1233,12 @@ const PropertyInvestmentCalculator = () => {
                         {cashRemaining >= 0 ? '+' : '-'}${Math.abs(Math.round(cashRemaining)).toLocaleString()}
                       </span>
                     </div>
+                    {cashRemaining < 0 && (
+                      <p className="mt-2 p-2 bg-red-50 border border-red-300 rounded text-xs text-red-700 font-normal">
+                        ⚠️ You've committed ${Math.abs(Math.round(cashRemaining)).toLocaleString()} more than your
+                        savings cover (deposit + upfront costs + scheduled contributions).
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>

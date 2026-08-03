@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateTotalCashRequired } from './totalCashRequired';
+import { calculateTotalCashRequired, calculateCashRemaining } from './totalCashRequired';
 
 describe('calculateTotalCashRequired', () => {
   it('sums deposit, stamp duty and closing costs when LMI is not paid upfront', () => {
@@ -38,5 +38,25 @@ describe('calculateTotalCashRequired', () => {
         payLmiUpfront: false,
       })
     ).toBeCloseTo(274343.5, 5);
+  });
+});
+
+describe('calculateCashRemaining', () => {
+  it('matches the plain savings-minus-costs figure when nothing is scheduled', () => {
+    expect(
+      calculateCashRemaining({ totalSavings: 350000, totalCashRequired: 274343.5, totalScheduledOffset: 0 })
+    ).toBeCloseTo(75656.5, 5);
+  });
+
+  it('also subtracts scheduled offset contributions, since they draw from the same pool', () => {
+    expect(
+      calculateCashRemaining({ totalSavings: 350000, totalCashRequired: 274343.5, totalScheduledOffset: 100000 })
+    ).toBeCloseTo(-24343.5, 5);
+  });
+
+  it('goes negative when the deposit, upfront costs and scheduled contributions overcommit the savings', () => {
+    expect(
+      calculateCashRemaining({ totalSavings: 350000, totalCashRequired: 307000, totalScheduledOffset: 250000 })
+    ).toBe(350000 - 307000 - 250000);
   });
 });
