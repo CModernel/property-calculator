@@ -274,6 +274,14 @@ const PropertyInvestmentCalculator = () => {
     setDownPayment(clampToRange(nextDeposit, 0, propertyPrice));
   };
 
+  // loanAmount stays a derived value (calculateLoanAmount) - editing it here
+  // just translates the edit into a new downPayment, so propertyPrice/
+  // downPayment/loanAmount can never drift out of sync with each other.
+  const handleLoanAmountChange = (nextLoanAmount) => {
+    const clamped = clampToRange(nextLoanAmount, 0, propertyPrice);
+    setDownPayment(propertyPrice - clamped);
+  };
+
   // Functions for managing offset contributions
   const addOffsetContribution = () => {
     if (newContribAmount <= 0) return;
@@ -420,6 +428,23 @@ const PropertyInvestmentCalculator = () => {
                 formatBound={formatCompactMoney}
               >
                 Loan: ${loanAmount.toLocaleString()} ({lvr.toFixed(1)}% LVR)
+              </NumberSliderField>
+
+              <NumberSliderField
+                label="Loan Amount"
+                value={loanAmount}
+                onChange={handleLoanAmountChange}
+                min={0}
+                max={propertyPrice}
+                sliderMax={propertyPrice}
+                sliderMin={0}
+                step={10000}
+                color="orange"
+                prefix="$"
+                suffix=" AUD"
+                formatBound={formatCompactMoney}
+              >
+                Deposit: ${downPayment.toLocaleString()} ({(100 - lvr).toFixed(1)}% of price)
               </NumberSliderField>
 
               <label className="flex items-center gap-2 text-sm font-medium text-gray-700">

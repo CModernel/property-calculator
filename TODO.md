@@ -202,16 +202,30 @@ optionally reuse in the commit message when you implement it.
   not by looking at a real phone-width render. Worth a follow-up pass with
   actual device/DevTools emulation if that becomes available.
 
+- [x] **TODO-13: Editable loan amount**
+  `loanAmount` stays a purely derived value (`calculateLoanAmount`, unchanged)
+  rather than becoming a third independent `useState` - a new
+  `handleLoanAmountChange` handler just translates an edit into a new
+  `downPayment` (`setDownPayment(propertyPrice - clampToRange(nextLoanAmount,
+  0, propertyPrice))`), reusing the same `clampToRange` pattern as
+  `handleDownPaymentChange`. This means the invariant `loanAmount =
+  propertyPrice - downPayment` can never drift, and all ~13 existing
+  read-sites of `loanAmount` (LVR, LMI, monthly payment, both simulations,
+  the Timeline Explorer snapshot, the ownership progress bar) needed zero
+  changes. New "Loan Amount" `NumberSliderField` added right after Down
+  Payment, with a "Deposit: $X (Y% of price)" caption mirroring Down
+  Payment's existing "Loan: $X (Y% LVR)" one. `handlePropertyPriceChange`
+  was intentionally left untouched (still anchors on keeping the deposit
+  fixed when price changes) - only the new edit direction was added, per
+  the TODO's own scope. Verified in the browser: typing $400,000 into Loan
+  Amount (on an $850,000 property) correctly set Down Payment to $450,000;
+  the $0 and full-price extremes both worked with no `NaN`; dropping
+  Property Price below the current loan amount correctly re-clamped without
+  going negative.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
-
-- [ ] **TODO-13: Editable loan amount**
-  `Loan` is still a read-only derived value
-  (`loanAmount = propertyPrice - downPayment`). Making it directly editable
-  means deciding what gives when the user types into it — presumably the
-  deposit recalculates — and keeping the three fields consistent in every
-  direction.
 
 - [ ] **TODO-20: Collapse Property Expenses, Rental Income, and Personal Expenses like the Closing Costs breakdown**
   TODO-11's "Closing costs breakdown" (`src/App.jsx`, the `showClosingCostsBreakdown`
