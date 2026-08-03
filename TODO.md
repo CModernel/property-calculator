@@ -123,19 +123,33 @@ optionally reuse in the commit message when you implement it.
   month-1 contribution against $350k savings correctly dropped Cash Remaining
   to -$71,547 and surfaced the warning.
 
+- [x] **TODO-19: Property and personal expenses with scheduled rate changes**
+  Different semantics than tenants/exceptExpenses on purpose: a scheduled
+  change here **replaces** the value from its start month onward (e.g.
+  "council rates go from $450 to $2,000 starting month 15"), it doesn't stack
+  like tenants do - stacking a temporary extra charge was already possible via
+  Exceptional Expenses, so that case didn't need new plumbing. Added
+  `getSteppedValue(base, changes, month)` (`src/calculations/steppedValue.js`)
+  and the project's first custom hook, `useSteppedValue`
+  (`src/hooks/useSteppedValue.js`), used once for each of the 7 fields
+  (`strataFees`, `utilities`, `councilRates`, `insurance`, `foodExpenses`,
+  `transportExpenses`, `otherExpenses`) instead of 7 bespoke implementations.
+  A new `SteppedExpenseField` component wraps the existing
+  `NumberSliderField` with a collapsed-by-default "+ Schedule a change" link.
+  Same architectural move as TODO-4: `offsetSimulation.js` gets an optional
+  `expenseFields` param (`null` by default, so all 16 existing tests are
+  unaffected) and now resolves each field's effective value **per month**
+  inside the loop rather than from a pre-collapsed constant; `baseMonthlySurplus`
+  in `App.jsx` was widened to exclude all 7 fields (not just tenant rent).
+  Verified in the browser: scheduled a council rates change ($450→$2,000/qtr
+  from month 15) and confirmed the offset's monthly growth rate dropped from
+  exactly $2,433.50/mo (months 11-12, pre-change) to exactly $2,046/mo
+  (months 19-20, post-change) - a $387.50/mo difference, matching
+  `(2000-450)/4` exactly.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
-
-- [ ] **TODO-19: Property and personal expenses by date range (optional)**
-  Split out of the original TODO-4 scope. Unlike tenants, `strataFees`,
-  `utilities`, `councilRates`, `insurance`, `foodExpenses`,
-  `transportExpenses`, and `otherExpenses` are flat scalars with no array
-  behind them - giving any of them a date range means first converting it into
-  a list of entries (amount + optional start/end), the same shape `tenants`
-  and `exceptExpenses` already use. That's a bigger UI change than TODO-4
-  turned out to be, which is why it was split off rather than done at the same
-  time.
 
 - [ ] **TODO-15: Configurable loan term**
   `TOTAL_MONTHS = 30 * 12` (`src/calculations/loan.js:1`) is hardcoded and feeds

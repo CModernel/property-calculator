@@ -242,6 +242,69 @@ describe('calculateLoanWithOffset', () => {
     expect(offsets).toEqual([1300, 3900, 6500, 7800]);
   });
 
+  it('ignores expenseFields entirely when omitted, matching the pre-TODO-19 behavior', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      exceptExpenses: [],
+      monthlyToOffset: 900,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 2,
+    });
+    const offsets = result.monthlyData.map(d => d.offset);
+    expect(offsets).toEqual([900, 1800]);
+  });
+
+  it('subtracts a flat expenseFields base every month when there is no scheduled change', () => {
+    const emptyField = { base: 0, changes: [] };
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      exceptExpenses: [],
+      monthlyToOffset: 1000,
+      expenseFields: {
+        strataFees: emptyField,
+        utilities: emptyField,
+        councilRates: { base: 400, changes: [] }, // quarterly -> $100/month
+        insurance: emptyField,
+        foodExpenses: emptyField,
+        transportExpenses: emptyField,
+        otherExpenses: emptyField,
+      },
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 2,
+    });
+    const offsets = result.monthlyData.map(d => d.offset);
+    expect(offsets).toEqual([900, 1800]);
+  });
+
+  it('switches to the scheduled expense change starting on its startMonth', () => {
+    const emptyField = { base: 0, changes: [] };
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      exceptExpenses: [],
+      monthlyToOffset: 1000,
+      expenseFields: {
+        strataFees: emptyField,
+        utilities: emptyField,
+        // quarterly -> $100/month until month 3, then $800/quarter -> $200/month
+        councilRates: { base: 400, changes: [{ startMonth: 3, amount: 800 }] },
+        insurance: emptyField,
+        foodExpenses: emptyField,
+        transportExpenses: emptyField,
+        otherExpenses: emptyField,
+      },
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 4,
+    });
+    const offsets = result.monthlyData.map(d => d.offset);
+    expect(offsets).toEqual([900, 1800, 2600, 3400]);
+  });
+
   it('does not take the sentinel shortcut when a tenant is present, even if the base surplus is <= 0', () => {
     // Before this fix, a tenant whose rent alone could produce a real surplus
     // would be masked by the sentinel, which only looked at the base surplus.

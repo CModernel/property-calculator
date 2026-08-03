@@ -1,10 +1,19 @@
 import { isMonthInRange } from './dateRange';
-import { calculateMonthlyRentalIncome } from './loan';
+import { getSteppedValue } from './steppedValue';
+import {
+  calculateMonthlyRentalIncome,
+  calculateMonthlyStrata,
+  calculateMonthlyCouncil,
+  calculateMonthlyPropertyExpenses,
+  calculateWeeklyPersonalExpenses,
+  calculateMonthlyPersonalExpenses,
+} from './loan';
 
 export function calculateLoanWithOffset({
   contributions,
   exceptExpenses,
   tenants = [],
+  expenseFields = null,
   monthlyToOffset,
   loanAmount,
   monthlyRate,
@@ -58,12 +67,44 @@ export function calculateLoanWithOffset({
     );
     const monthlyRentalIncomeThisMonth = calculateMonthlyRentalIncome(activeWeeklyRent);
 
-    // Add regular monthly deposit to offset (this month's rent, minus
-    // exceptional expenses). We assume exceptional expenses come out of the
-    // surplus first. `monthlyToOffset` here excludes tenant rent - it's added
-    // per month above instead, since a tenant's date range means it can't be
-    // pre-collapsed into a single constant the way it used to be.
-    const netMonthlyDeposit = Math.max(0, monthlyToOffset + monthlyRentalIncomeThisMonth - monthlyExceptionalCost);
+    // Property/personal expenses for this month, each resolved to whichever
+    // scheduled change (if any) is in effect - same reasoning as tenant rent
+    // above: a value that can change mid-simulation can't be pre-collapsed
+    // into a single constant outside the loop.
+    let monthlyExpensesForMonth = 0;
+    if (expenseFields) {
+      const strata = getSteppedValue(expenseFields.strataFees.base, expenseFields.strataFees.changes, months);
+      const utilities = getSteppedValue(expenseFields.utilities.base, expenseFields.utilities.changes, months);
+      const council = getSteppedValue(expenseFields.councilRates.base, expenseFields.councilRates.changes, months);
+      const insurance = getSteppedValue(expenseFields.insurance.base, expenseFields.insurance.changes, months);
+      const food = getSteppedValue(expenseFields.foodExpenses.base, expenseFields.foodExpenses.changes, months);
+      const transport = getSteppedValue(
+        expenseFields.transportExpenses.base,
+        expenseFields.transportExpenses.changes,
+        months
+      );
+      const other = getSteppedValue(expenseFields.otherExpenses.base, expenseFields.otherExpenses.changes, months);
+
+      const propertyExpenses = calculateMonthlyPropertyExpenses(
+        calculateMonthlyStrata(strata),
+        utilities,
+        calculateMonthlyCouncil(council),
+        insurance
+      );
+      const personalExpenses = calculateMonthlyPersonalExpenses(calculateWeeklyPersonalExpenses(food, transport, other));
+      monthlyExpensesForMonth = propertyExpenses + personalExpenses;
+    }
+
+    // Add regular monthly deposit to offset (this month's rent, minus this
+    // month's property/personal expenses and exceptional expenses). We assume
+    // exceptional expenses come out of the surplus first. `monthlyToOffset`
+    // here excludes tenant rent and expenseFields - both are added/subtracted
+    // per month above instead, since they can no longer be pre-collapsed into
+    // a single constant once either can change mid-simulation.
+    const netMonthlyDeposit = Math.max(
+      0,
+      monthlyToOffset + monthlyRentalIncomeThisMonth - monthlyExpensesForMonth - monthlyExceptionalCost
+    );
     offsetBalance += netMonthlyDeposit;
 
     // Offset cannot exceed loan balance

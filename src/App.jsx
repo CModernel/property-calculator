@@ -37,6 +37,9 @@ import { estimateLmi } from './calculations/lmi';
 import { sumClosingCosts } from './calculations/closingCosts';
 import { calculateTotalCashRequired, calculateCashRemaining } from './calculations/totalCashRequired';
 import { isMonthInRange } from './calculations/dateRange';
+import { getSteppedValue } from './calculations/steppedValue';
+import { useSteppedValue } from './hooks/useSteppedValue';
+import SteppedExpenseField from './components/SteppedExpenseField';
 import defaultConfig from '../config.default.json';
 
 // config.local.json is git-ignored and optional - import.meta.glob resolves to
@@ -50,10 +53,10 @@ const PropertyInvestmentCalculator = () => {
   const [propertyPrice, setPropertyPrice] = useState(config.propertyPrice);
   const [downPayment, setDownPayment] = useState(config.downPayment);
   const [interestRate, setInterestRate] = useState(config.interestRate);
-  const [strataFees, setStrataFees] = useState(config.strataFees);
-  const [utilities, setUtilities] = useState(config.utilities);
-  const [councilRates, setCouncilRates] = useState(config.councilRates);
-  const [insurance, setInsurance] = useState(config.insurance);
+  const strataFeesField = useSteppedValue(config.strataFees);
+  const utilitiesField = useSteppedValue(config.utilities);
+  const councilRatesField = useSteppedValue(config.councilRates);
+  const insuranceField = useSteppedValue(config.insurance);
 
   // Upfront purchase costs (NSW)
   const [isFirstHomeBuyer, setIsFirstHomeBuyer] = useState(config.isFirstHomeBuyer);
@@ -81,9 +84,9 @@ const PropertyInvestmentCalculator = () => {
 
   // Your personal expenses
   const [fortnightlyIncome, setFortnightlyIncome] = useState(config.fortnightlyIncome);
-  const [foodExpenses, setFoodExpenses] = useState(config.foodExpenses);
-  const [transportExpenses, setTransportExpenses] = useState(config.transportExpenses);
-  const [otherExpenses, setOtherExpenses] = useState(config.otherExpenses);
+  const foodExpensesField = useSteppedValue(config.foodExpenses);
+  const transportExpensesField = useSteppedValue(config.transportExpenses);
+  const otherExpensesField = useSteppedValue(config.otherExpenses);
 
   // Offset contributions state
   const [offsetContributions, setOffsetContributions] = useState([]);
@@ -141,6 +144,17 @@ const PropertyInvestmentCalculator = () => {
   // month-1 contribution could both look affordable in isolation.
   const cashRemaining = calculateCashRemaining({ totalSavings, totalCashRequired, totalScheduledOffset });
 
+  // Current ("month 1") value of each expense field - same convention as
+  // tenants: a scheduled change that hasn't kicked in yet shouldn't affect
+  // what these recurring-situation cards show right now.
+  const strataFees = getSteppedValue(strataFeesField.base, strataFeesField.changes, 1);
+  const utilities = getSteppedValue(utilitiesField.base, utilitiesField.changes, 1);
+  const councilRates = getSteppedValue(councilRatesField.base, councilRatesField.changes, 1);
+  const insurance = getSteppedValue(insuranceField.base, insuranceField.changes, 1);
+  const foodExpenses = getSteppedValue(foodExpensesField.base, foodExpensesField.changes, 1);
+  const transportExpenses = getSteppedValue(transportExpensesField.base, transportExpensesField.changes, 1);
+  const otherExpenses = getSteppedValue(otherExpensesField.base, otherExpensesField.changes, 1);
+
   // Monthly property expenses
   const monthlyStrata = calculateMonthlyStrata(strataFees);
   const monthlyCouncil = calculateMonthlyCouncil(councilRates);
@@ -179,18 +193,30 @@ const PropertyInvestmentCalculator = () => {
   const weeklyToOffset = calculateWeeklyToOffset(weeklyNetBalance);
   const fortnightlyToOffset = calculateFortnightlyToOffset(fortnightlyNetBalance);
 
-  // Surplus feeding the simulation, EXCLUDING tenant rent (rentalIncome: 0) and
-  // left unclamped. The loop adds each tenant's rent back in per month instead,
-  // since a tenant's date range means it can no longer be pre-collapsed into a
-  // single constant - clamping here first would lose information once rent is
-  // summed in afterwards (see offsetSimulation.js).
-  const baseMonthlySurplus = calculateMonthlyNetBalance(monthlyIncome, 0, monthlyPersonalExpenses, totalPropertyCost);
+  // Surplus feeding the simulation, EXCLUDING tenant rent and the 7 expense
+  // fields, left unclamped. The loop adds/subtracts each of those back in per
+  // month instead, since any of them can now change mid-simulation and so can
+  // no longer be pre-collapsed into a single constant - clamping here first
+  // would lose information once they're summed in afterwards (see
+  // offsetSimulation.js).
+  const baseMonthlySurplus = calculateMonthlyNetBalance(monthlyIncome, 0, 0, monthlyPayment);
+
+  const expenseFields = {
+    strataFees: strataFeesField,
+    utilities: utilitiesField,
+    councilRates: councilRatesField,
+    insurance: insuranceField,
+    foodExpenses: foodExpensesField,
+    transportExpenses: transportExpensesField,
+    otherExpenses: otherExpensesField,
+  };
 
   // Complete loan simulation with offset
   const loanSimulation = calculateLoanWithOffset({
     contributions: offsetContributions,
     exceptExpenses,
     tenants,
+    expenseFields,
     monthlyToOffset: baseMonthlySurplus,
     loanAmount,
     monthlyRate,
@@ -200,6 +226,7 @@ const PropertyInvestmentCalculator = () => {
     contributions: [], // No offsets
     exceptExpenses,
     tenants,
+    expenseFields,
     monthlyToOffset: baseMonthlySurplus,
     loanAmount,
     monthlyRate,
@@ -587,10 +614,9 @@ const PropertyInvestmentCalculator = () => {
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <NumberSliderField
+              <SteppedExpenseField
+                field={strataFeesField}
                 label="Strata (quarterly)"
-                value={strataFees}
-                onChange={setStrataFees}
                 min={0}
                 max={20000}
                 sliderMax={5000}
@@ -599,12 +625,11 @@ const PropertyInvestmentCalculator = () => {
                 prefix="$"
               >
                 ≈ ${Math.round(strataFees / 4)}/month
-              </NumberSliderField>
+              </SteppedExpenseField>
 
-              <NumberSliderField
+              <SteppedExpenseField
+                field={utilitiesField}
                 label="Utilities (monthly)"
-                value={utilities}
-                onChange={setUtilities}
                 min={0}
                 max={2000}
                 sliderMax={600}
@@ -613,10 +638,9 @@ const PropertyInvestmentCalculator = () => {
                 prefix="$"
               />
 
-              <NumberSliderField
+              <SteppedExpenseField
+                field={councilRatesField}
                 label="Council Rates (quarterly)"
-                value={councilRates}
-                onChange={setCouncilRates}
                 min={0}
                 max={10000}
                 sliderMax={2000}
@@ -625,12 +649,11 @@ const PropertyInvestmentCalculator = () => {
                 prefix="$"
               >
                 ≈ ${Math.round(councilRates / 4)}/month
-              </NumberSliderField>
+              </SteppedExpenseField>
 
-              <NumberSliderField
+              <SteppedExpenseField
+                field={insuranceField}
                 label="Insurance (monthly)"
-                value={insurance}
-                onChange={setInsurance}
                 min={0}
                 max={2000}
                 sliderMax={500}
@@ -922,10 +945,9 @@ const PropertyInvestmentCalculator = () => {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <NumberSliderField
+                <SteppedExpenseField
+                  field={foodExpensesField}
                   label="Food"
-                  value={foodExpenses}
-                  onChange={setFoodExpenses}
                   min={0}
                   max={5000}
                   sliderMax={600}
@@ -934,10 +956,9 @@ const PropertyInvestmentCalculator = () => {
                   prefix="$"
                 />
 
-                <NumberSliderField
+                <SteppedExpenseField
+                  field={transportExpensesField}
                   label="Transport"
-                  value={transportExpenses}
-                  onChange={setTransportExpenses}
                   min={0}
                   max={5000}
                   sliderMax={400}
@@ -946,10 +967,9 @@ const PropertyInvestmentCalculator = () => {
                   prefix="$"
                 />
 
-                <NumberSliderField
+                <SteppedExpenseField
+                  field={otherExpensesField}
                   label="Other"
-                  value={otherExpenses}
-                  onChange={setOtherExpenses}
                   min={0}
                   max={10000}
                   sliderMax={800}
