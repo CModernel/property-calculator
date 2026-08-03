@@ -57,6 +57,7 @@ const PropertyInvestmentCalculator = () => {
   const utilitiesField = useSteppedValue(config.utilities);
   const councilRatesField = useSteppedValue(config.councilRates);
   const insuranceField = useSteppedValue(config.insurance);
+  const [showPropertyExpenses, setShowPropertyExpenses] = useState(false);
 
   // Upfront purchase costs (NSW)
   const [isFirstHomeBuyer, setIsFirstHomeBuyer] = useState(config.isFirstHomeBuyer);
@@ -75,6 +76,7 @@ const PropertyInvestmentCalculator = () => {
 
   // Rental options
   const [tenants, setTenants] = useState([]);
+  const [showRentalIncome, setShowRentalIncome] = useState(false);
   const [showAddTenant, setShowAddTenant] = useState(false);
   const [newTenantType, setNewTenantType] = useState('single');
   const [newTenantRent, setNewTenantRent] = useState(config.newTenantRent);
@@ -88,6 +90,7 @@ const PropertyInvestmentCalculator = () => {
   const foodExpensesField = useSteppedValue(config.foodExpenses);
   const transportExpensesField = useSteppedValue(config.transportExpenses);
   const otherExpensesField = useSteppedValue(config.otherExpenses);
+  const [showPersonalExpenses, setShowPersonalExpenses] = useState(false);
 
   // Offset contributions state
   const [offsetContributions, setOffsetContributions] = useState([]);
@@ -661,61 +664,66 @@ const PropertyInvestmentCalculator = () => {
               Property Expenses
             </h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <SteppedExpenseField
-                field={strataFeesField}
-                label="Strata (quarterly)"
-                min={0}
-                max={20000}
-                sliderMax={5000}
-                step={100}
-                color="orange"
-                prefix="$"
-              >
-                ≈ ${Math.round(strataFees / 4)}/month
-              </SteppedExpenseField>
+            <button
+              type="button"
+              onClick={() => setShowPropertyExpenses(!showPropertyExpenses)}
+              className="text-sm font-medium text-blue-600 hover:text-blue-700"
+            >
+              {showPropertyExpenses ? '▾' : '▸'} Property expenses breakdown (subtotal: $
+              {Math.round(monthlyPropertyExpenses).toLocaleString()}/month)
+            </button>
 
-              <SteppedExpenseField
-                field={utilitiesField}
-                label="Utilities (monthly)"
-                min={0}
-                max={2000}
-                sliderMax={600}
-                step={10}
-                color="orange"
-                prefix="$"
-              />
+            {showPropertyExpenses && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                <SteppedExpenseField
+                  field={strataFeesField}
+                  label="Strata (quarterly)"
+                  min={0}
+                  max={20000}
+                  sliderMax={5000}
+                  step={100}
+                  color="orange"
+                  prefix="$"
+                >
+                  ≈ ${Math.round(strataFees / 4)}/month
+                </SteppedExpenseField>
 
-              <SteppedExpenseField
-                field={councilRatesField}
-                label="Council Rates (quarterly)"
-                min={0}
-                max={10000}
-                sliderMax={2000}
-                step={50}
-                color="orange"
-                prefix="$"
-              >
-                ≈ ${Math.round(councilRates / 4)}/month
-              </SteppedExpenseField>
+                <SteppedExpenseField
+                  field={utilitiesField}
+                  label="Utilities (monthly)"
+                  min={0}
+                  max={2000}
+                  sliderMax={600}
+                  step={10}
+                  color="orange"
+                  prefix="$"
+                />
 
-              <SteppedExpenseField
-                field={insuranceField}
-                label="Insurance (monthly)"
-                min={0}
-                max={2000}
-                sliderMax={500}
-                step={10}
-                color="orange"
-                prefix="$"
-              />
-            </div>
+                <SteppedExpenseField
+                  field={councilRatesField}
+                  label="Council Rates (quarterly)"
+                  min={0}
+                  max={10000}
+                  sliderMax={2000}
+                  step={50}
+                  color="orange"
+                  prefix="$"
+                >
+                  ≈ ${Math.round(councilRates / 4)}/month
+                </SteppedExpenseField>
 
-            <div className="mt-3 p-3 bg-orange-50 rounded-lg border border-orange-200">
-              <p className="text-sm font-semibold text-gray-700">
-                Property Subtotal: ${Math.round(monthlyPropertyExpenses)}/month
-              </p>
-            </div>
+                <SteppedExpenseField
+                  field={insuranceField}
+                  label="Insurance (monthly)"
+                  min={0}
+                  max={2000}
+                  sliderMax={500}
+                  step={10}
+                  color="orange"
+                  prefix="$"
+                />
+              </div>
+            )}
           </div>
 
           {/* Rental */}
@@ -725,7 +733,16 @@ const PropertyInvestmentCalculator = () => {
               Rental Income
             </h2>
 
-            <div className="space-y-4">
+            <button
+              type="button"
+              onClick={() => setShowRentalIncome(!showRentalIncome)}
+              className="text-sm font-medium text-blue-600 hover:text-blue-700"
+            >
+              {showRentalIncome ? '▾' : '▸'} Rental income breakdown (subtotal: ${weeklyRentalIncome.toLocaleString()}/week)
+            </button>
+
+            {showRentalIncome && (
+            <div className="space-y-4 mt-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-md font-bold text-gray-700">👥 Tenants</h3>
                 <button
@@ -867,13 +884,8 @@ const PropertyInvestmentCalculator = () => {
                   <p className="text-sm text-gray-500 text-center italic py-2">No tenants added yet.</p>
                 )}
               </div>
-
-              <div className="mt-3 p-3 bg-green-50 rounded-lg border border-green-200">
-                <p className="text-sm font-semibold text-gray-700 text-center">
-                  Total Weekly Rent: <span className="text-green-700 text-lg">${weeklyRentalIncome.toLocaleString()}</span>
-                </p>
-              </div>
             </div>
+            )}
           </div>
 
           {/* YOUR PERSONAL EXPENSES */}
@@ -1009,47 +1021,51 @@ const PropertyInvestmentCalculator = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <SteppedExpenseField
-                  field={foodExpensesField}
-                  label="Food"
-                  min={0}
-                  max={5000}
-                  sliderMax={600}
-                  step={10}
-                  color="purple"
-                  prefix="$"
-                />
+              <button
+                type="button"
+                onClick={() => setShowPersonalExpenses(!showPersonalExpenses)}
+                className="text-sm font-medium text-blue-600 hover:text-blue-700"
+              >
+                {showPersonalExpenses ? '▾' : '▸'} Personal expenses breakdown (subtotal: $
+                {Math.round(weeklyPersonalExpenses).toLocaleString()}/week)
+              </button>
 
-                <SteppedExpenseField
-                  field={transportExpensesField}
-                  label="Transport"
-                  min={0}
-                  max={5000}
-                  sliderMax={400}
-                  step={10}
-                  color="purple"
-                  prefix="$"
-                />
+              {showPersonalExpenses && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <SteppedExpenseField
+                    field={foodExpensesField}
+                    label="Food"
+                    min={0}
+                    max={5000}
+                    sliderMax={600}
+                    step={10}
+                    color="purple"
+                    prefix="$"
+                  />
 
-                <SteppedExpenseField
-                  field={otherExpensesField}
-                  label="Other"
-                  min={0}
-                  max={10000}
-                  sliderMax={800}
-                  step={10}
-                  color="purple"
-                  prefix="$"
-                />
-              </div>
+                  <SteppedExpenseField
+                    field={transportExpensesField}
+                    label="Transport"
+                    min={0}
+                    max={5000}
+                    sliderMax={400}
+                    step={10}
+                    color="purple"
+                    prefix="$"
+                  />
 
-              <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
-                <p className="text-sm font-semibold text-gray-700">
-                  Total Personal Expenses: ${Math.round(weeklyPersonalExpenses)}/week
-                  (≈ ${Math.round(monthlyPersonalExpenses)}/month)
-                </p>
-              </div>
+                  <SteppedExpenseField
+                    field={otherExpensesField}
+                    label="Other"
+                    min={0}
+                    max={10000}
+                    sliderMax={800}
+                    step={10}
+                    color="purple"
+                    prefix="$"
+                  />
+                </div>
+              )}
 
               {/* EXCEPTIONAL EXPENSES */}
               <div className="bg-white rounded-lg shadow-md p-5 border-t-4 border-yellow-400">

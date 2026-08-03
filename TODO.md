@@ -223,25 +223,24 @@ optionally reuse in the commit message when you implement it.
   Property Price below the current loan amount correctly re-clamped without
   going negative.
 
----
-
-## 🟡 MEDIUM PRIORITY (Important, but not blocking)
-
-- [ ] **TODO-20: Collapse Property Expenses, Rental Income, and Personal Expenses like the Closing Costs breakdown**
-  TODO-11's "Closing costs breakdown" (`src/App.jsx`, the `showClosingCostsBreakdown`
-  toggle) collapses 9 fields behind a single "▸ Closing costs breakdown
-  (subtotal: $X)" link, showing just the subtotal until the user opts in.
-  The "Property Expenses" (strata/utilities/council/insurance) and "Your
-  Personal Expenses" (food/transport/other) cards don't follow that pattern -
-  all fields are always visible, even though each already has its own
-  subtotal line (`Property Subtotal: $X/month`, `Total Personal Expenses:
-  $X/week`) that could anchor a collapsed summary the same way. Rental
-  Income (the Tenants list/form) already has a "+ Add" toggle for the form
-  itself, but the section as a whole doesn't collapse behind its own
-  subtotal (`Total Weekly Rent: $X`) the way Closing Costs does. Reusing the
-  same collapsed-by-default pattern across all three would make the page
-  shorter by default and more consistent, especially relevant alongside
-  TODO-17 (mobile).
+- [x] **TODO-20: Collapse Property Expenses, Rental Income, and Personal Expenses like the Closing Costs breakdown**
+  Reused the exact `showClosingCostsBreakdown` pattern (TODO-11) three more
+  times: a `text-sm font-medium text-blue-600` button reading `{▾/▸} <label>
+  (subtotal: $X)`, collapsed by default (`useState(false)`), with the fields
+  only rendered when expanded. Property Expenses and Personal Expenses each
+  had their standalone subtotal box (`Property Subtotal: $X/month`, `Total
+  Personal Expenses: $X/week`) removed, since the toggle button now shows the
+  same figure - matching Closing Costs, which never had a separate subtotal
+  box either. Rental Income's "Tenants" header, "+ Add" form, and list all
+  moved inside the new collapse (previously always visible), and its old
+  standalone "Total Weekly Rent: $X" box was removed the same way. Personal
+  Expenses' collapse only wraps the Food/Transport/Other fields - Fortnightly
+  Income and the already-independently-toggled Offset Contributions Schedule
+  and Exceptional Expenses sub-sections were left untouched. Verified in the
+  browser: all three render collapsed by default with the correct subtotal in
+  the link text, expand/collapse correctly, and none of the untouched
+  sibling sections (Fortnightly Income, Offset Contributions, Exceptional
+  Expenses) were affected.
 
 - [ ] **TODO-18: Strata fees should only apply to units/apartments**
   `strataFees` is currently just a generic slider with no concept of property
