@@ -39,6 +39,7 @@ import { isMonthInRange } from './calculations/dateRange';
 import { getSteppedValue } from './calculations/steppedValue';
 import { useSteppedValue } from './hooks/useSteppedValue';
 import SteppedExpenseField from './components/SteppedExpenseField';
+import { loadScenario, saveScenario, clearScenario } from './persistence/scenarioStorage';
 import defaultConfig from '../config.default.json';
 
 // config.local.json is git-ignored and optional - import.meta.glob resolves to
@@ -46,7 +47,11 @@ import defaultConfig from '../config.default.json';
 // runtime fetch or fallback branching is needed for the common case.
 const localConfigModules = import.meta.glob('../config.local.json', { eager: true });
 const localConfig = Object.values(localConfigModules)[0]?.default ?? {};
-const config = { ...defaultConfig, ...localConfig };
+// A saved-in-browser scenario wins over both config files - it must replace
+// the defaults outright, not patch over them after the fact, or the page
+// would flash default values before the saved ones apply.
+const savedScenario = loadScenario();
+const config = { ...defaultConfig, ...localConfig, ...savedScenario };
 
 const PropertyInvestmentCalculator = () => {
   const [propertyPrice, setPropertyPrice] = useState(config.propertyPrice);
@@ -54,10 +59,10 @@ const PropertyInvestmentCalculator = () => {
   const [downPayment, setDownPayment] = useState(config.downPayment);
   const [interestRate, setInterestRate] = useState(config.interestRate);
   const [loanTermYears, setLoanTermYears] = useState(config.loanTermYears);
-  const strataFeesField = useSteppedValue(config.strataFees);
-  const utilitiesField = useSteppedValue(config.utilities);
-  const councilRatesField = useSteppedValue(config.councilRates);
-  const insuranceField = useSteppedValue(config.insurance);
+  const strataFeesField = useSteppedValue(config.strataFees, config.strataFeesChanges);
+  const utilitiesField = useSteppedValue(config.utilities, config.utilitiesChanges);
+  const councilRatesField = useSteppedValue(config.councilRates, config.councilRatesChanges);
+  const insuranceField = useSteppedValue(config.insurance, config.insuranceChanges);
   const [showPropertyExpenses, setShowPropertyExpenses] = useState(false);
 
   // Upfront purchase costs (NSW)
@@ -76,7 +81,7 @@ const PropertyInvestmentCalculator = () => {
   const [rateAdjustments, setRateAdjustments] = useState(config.rateAdjustments);
 
   // Rental options
-  const [tenants, setTenants] = useState([]);
+  const [tenants, setTenants] = useState(config.tenants ?? []);
   const [showRentalIncome, setShowRentalIncome] = useState(false);
   const [showAddTenant, setShowAddTenant] = useState(false);
   const [newTenantType, setNewTenantType] = useState('single');
@@ -88,19 +93,19 @@ const PropertyInvestmentCalculator = () => {
 
   // Your personal expenses
   const [fortnightlyIncome, setFortnightlyIncome] = useState(config.fortnightlyIncome);
-  const foodExpensesField = useSteppedValue(config.foodExpenses);
-  const transportExpensesField = useSteppedValue(config.transportExpenses);
-  const otherExpensesField = useSteppedValue(config.otherExpenses);
+  const foodExpensesField = useSteppedValue(config.foodExpenses, config.foodExpensesChanges);
+  const transportExpensesField = useSteppedValue(config.transportExpenses, config.transportExpensesChanges);
+  const otherExpensesField = useSteppedValue(config.otherExpenses, config.otherExpensesChanges);
   const [showPersonalExpenses, setShowPersonalExpenses] = useState(false);
 
   // Offset contributions state
-  const [offsetContributions, setOffsetContributions] = useState([]);
+  const [offsetContributions, setOffsetContributions] = useState(config.offsetContributions ?? []);
   const [showAddContribution, setShowAddContribution] = useState(false);
   const [newContribMonth, setNewContribMonth] = useState(1);
   const [newContribAmount, setNewContribAmount] = useState(config.newContribAmount);
 
   // Exceptional Expenses State
-  const [exceptExpenses, setExceptExpenses] = useState([]);
+  const [exceptExpenses, setExceptExpenses] = useState(config.exceptExpenses ?? []);
   const [showAddExceptExp, setShowAddExceptExp] = useState(false);
   const [newExpName, setNewExpName] = useState('Rent');
   const [newExpAmount, setNewExpAmount] = useState(config.newExpAmount);
@@ -112,6 +117,10 @@ const PropertyInvestmentCalculator = () => {
 
   // Timeline Explorer State
   const [timelineMonth, setTimelineMonth] = useState(0);
+
+  // Whether the current inputs are backed by a saved-in-browser scenario -
+  // drives the Save/Reset bar's copy and whether "Reset" is even offered.
+  const [hasSavedScenario, setHasSavedScenario] = useState(savedScenario !== null);
 
   // Calculate total scheduled offset contributions
   const totalScheduledOffset = calculateTotalScheduledOffset(offsetContributions);
@@ -302,6 +311,43 @@ const PropertyInvestmentCalculator = () => {
     }
   };
 
+  // Only the ~24 "data" inputs are saved - ephemeral UI state (collapsed
+  // sections, in-progress "Add" form drafts, the Timeline Explorer's
+  // selected month) isn't part of a scenario.
+  const handleSaveScenario = () => {
+    const scenario = {
+      propertyPrice, propertyType, downPayment, interestRate, loanTermYears,
+      strataFees: strataFeesField.base, strataFeesChanges: strataFeesField.changes,
+      utilities: utilitiesField.base, utilitiesChanges: utilitiesField.changes,
+      councilRates: councilRatesField.base, councilRatesChanges: councilRatesField.changes,
+      insurance: insuranceField.base, insuranceChanges: insuranceField.changes,
+      isFirstHomeBuyer, totalSavings, payLmiUpfront,
+      conveyancing, buildingInspection, pestInspection, registrationFees, searches,
+      loanEstablishmentFee, propertyValuation, homeInsurance, rateAdjustments,
+      tenants,
+      fortnightlyIncome,
+      foodExpenses: foodExpensesField.base, foodExpensesChanges: foodExpensesField.changes,
+      transportExpenses: transportExpensesField.base, transportExpensesChanges: transportExpensesField.changes,
+      otherExpenses: otherExpensesField.base, otherExpensesChanges: otherExpensesField.changes,
+      offsetContributions,
+      exceptExpenses,
+    };
+    if (saveScenario(scenario)) {
+      setHasSavedScenario(true);
+    } else {
+      alert('Could not save - your browser may be blocking local storage (e.g. private browsing).');
+    }
+  };
+
+  const handleClearSavedScenario = () => {
+    if (!window.confirm('Clear your saved scenario and reset to defaults?')) return;
+    clearScenario();
+    // Reloading lets the normal (now scenario-less) initialization flow reset
+    // all ~24 pieces of state at once, instead of duplicating every default
+    // here a second time.
+    window.location.reload();
+  };
+
   // Functions for managing offset contributions
   const addOffsetContribution = () => {
     if (newContribAmount <= 0) return;
@@ -404,6 +450,32 @@ const PropertyInvestmentCalculator = () => {
           Property Investment Cash Flow Calculator
         </h1>
         <p className="text-gray-600">How much is left after EVERYTHING? That goes to offset automatically.</p>
+      </div>
+
+      <div className="bg-white rounded-lg shadow-md p-4 mb-4 flex items-center justify-between gap-3 flex-wrap">
+        <p className="text-sm text-gray-600">
+          {hasSavedScenario
+            ? '💾 This scenario is saved in your browser.'
+            : "Your inputs aren't saved yet — they reset if you reload the page."}
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={handleSaveScenario}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+          >
+            💾 Save
+          </button>
+          {hasSavedScenario && (
+            <button
+              type="button"
+              onClick={handleClearSavedScenario}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300"
+            >
+              Reset to defaults
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

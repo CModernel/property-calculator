@@ -4,9 +4,9 @@ import { useState } from 'react';
 // each superseding the previous one from its startMonth onward (see
 // getSteppedValue in src/calculations/steppedValue.js for how a month's
 // effective value is resolved).
-export function useSteppedValue(initialBase) {
+export function useSteppedValue(initialBase, initialChanges = []) {
   const [base, setBase] = useState(initialBase);
-  const [changes, setChanges] = useState([]);
+  const [changes, setChanges] = useState(initialChanges);
 
   const addChange = (amount, startMonth) => {
     if (changes.some((c) => c.startMonth === startMonth)) {

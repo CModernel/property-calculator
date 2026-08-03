@@ -262,33 +262,52 @@ optionally reuse in the commit message when you implement it.
   correctly raised Total Monthly Expenses by $250/month; switching back to
   "House" hid the field again and restored the exact original numbers.
 
+- [x] **TODO-21: Save scenarios to the browser (localStorage)**
+  Explicit "Save" button (not autosave) backing a single saved slot (not
+  multiple named scenarios) - both decided with the user upfront to keep
+  this simple. `src/persistence/scenarioStorage.js` separates the pure,
+  tested `parseScenarioPayload`/`serializeScenarioPayload` (versioned
+  envelope - a version mismatch or corrupt JSON discards to `null` rather
+  than attempting a migration) from thin `loadScenario`/`saveScenario`/
+  `clearScenario` wrappers around `localStorage`, verified manually since
+  the test environment has no DOM. `useSteppedValue` gained an optional
+  `initialChanges` parameter so a saved scenario's scheduled rate changes
+  seed each of the 7 `SteppedExpenseField`s, not just their base values.
+  **Precedence, per the user's explicit requirement:** a saved-in-browser
+  scenario now replaces the config chain outright -
+  `{...defaultConfig, ...localConfig, ...savedScenario}` computed once at
+  module load (same synchronous pattern TODO-16 established), so there's no
+  flash of default values before the saved ones apply. A new bar under the
+  header shows "This scenario is saved in your browser." / "Your inputs
+  aren't saved yet..." with **Save** and (when a scenario exists) **Reset
+  to defaults** buttons; Reset clears storage and reloads the page rather
+  than manually resetting ~24 pieces of state. Only the ~24 "data" fields
+  are saved (prices, rates, tenants, exceptional expenses, offset
+  contributions, scheduled changes) - ephemeral UI state (collapsed
+  sections, in-progress "Add" form drafts, the Timeline Explorer's selected
+  month) is deliberately left out. Verified in the browser: changed
+  Property Price and scheduled a Council Rates change, saved, reloaded, and
+  confirmed both restored exactly (including the scheduled change altering
+  the simulation, not just the static display); Reset to defaults (tested
+  by clearing storage directly, since the confirm() dialog it's built on
+  can't safely be automated) correctly reverted everything to
+  `config.default.json` on reload.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
 
-- [ ] **TODO-21: Save scenarios to the browser (localStorage)**
-  Requested directly by the user. Right now every value resets to
-  `config.default.json` (optionally overridden by `config.local.json` at
-  build time - TODO-16) on every page load; there's no way to save a
-  session's inputs and come back to them later. Needs a design pass before
-  implementing (**"Analizar bien las opciones"**, per the user's own
-  framing) - at minimum: what triggers a save (explicit "Save" button vs.
-  autosave on every change - autosave is probably friendlier, but needs
-  debouncing so it isn't writing to `localStorage` on every keystroke);
-  what gets saved (all ~30 inputs including `tenants`/`exceptExpenses`/
-  `offsetContributions` arrays, or just the scalar fields); versioning
-  (what happens if a future release adds/renames a field - a saved blob
-  from an older version could crash a naive `JSON.parse` + spread onto
-  state); and multiple scenarios vs. a single autosaved slot (the existing
-  README roadmap already lists "Save scenarios to browser" as a future
-  idea, so there may be an implied expectation of *multiple* named saves,
-  not just one). **Explicit requirement from the user:** if saved data
-  exists in the browser, it should replace `config.default.json` (and
-  presumably `config.local.json`, whichever wins today) as the source of
-  initial state - i.e. the precedence becomes saved-in-browser >
-  `config.local.json` > `config.default.json`, not just "load defaults,
-  then overwrite from storage" after the fact, since the latter could
-  flash default values before the saved ones apply.
+- [ ] **TODO-22: Show last-saved date/time, next to the Save bar**
+  Requested by the user right after TODO-21 shipped. The Save bar currently
+  only shows a boolean "saved in your browser" / "not saved yet" state -
+  add a human-readable timestamp of the last successful save (e.g. "Saved
+  Aug 3, 2026, 4:12 PM") so the user has some confidence about how fresh
+  the saved scenario is. Needs a `savedAt` (or similar) field added to the
+  persisted payload in `scenarioStorage.js`'s `data` (or alongside it in the
+  envelope, next to `version`), set by `handleSaveScenario` in `App.jsx` at
+  save time, and read back into a new bit of state (or derived from
+  `savedScenario`) to render next to the existing "This scenario is saved
+  in your browser." copy.
 
 ---
 
