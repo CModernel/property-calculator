@@ -14,7 +14,7 @@
   "foodExpenses": 100,
   "transportExpenses": 50,
   "otherExpenses": 50,
-  "newTenantRent": 600,
+  "newTenantAmountPerPerson": 300,
   "newTenantStartMonth": 13,
   "newContribAmount": 10000,
   "newExpAmount": 920,

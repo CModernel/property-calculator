@@ -556,6 +556,31 @@ optionally reuse in the commit message when you implement it.
   Month" wording on both forms; saved a scenario and confirmed
   `version: 3` with the new shape in `localStorage`.
 
+- [x] **TODO-33: Redesign "Shared Room" tenants as per-person income**
+  Requested by the user. A tenant used to be `{type: 'single'|'shared',
+  amount}` where `amount` was the *total* weekly rent for the room -
+  `shared` only *displayed* `amount / 2` as an annotation, always assuming
+  exactly 2 people. Replaced with `{isShared, numPeople, amountPerPerson,
+  amount}`, where `amount` (`amountPerPerson * numPeople`) is now computed
+  at add-time rather than entered directly - `calculateWeeklyRentalIncome`
+  (`src/calculations/loan.js`) needed **zero changes**, since it just sums
+  `amount` and never knew about `type` in the first place.
+  UI: the Individual/Shared Room button pair became a single "Shared room?"
+  checkbox (default unchecked); checking it reveals a "Number of People"
+  slider (2-6) and relabels the amount field "Weekly Rent per Person",
+  showing a live "Total: $X/week" preview. Default per-person amount set
+  to **$300** (config.default.json: `newTenantRent` →
+  `newTenantAmountPerPerson`), per the user's own Sydney-average framing -
+  applies to both shared and individual rooms now (individual is just
+  `numPeople: 1`). List display and the Timeline Explorer's tenant status
+  line both updated to show `(N × $X each)` instead of the hardcoded ÷2.
+  `SCHEMA_VERSION` bumped 3→4, discarding old-shape saved tenants cleanly.
+  Verified in the browser: added a 3-person shared room at $300/person,
+  confirmed the "Total: $900/week" preview matched the saved entry
+  ("Shared Room, $900/week (3 × $300 each)"), the loan simulation reacted
+  (6.2 years, down from 10.8), and the Timeline Explorer's Financial Events
+  Log showed "Shared (3 × $300)" once past the tenant's start month.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -571,9 +596,41 @@ optionally reuse in the commit message when you implement it.
   `Schedule` (tenants are always "monthly, no end" or "monthly, period" in
   today's terms - never one-time/quarterly/yearly), and add "Rental Income"
   as a preset in the Income Name dropdown (`src/App.jsx`, currently
-  Salary/Freelance/Bonus/Other). Still needs its own pass to decide: does
-  "shared room splits amount ÷2" stay a tenant-specific display quirk, or
-  does it need a `roomType` field alongside the generic entry?
+  Salary/Freelance/Bonus/Other). TODO-33 (done) already redesigned tenants
+  to store `isShared`/`numPeople`/`amountPerPerson` instead of a `type`
+  string, which should make folding a tenant into a generic Income entry
+  more straightforward (the per-person breakdown can live as extra fields
+  or a formatted note on the entry) - still needs its own pass to decide
+  exactly how that maps onto whatever the unified entry ends up looking
+  like.
+
+- [ ] **TODO-32: Apply the Schedule model to Offset Contributions**
+  Requested by the user, following up on TODO-31 - asked whether the new
+  unified `Schedule` model (`src/calculations/recurringAmount.js`) should
+  extend to other income/expense-like fields. Audited every month/date-
+  bearing field in the app: **Offset Contributions is the other real gap**.
+  Today `offsetContributions` entries are `{id, month, amount}`
+  (`addOffsetContribution`, `src/App.jsx`) - always a single one-time lump
+  sum, with an explicit uniqueness guard preventing two contributions in
+  the same month. There's no way to express "contribute $500 every
+  quarter" - repeating one today means adding N separate entries by hand.
+  Adding `recurrence`/`endMonth` (reusing the same Schedule shape and
+  `getActiveAmount`/`isScheduleActive` from `recurringAmount.js`) would let
+  a contribution recur monthly/quarterly/yearly just like Income Sources
+  and Exceptional Expenses now do. Needs to fold the contribution amount
+  into `offsetBalance` per month inside the loop
+  (`src/calculations/offsetSimulation.js`, currently a simple `forEach`
+  matching `contrib.month === months` at the top of the loop) instead of
+  a single exact-month match - straightforward given `getActiveAmount`
+  already exists, but touches the loop's contribution-application logic,
+  not just `exceptExpenses`/`incomeSources` like TODO-31 did.
+  **Confirmed NOT a fit for the same treatment:** the 7 "stepped" expense
+  fields (strata/utilities/council/insurance/food/transport/other,
+  `useSteppedValue`/`getSteppedValue`) - these model "what's the current
+  rate as of this month" (a base value permanently superseded by a later
+  change, no end date, no repeat interval), not "does a cash event fire
+  this month" - a fundamentally different concept from Schedule, correctly
+  left as-is.
 
 ---
 

@@ -6,7 +6,10 @@ const STORAGE_KEY = 'propertyCalculator.scenario';
 // {type, month, recurrence: 'forever'|'period', startMonth, endMonth} to a
 // unified {startMonth, recurrence: 'none'|'monthly'|'quarterly'|'yearly',
 // endMonth} Schedule shape.
-const SCHEMA_VERSION = 3;
+// Bumped to 4 in TODO-33: tenants dropped {type: 'single'|'shared'} in favor
+// of {isShared, numPeople, amountPerPerson} - amount is now computed
+// (amountPerPerson * numPeople) instead of a flat entered total.
+const SCHEMA_VERSION = 4;
 
 // A version mismatch means the saved shape no longer matches what this
 // version of the app expects - discard rather than attempt a migration,

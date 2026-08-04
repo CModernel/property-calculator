@@ -85,8 +85,9 @@ const PropertyInvestmentCalculator = () => {
   const [tenants, setTenants] = useState(config.tenants ?? []);
   const [showRentalIncome, setShowRentalIncome] = useState(false);
   const [showAddTenant, setShowAddTenant] = useState(false);
-  const [newTenantType, setNewTenantType] = useState('single');
-  const [newTenantRent, setNewTenantRent] = useState(config.newTenantRent);
+  const [newTenantIsShared, setNewTenantIsShared] = useState(false);
+  const [newTenantNumPeople, setNewTenantNumPeople] = useState(2);
+  const [newTenantAmountPerPerson, setNewTenantAmountPerPerson] = useState(config.newTenantAmountPerPerson);
   const [newTenantHasDateRange, setNewTenantHasDateRange] = useState(true);
   const [newTenantStartMonth, setNewTenantStartMonth] = useState(config.newTenantStartMonth);
   const [newTenantHasEndMonth, setNewTenantHasEndMonth] = useState(false);
@@ -404,15 +405,20 @@ const PropertyInvestmentCalculator = () => {
   };
 
   const addTenant = () => {
-    if (newTenantRent <= 0) return;
+    if (newTenantAmountPerPerson <= 0) return;
     if (newTenantHasDateRange && newTenantHasEndMonth && newTenantStartMonth > newTenantEndMonth) {
       alert('Start month must be before end month.');
       return;
     }
+    const numPeople = newTenantIsShared ? newTenantNumPeople : 1;
     const newTenant = {
       id: Date.now(),
-      type: newTenantType,
-      amount: newTenantRent,
+      isShared: newTenantIsShared,
+      numPeople,
+      amountPerPerson: newTenantAmountPerPerson,
+      // Computed total - calculateWeeklyRentalIncome just sums `amount`
+      // across tenants, so it doesn't need to know about per-person split.
+      amount: newTenantAmountPerPerson * numPeople,
       startMonth: newTenantHasDateRange ? newTenantStartMonth : null,
       // No end date ticked means "ongoing" - open-ended, not "always active
       // regardless of start" (see isMonthInRange).
@@ -420,7 +426,9 @@ const PropertyInvestmentCalculator = () => {
     };
     setTenants([...tenants, newTenant]);
     setShowAddTenant(false);
-    setNewTenantRent(config.newTenantRent);
+    setNewTenantIsShared(false);
+    setNewTenantNumPeople(2);
+    setNewTenantAmountPerPerson(config.newTenantAmountPerPerson);
     setNewTenantHasDateRange(true);
     setNewTenantStartMonth(config.newTenantStartMonth);
     setNewTenantHasEndMonth(false);
@@ -1107,39 +1115,45 @@ const PropertyInvestmentCalculator = () => {
               {showAddTenant && (
                 <div className="mb-3 p-3 bg-green-50 rounded-lg border border-green-200">
                   <div className="grid grid-cols-2 gap-3 mb-3">
-                    <div className="col-span-2 flex gap-2">
-                      <button
-                        onClick={() => setNewTenantType('single')}
-                        className={`flex-1 py-1 px-2 rounded text-sm ${newTenantType === 'single'
-                          ? 'bg-green-600 text-white'
-                          : 'bg-green-200 text-green-800'
-                          }`}
-                      >
-                        Individual Room
-                      </button>
-                      <button
-                        onClick={() => setNewTenantType('shared')}
-                        className={`flex-1 py-1 px-2 rounded text-sm ${newTenantType === 'shared'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-blue-200 text-blue-800'
-                          }`}
-                      >
-                        Shared Room
-                      </button>
+                    <div className="col-span-2">
+                      <label className="flex items-center gap-2 text-xs font-medium text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={newTenantIsShared}
+                          onChange={(e) => setNewTenantIsShared(e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        Shared room? (multiple people splitting this room)
+                      </label>
                     </div>
+
+                    {newTenantIsShared && (
+                      <div className="col-span-2">
+                        <label className="block text-xs font-medium mb-1">Number of People: {newTenantNumPeople}</label>
+                        <input
+                          type="range" min="2" max="6"
+                          value={newTenantNumPeople}
+                          onChange={(e) => setNewTenantNumPeople(Number(e.target.value))}
+                          className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer"
+                        />
+                      </div>
+                    )}
+
                     <div className="col-span-2">
                       <NumberSliderField
-                        label="Weekly Rent"
-                        value={newTenantRent}
-                        onChange={setNewTenantRent}
+                        label={newTenantIsShared ? 'Weekly Rent per Person' : 'Weekly Rent'}
+                        value={newTenantAmountPerPerson}
+                        onChange={setNewTenantAmountPerPerson}
                         min={0}
                         max={5000}
                         sliderMin={50}
                         sliderMax={1200}
                         step={10}
-                        color={newTenantType === 'single' ? 'green' : 'blue'}
+                        color={newTenantIsShared ? 'blue' : 'green'}
                         prefix="$"
-                      />
+                      >
+                        {newTenantIsShared && `Total: $${(newTenantAmountPerPerson * newTenantNumPeople).toLocaleString()}/week`}
+                      </NumberSliderField>
                     </div>
                     <div className="col-span-2">
                       <label className="flex items-center gap-2 text-xs font-medium text-gray-700">
@@ -1188,7 +1202,7 @@ const PropertyInvestmentCalculator = () => {
                   </div>
                   <button
                     onClick={addTenant}
-                    className={`w-full py-2 text-white rounded-lg font-medium transition-colors ${newTenantType === 'single' ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                    className={`w-full py-2 text-white rounded-lg font-medium transition-colors ${newTenantIsShared ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-600 hover:bg-green-700'}`}
                   >
                     Add Tenant
                   </button>
@@ -1200,17 +1214,17 @@ const PropertyInvestmentCalculator = () => {
                 {tenants.map((tenant) => (
                   <div
                     key={tenant.id}
-                    className={`flex items-center justify-between p-3 rounded-lg border ${tenant.type === 'single' ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}
+                    className={`flex items-center justify-between p-3 rounded-lg border ${tenant.isShared ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'}`}
                   >
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        {tenant.type === 'single' ? '👤' : '👥'}
+                        {tenant.isShared ? '👥' : '👤'}
                         <div>
                           <p className="font-semibold text-gray-800">
-                            {tenant.type === 'single' ? 'Individual Room' : 'Shared Room'}
+                            {tenant.isShared ? 'Shared Room' : 'Individual Room'}
                           </p>
                           <p className="text-xs text-gray-600">
-                            ${tenant.amount}/week {tenant.type === 'shared' && <span className="text-blue-600 font-medium">(~${Math.round(tenant.amount / 2)} each)</span>}
+                            ${tenant.amount}/week {tenant.isShared && <span className="text-blue-600 font-medium">({tenant.numPeople} × ${tenant.amountPerPerson} each)</span>}
                             {tenant.startMonth != null && (
                               <span className="text-gray-500">
                                 {tenant.endMonth != null
@@ -2047,7 +2061,7 @@ const PropertyInvestmentCalculator = () => {
                               if (status === 'future') return null;
                               return (
                                 <p key={t.id} className={`truncate ${status === 'past' ? 'text-gray-400' : 'text-green-700'}`}>
-                                  • {t.type === 'single' ? 'Individual' : 'Shared ($' + Math.round(t.amount / 2) + ')'}
+                                  • {t.isShared ? `Shared (${t.numPeople} × $${t.amountPerPerson})` : 'Individual'}
                                   {status === 'past' && ' (Done)'}
                                   {t.startMonth != null && (
                                     <span className="text-gray-400">
