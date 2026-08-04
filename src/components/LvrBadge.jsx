@@ -17,7 +17,7 @@ const LvrBadge = ({ lvr }) => {
 
       <div
         role="tooltip"
-        className="invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 transition-opacity duration-150 absolute z-20 top-full right-0 mt-2 w-72 max-w-[90vw] rounded-lg border border-gray-200 bg-white p-3 shadow-lg text-xs"
+        className="invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 transition-opacity duration-150 absolute z-20 top-full left-1/2 -translate-x-1/2 mt-2 w-72 max-w-[90vw] rounded-lg border border-gray-200 bg-white p-3 shadow-lg text-xs"
       >
         <p className="text-gray-600 mb-2">
           The lower the LVR, the lower the risk and the greater the borrowing flexibility.

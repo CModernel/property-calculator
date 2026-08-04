@@ -29,6 +29,7 @@ const NumberSliderField = ({
   suffix = '',
   formatValue = (v) => v.toLocaleString(),
   formatBound,
+  hideSlider = false,
   children,
 }) => {
   const id = useId();
@@ -110,28 +111,32 @@ const NumberSliderField = ({
         />
       </div>
 
-      <input
-        type="range"
-        aria-label={`${label} slider`}
-        min={sliderMin}
-        max={safeSliderMax}
-        step={step}
-        // Clamping here is required, not cosmetic: a range input whose value
-        // exceeds max is clamped by the DOM without firing change, and that
-        // React/DOM divergence is what let the deposit outgrow the price.
-        value={clampToRange(preview, sliderMin, safeSliderMax)}
-        onChange={handleSliderChange}
-        className={`w-full h-2 mt-2 rounded-lg appearance-none cursor-pointer ${TRACK_CLASSES[color]}`}
-      />
+      {!hideSlider && (
+        <>
+          <input
+            type="range"
+            aria-label={`${label} slider`}
+            min={sliderMin}
+            max={safeSliderMax}
+            step={step}
+            // Clamping here is required, not cosmetic: a range input whose value
+            // exceeds max is clamped by the DOM without firing change, and that
+            // React/DOM divergence is what let the deposit outgrow the price.
+            value={clampToRange(preview, sliderMin, safeSliderMax)}
+            onChange={handleSliderChange}
+            className={`w-full h-2 mt-2 rounded-lg appearance-none cursor-pointer ${TRACK_CLASSES[color]}`}
+          />
 
-      <div className="flex justify-between text-xs text-gray-400 mt-1 tabular-nums">
-        <span className={belowRange ? 'text-amber-600 font-medium' : undefined}>
-          {belowRange && '<'}{prefix}{showBound(sliderMin)}
-        </span>
-        <span className={aboveRange ? 'text-amber-600 font-medium' : undefined}>
-          {prefix}{showBound(safeSliderMax)}{aboveRange && '+'}
-        </span>
-      </div>
+          <div className="flex justify-between text-xs text-gray-400 mt-1 tabular-nums">
+            <span className={belowRange ? 'text-amber-600 font-medium' : undefined}>
+              {belowRange && '<'}{prefix}{showBound(sliderMin)}
+            </span>
+            <span className={aboveRange ? 'text-amber-600 font-medium' : undefined}>
+              {prefix}{showBound(safeSliderMax)}{aboveRange && '+'}
+            </span>
+          </div>
+        </>
+      )}
 
       {children && <p className="text-xs text-gray-500 mt-1">{children}</p>}
     </div>

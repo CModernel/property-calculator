@@ -377,24 +377,135 @@ optionally reuse in the commit message when you implement it.
   correctly, don't overlap the Save bar) and re-ran the Spanish-text sweep
   from TODO-23 to confirm the new copy is 100% English.
 
+- [x] **TODO-14: Small display and input leftovers**
+  - Fixed the sign bug: "Net Property Monthly Balance" now reads
+    `-$642/month` instead of `$-642/month` (`src/App.jsx:1501`) - the `$`
+    literal was sitting before the minus sign `.toLocaleString()` generates
+    for negative numbers. Matched the existing correct convention used for
+    `cashRemaining` (`src/App.jsx:1472`): compute the sign as an explicit
+    branch *before* the `$`, and use `Math.abs` so `.toLocaleString()` never
+    contributes its own sign.
+  - `NumberSliderField` gained an optional `hideSlider` prop (default
+    `false`, fully backward-compatible) that skips rendering the range
+    input and its min/max labels, keeping only the label/value display and
+    the number input with its draft/commit "don't snap to 0 when cleared"
+    behavior. `newContribAmount` (Offset Contributions) and `newExpAmount`
+    (Exceptional Expenses) - previously bare `<input type="number">`s that
+    reset to 0 on an empty field - now both use `NumberSliderField` with
+    `hideSlider`, gaining the fix for free instead of duplicating the
+    draft/commit logic.
+  - **Decision on component tests** (made with the user): did not install
+    React Testing Library/jsdom to test `NumberSliderField`'s draft/commit
+    state machine. No other interactive component in the project
+    (`SteppedExpenseField`, the tenant/exceptional-expense forms, etc.) has
+    component tests either - all are verified manually - so adding new
+    testing infrastructure for just this one component would break that
+    consistency for a single-component's marginal benefit. The underlying
+    pure helpers (`parseNumberInput.js`, `clampToRange.js`) remain
+    unit-tested; the state-machine orchestration itself stays covered by
+    manual verification, as it always has been.
+  - Verified in the browser: forced a negative "Net Property Monthly
+    Balance" and confirmed `-$X/month` renders correctly; cleared both
+    "Amount ($)" fields (Offset Contributions and Exceptional Expenses)
+    with the field focused and confirmed neither snaps to 0 on blur, and
+    neither renders a slider underneath.
+
+- [x] **TODO-27: Reorganize "Property & Loan" into "Purchase Details" + "Financial Position", rename fields**
+  Requested by the user, with reasoning worth preserving: Down Payment
+  isn't useless, but it represents a *decision* ("how much cash do I put
+  in vs. keep liquid?"), separate from Total Savings Available, which
+  represents *capacity* ("how much money do I have?") - worth keeping for
+  a purchase-decision calculator, just not as the first/primary input.
+  The single "Property & Loan" card was split into two:
+  - **"Purchase Details"** ("what are you buying?"): Property Type, First
+    Home Buyer, Property Price, **Deposit Contribution** (renamed from
+    "Down Payment"), Loan Amount - resolving the open question from when
+    this was queued, the user placed Property Type/First Home Buyer here
+    too, alongside the property/loan-structure inputs.
+  - **"Financial Position"** ("can you afford it and how will you manage
+    it?"): **Available Savings** (renamed from "Total Savings Available"),
+    Interest Rate, Loan Term, and the **Repayments** summary box (renamed
+    from "Monthly Payment") - Interest Rate/Loan Term moved here from
+    Purchase Details per the user's explicit split, since they're about
+    the financing arrangement rather than the property itself. New
+    `Wallet` icon (lucide-react) for this card's header.
+  Renamed consistently everywhere the labels appeared, not just the input
+  cards: "Repayments" (both the input card's summary box and the results
+  panel's "Loan Information" box), "Available Savings" and "Remaining
+  Savings" (renamed from "Cash Remaining") in the results panel's "Upfront
+  Costs (NSW)" box. Pure text/JSX reorganization - no state, calculation,
+  or prop renames (`downPayment`/`setDownPayment`/`totalSavings`/
+  `monthlyPayment`/`cashRemaining` etc. all unchanged), so the diff is
+  fully contained to labels and card boundaries. Verified in the browser:
+  "Purchase Details" shows Property Type → First Home Buyer → Property
+  Price → Deposit Contribution → Loan Amount in that order; "Financial
+  Position" shows Available Savings → Interest Rate → Loan Term →
+  Repayments; the results panel shows Available Savings, Total Cash
+  Required, Remaining Savings, LVR (via the TODO-23 badge), and Repayments
+  all correctly labeled.
+
+- [x] **TODO-28: Add the LVR risk badge/tooltip to the Deposit Contribution caption too**
+  Requested by the user - the "Deposit Contribution" field's caption
+  ("Loan: $543,000 (63.9% LVR)") got the same `<LvrBadge lvr={lvr} />` the
+  "LMI (estimate, X% LVR)" line already had from TODO-23, which had
+  deliberately deferred this second call site to limit that diff. Trivial
+  wiring, but it surfaced a real positioning bug: `LvrBadge`'s tooltip was
+  hardcoded `right-0` (anchored to grow leftward), which worked in the
+  narrow results-panel column it was designed in, but clipped off the
+  *left* edge of the viewport here, since this caption sits near the left
+  edge of the much wider left-panel column. Fixed by centering the tooltip
+  under the badge instead (`left-1/2 -translate-x-1/2` in
+  `src/components/LvrBadge.jsx`, replacing the `right-0` anchor) - robust
+  in both narrow and wide containers instead of assuming one specific
+  layout. Verified in the browser: hovering the badge at both call sites
+  now shows the full, unclipped tooltip.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
 
+- [ ] **TODO-26: Generalize "Rental Income" into a broader "Income" section**
+  Requested by the user - "Rental Income" is too narrow today; personal
+  income (`fortnightlyIncome`, `src/App.jsx:96`) is a single recurring
+  scalar with no support for multiple sources, date ranges, or one-time
+  amounts, while tenants already support exactly that flexibility. Confirmed
+  **not hardcoded** - `fortnightlyIncome` is a real `useState` seeded from
+  `config.fortnightlyIncome` (`config.default.json:11`, currently `3228`),
+  editable via its own `NumberSliderField` and flowing through the full
+  config/localStorage precedence chain (TODO-16/21) - the actual gap is the
+  single-scalar model, not a fake/fixed value.
+  Requested shape: **Salary** (recurring), **Other income** (recurring,
+  optional start/end date), and **one-time income at a specific date** -
+  i.e. merge the flexibility already proven by two existing models instead
+  of inventing a third:
+  - The **tenant model** (`src/App.jsx` tenants array: `{id, type,
+    amount, startMonth, endMonth}`, resolved via `isMonthInRange` from
+    `src/calculations/dateRange.js`) already covers "recurring, with an
+    optional date range."
+  - The **exceptional expense model** (`exceptExpenses` array: `{id, name,
+    amount, type: 'one-time' | 'recurring', month, recurrence: 'forever' |
+    'period', startMonth, endMonth}`) already covers "one-time at a specific
+    month" alongside "recurring, forever or for a period."
+  A generalized `incomeSources` list combining both shapes (name/label +
+  amount + one-time-vs-recurring + optional date range) could replace both
+  the single `fortnightlyIncome` scalar and the tenant-specific "Rental
+  Income" card, unifying "salary," "rental income," "other income," and
+  "one-time income" under one model and one card - `tenants` would likely
+  become just one more entry type within it rather than its own concept.
+  **Open decision, per the user's own framing:** should the recurring
+  cadence be weekly instead of fortnightly? The user's opinion is weekly,
+  since that's standard in Sydney/NSW - today `fortnightlyIncome` is the
+  source of truth and week/month are derived from it
+  (`calculateWeeklyIncome`/`calculateMonthlyIncome` in `loan.js`); switching
+  the source of truth to weekly would need the same treatment (and check
+  whether rental income, already weekly, would then share the same base
+  cadence as personal income for the first time). This is a substantial
+  redesign (data model + simulation loop + UI) - needs a proper design pass
+  before implementing, not a quick patch.
+
 ---
 
 ## 🟢 LOW PRIORITY (Polish, refactoring, cleanup)
-
-- [ ] **TODO-14: Small display and input leftovers**
-  - "Net Property Monthly Balance" renders a negative as `$-642/month` instead
-    of `-$642/month` (`src/App.jsx:924`, from PCALC-2); every other figure in
-    the app uses the `-$X` form.
-  - The two remaining bare `type="number"` inputs (`newContribAmount`, and
-    `newExpAmount` which has no `min`/`max`/`step` at all) still snap to 0 when
-    cleared — they could reuse `NumberSliderField` in a number-only mode.
-  - `NumberSliderField` itself has no component tests; React Testing Library is
-    not installed, so its draft/commit typing behaviour is currently covered
-    only through the pure helpers plus manual verification.
 
 - [ ] **TODO-8: Extract and test the Timeline Explorer snapshot**
   Left out of scope of the tests work (TODO-1): the logic starting at

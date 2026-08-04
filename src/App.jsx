@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DollarSign, Home, Users, TrendingDown, Calendar, ShoppingCart, Car, RotateCcw } from 'lucide-react';
+import { DollarSign, Home, Users, TrendingDown, Calendar, ShoppingCart, Car, RotateCcw, Wallet } from 'lucide-react';
 import { formatMonthsDetailed, formatCompactMoney } from './calculations/formatting';
 import NumberSliderField from './components/NumberSliderField';
 import LvrBadge from './components/LvrBadge';
@@ -501,29 +501,14 @@ const PropertyInvestmentCalculator = () => {
         {/* LEFT PANEL - Configuration */}
         <div className="lg:col-span-2 space-y-4">
 
-          {/* Property */}
+          {/* Purchase Details */}
           <div className="bg-white rounded-lg shadow-md p-5">
             <h2 className="text-xl font-bold text-gray-700 mb-4 flex items-center gap-2">
               <Home size={24} className="text-blue-600" />
-              Property & Loan
+              Purchase Details
             </h2>
 
             <div className="space-y-4">
-              <NumberSliderField
-                label="Property Price"
-                value={propertyPrice}
-                onChange={handlePropertyPriceChange}
-                min={50000}
-                max={10000000}
-                sliderMin={200000}
-                sliderMax={3000000}
-                step={10000}
-                color="blue"
-                prefix="$"
-                suffix=" AUD"
-                formatBound={formatCompactMoney}
-              />
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Property Type</label>
                 <div className="flex gap-2">
@@ -549,8 +534,33 @@ const PropertyInvestmentCalculator = () => {
                 )}
               </div>
 
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={isFirstHomeBuyer}
+                  onChange={(e) => setIsFirstHomeBuyer(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                First Home Buyer (NSW stamp duty concession)
+              </label>
+
               <NumberSliderField
-                label="Down Payment"
+                label="Property Price"
+                value={propertyPrice}
+                onChange={handlePropertyPriceChange}
+                min={50000}
+                max={10000000}
+                sliderMin={200000}
+                sliderMax={3000000}
+                step={10000}
+                color="blue"
+                prefix="$"
+                suffix=" AUD"
+                formatBound={formatCompactMoney}
+              />
+
+              <NumberSliderField
+                label="Deposit Contribution"
                 value={downPayment}
                 onChange={handleDownPaymentChange}
                 min={0}
@@ -564,6 +574,7 @@ const PropertyInvestmentCalculator = () => {
                 formatBound={formatCompactMoney}
               >
                 Loan: ${loanAmount.toLocaleString()} ({lvr.toFixed(1)}% LVR)
+                <LvrBadge lvr={lvr} />
               </NumberSliderField>
 
               <NumberSliderField
@@ -582,19 +593,19 @@ const PropertyInvestmentCalculator = () => {
               >
                 Deposit: ${downPayment.toLocaleString()} ({(100 - lvr).toFixed(1)}% of price)
               </NumberSliderField>
+            </div>
+          </div>
 
-              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={isFirstHomeBuyer}
-                  onChange={(e) => setIsFirstHomeBuyer(e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                First Home Buyer (NSW stamp duty concession)
-              </label>
+          {/* Financial Position */}
+          <div className="bg-white rounded-lg shadow-md p-5">
+            <h2 className="text-xl font-bold text-gray-700 mb-4 flex items-center gap-2">
+              <Wallet size={24} className="text-blue-600" />
+              Financial Position
+            </h2>
 
+            <div className="space-y-4">
               <NumberSliderField
-                label="Total Savings Available"
+                label="Available Savings"
                 value={totalSavings}
                 onChange={setTotalSavings}
                 min={0}
@@ -641,7 +652,7 @@ const PropertyInvestmentCalculator = () => {
 
               <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
                 <p className="text-sm font-semibold text-gray-700">
-                  Monthly Payment: ${Math.round(monthlyPayment).toLocaleString()}
+                  Repayments: ${Math.round(monthlyPayment).toLocaleString()}
                 </p>
               </div>
             </div>
@@ -1088,20 +1099,15 @@ const PropertyInvestmentCalculator = () => {
                           {newContribMonth} months
                         </div>
                       </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          Amount ($)
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="500000"
-                          step="1000"
-                          value={newContribAmount}
-                          onChange={(e) => setNewContribAmount(Number(e.target.value))}
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                        />
-                      </div>
+                      <NumberSliderField
+                        label="Amount ($)"
+                        value={newContribAmount}
+                        onChange={setNewContribAmount}
+                        min={0}
+                        max={500000}
+                        prefix="$"
+                        hideSlider
+                      />
                     </div>
                     <button
                       onClick={addOffsetContribution}
@@ -1230,15 +1236,15 @@ const PropertyInvestmentCalculator = () => {
                         />
                       </div>
 
-                      <div>
-                        <label className="block font-medium text-gray-700 mb-1">Amount ($)</label>
-                        <input
-                          type="number"
-                          value={newExpAmount}
-                          onChange={(e) => setNewExpAmount(Number(e.target.value))}
-                          className="w-full p-2 border rounded"
-                        />
-                      </div>
+                      <NumberSliderField
+                        label="Amount ($)"
+                        value={newExpAmount}
+                        onChange={setNewExpAmount}
+                        min={0}
+                        max={500000}
+                        prefix="$"
+                        hideSlider
+                      />
 
                       <div className="flex gap-2">
                         <button
@@ -1347,7 +1353,7 @@ const PropertyInvestmentCalculator = () => {
                 <h3 className="font-semibold text-gray-700 mb-2">🏠 Loan Information</h3>
                 <div className="space-y-1">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Monthly Payment:</span>
+                    <span className="text-gray-600">Repayments:</span>
                     <span className="text-gray-700 font-medium">${Math.round(monthlyPayment).toLocaleString()}</span>
                   </div>
 
@@ -1462,12 +1468,12 @@ const PropertyInvestmentCalculator = () => {
                     </div>
                   )}
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Total Savings Available:</span>
+                    <span className="text-gray-600">Available Savings:</span>
                     <span className="font-semibold text-gray-700">${totalSavings.toLocaleString()}</span>
                   </div>
                   <div className={`border-t pt-1 mt-1 font-bold ${getBalanceBgColor(cashRemaining)}`}>
                     <div className="flex justify-between">
-                      <span className="text-gray-700">Cash Remaining:</span>
+                      <span className="text-gray-700">Remaining Savings:</span>
                       <span className={getBalanceColor(cashRemaining)}>
                         {cashRemaining >= 0 ? '+' : '-'}${Math.abs(Math.round(cashRemaining)).toLocaleString()}
                       </span>
@@ -1498,7 +1504,7 @@ const PropertyInvestmentCalculator = () => {
                     <div className="flex justify-between">
                       <span className="text-gray-700">Net Property Monthly Balance:</span>
                       <span className={(monthlyRentalIncome - totalPropertyCost) >= 0 ? 'text-green-600' : 'text-red-600'}>
-                        {(monthlyRentalIncome - totalPropertyCost) >= 0 ? '+' : ''}${Math.round(monthlyRentalIncome - totalPropertyCost).toLocaleString()}/month
+                        {(monthlyRentalIncome - totalPropertyCost) >= 0 ? '+' : '-'}${Math.abs(Math.round(monthlyRentalIncome - totalPropertyCost)).toLocaleString()}/month
                       </span>
                     </div>
                   </div>
