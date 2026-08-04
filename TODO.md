@@ -814,54 +814,52 @@ optionally reuse in the commit message when you implement it.
   re-enabled (still unchecked, not force-re-checked) and could be ticked
   normally again.
 
----
-
-## 🟡 MEDIUM PRIORITY (Important, but not blocking)
-
-- [ ] **TODO-36: Add a Schedule-based expense list for Health/Subscriptions/Entertainment/Debt Repayments; replace "Other" with custom expenses**
+- [x] **TODO-36: Add a Schedule-based expense list for Health/Subscriptions/Entertainment/Debt Repayments; replace "Other" with custom expenses**
   Requested by the user, referencing a bank-style Housing/Living/Debt
-  categorization. Analysis of what fits where:
-  - **Housing** maps to today's "Property Expenses" already (see TODO-35
-    for its additions) - "Mortgage/Rent" deliberately excluded from any
-    editable expense list, since the mortgage is already the core loan
-    repayment calculation elsewhere, not a discretionary line item, and
-    "Rent" doesn't apply (this app assumes the user is buying, not renting
-    their own place).
-  - **Living + Debt** are where the new work is. **Recommendation: don't
-    fold Food/Transport into a new list** - they're `SteppedExpenseField`s
-    today (`foodExpensesField`/`transportExpensesField`,
-    `useSteppedValue`/`getSteppedValue`) and already support "current rate
-    that changes at a scheduled month" (TODO-19's "Schedule a change").
-    Moving them to the Schedule/list model (TODO-31's
-    `getActiveAmount`/`recurrence`) would lose that specific capability
-    unless rebuilt there too - not worth it since they already work well
-    for "an ongoing rate that occasionally changes."
-  - Health, Subscriptions, Entertainment, and Debt Repayments are
-    different in kind - each is more naturally "a distinct expense with
-    its own lifecycle" (a subscription starts and gets cancelled, a loan
-    ends when paid off) - exactly what TODO-31's Schedule model
-    (`{startMonth, recurrence: 'none'|'monthly'|'quarterly'|'yearly',
-    endMonth}`) already fits, reused directly rather than inventing
-    another shape. **Don't split Debt into Personal Loan/Car Loan/Credit
-    Card presets** - a single generic "Debt Repayment" category plus a
-    free-text/custom name (e.g. typing "Car Loan") covers the same ground
-    without three near-identical presets.
-  - **Replace the "Other" field entirely** with an "Add Custom Expense"
-    entry in this same new list (not a dropdown category, just a free
-    name) - covers Pet Expenses/Childcare/Gym/Parking/Coffee/Streaming/
-    whatever else, per the user's own examples, without needing a preset
-    for each.
-  Net shape: Property Expenses card keeps Strata/Utilities/Council
-  Rates/Insurance/Maintenance/Water Rates as `SteppedExpenseField`s (per
-  TODO-35); Personal Expenses card keeps Food/Transport as
-  `SteppedExpenseField`s, loses the standalone "Other" field, and gains a
-  new list (mirroring Income Sources' UI/state pattern exactly: add-form
-  with name/amount/one-time-checkbox/recurrence/end-month, a list with
-  remove buttons) seeded with Health/Subscriptions/Entertainment/Debt
-  Repayment presets plus free-text custom entries. Needs the same
-  `offsetSimulation.js` wiring TODO-31 already did for `incomeSources`/
-  `exceptExpenses` (pass the list in, resolve per month via
-  `getActiveAmount`), and another `SCHEMA_VERSION` bump.
+  categorization. "Housing" already maps to "Property Expenses" (TODO-35);
+  Food/Transport deliberately stayed as `SteppedExpenseField`s (not folded
+  into the new list) since they need "current rate that changes at a
+  scheduled month" (TODO-19), a capability the Schedule/list model doesn't
+  have. The flat "Other" field was removed entirely and replaced by a new
+  `otherExpenseItems` list (`src/App.jsx`) - a picklist of Health/
+  Subscriptions/Entertainment/Debt Repayment/Custom (the last revealing a
+  free-text name field, mirroring Income Sources' 'Other' pattern exactly)
+  plus the same add-form/list UI as Exceptional Expenses (name, amount,
+  One-Time checkbox, Monthly/Quarterly/Yearly, End Month). **Don't split
+  Debt into Personal Loan/Car Loan/Credit Card presets** - a single
+  generic "Debt Repayment" plus free-text custom name covers the same
+  ground.
+  **Resolved with the user**: the new items' `amount` is a **direct
+  per-occurrence dollar amount** (e.g. Netflix $15 with recurrence=monthly
+  costs $15 that month), the same convention as Exceptional Expenses -
+  **not** a $/week rate like Income Sources (which even applies that
+  framing to one-time items, a pre-existing quirk not worth carrying into
+  a second list). Consequence, also matching Exceptional Expenses'
+  existing behavior: these items do **not** appear in the static
+  "Personal Expenses"/"TO OFFSET" summary - they only affect the
+  simulation (Loan Simulation/Timeline Explorer), resolved via
+  `getActiveAmount(otherExpenseItems, months)` exactly like
+  `exceptExpenses` already was. `calculateWeeklyPersonalExpenses`
+  (`src/calculations/loan.js`) dropped its `otherExpenses` parameter
+  (now just `foodExpenses, transportExpenses`), and the Timeline
+  Explorer's "Expenses Status" column merges `otherExpenseItems` into the
+  same `exceptExpenses` list/status logic, one combined array.
+  `SCHEMA_VERSION` bumped 6→7 - unlike TODO-35's purely-additive change,
+  this genuinely retires a field (`otherExpenses`/`otherExpensesChanges`)
+  that could hold real user data, so old scenarios are discarded cleanly
+  rather than silently losing that expense on load.
+  Verified in the browser: confirmed the "Other" field is gone from
+  Personal Expenses (grid now just Food/Transport); added a "Debt
+  Repayment" $500/month item via the new "Other Expenses" card and
+  confirmed "Personal Expenses: -$650" and "TO OFFSET: $2500" stayed
+  **unchanged** (not counted in the static summary, as designed), while
+  "Time to pay off" rose from 10.7 to 12.1 years (correctly affects the
+  simulation); confirmed the "Custom" category reveals a free-text name
+  field; jumped the Timeline Explorer to month 78 and saw "Debt Repayment
+  $500" in the merged Expenses Status column; saved a scenario and
+  confirmed `version: 7` in `localStorage` with `otherExpenseItems`
+  present and no `otherExpenses`/`otherExpensesChanges` fields, reloaded
+  and confirmed the restored scenario matched exactly.
 
 ---
 

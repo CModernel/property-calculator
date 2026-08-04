@@ -40,7 +40,6 @@ const DEFAULTS = {
   insurance: 80,
   foodExpenses: 100,
   transportExpenses: 50,
-  otherExpenses: 50,
 };
 
 describe('calculateLoanAmount', () => {
@@ -189,8 +188,8 @@ describe('property balance', () => {
 describe('personal expenses and income', () => {
   it('sums weekly personal expenses', () => {
     expect(
-      calculateWeeklyPersonalExpenses(DEFAULTS.foodExpenses, DEFAULTS.transportExpenses, DEFAULTS.otherExpenses)
-    ).toBe(200);
+      calculateWeeklyPersonalExpenses(DEFAULTS.foodExpenses, DEFAULTS.transportExpenses)
+    ).toBe(150);
   });
 
   it('converts weekly personal expenses to a monthly figure', () => {

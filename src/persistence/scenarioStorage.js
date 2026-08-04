@@ -17,7 +17,13 @@ const STORAGE_KEY = 'propertyCalculator.scenario';
 // {id, month, amount} to the same Schedule shape as incomeSources/
 // exceptExpenses ({id, amount, startMonth, recurrence, endMonth}), so a
 // contribution can now recur instead of always being a single lump sum.
-const SCHEMA_VERSION = 6;
+// Bumped to 7 in TODO-36: the flat `otherExpenses`/`otherExpensesChanges`
+// SteppedExpenseField was retired in favor of `otherExpenseItems`, a
+// Schedule-shaped list (Health/Subscriptions/Entertainment/Debt Repayment/
+// Custom) - unlike TODO-35's purely-additive change, this genuinely drops a
+// field that could hold real user data, so old scenarios are discarded
+// cleanly rather than silently losing that expense on load.
+const SCHEMA_VERSION = 7;
 
 // A version mismatch means the saved shape no longer matches what this
 // version of the app expects - discard rather than attempt a migration,

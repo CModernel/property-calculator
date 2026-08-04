@@ -71,8 +71,8 @@ export function calculateWeeklyPropertyBalance(monthlyPropertyBalance) {
   return monthlyPropertyBalance * 12 / 52;
 }
 
-export function calculateWeeklyPersonalExpenses(foodExpenses, transportExpenses, otherExpenses) {
-  return foodExpenses + transportExpenses + otherExpenses;
+export function calculateWeeklyPersonalExpenses(foodExpenses, transportExpenses) {
+  return foodExpenses + transportExpenses;
 }
 
 export function calculateMonthlyPersonalExpenses(weeklyPersonalExpenses) {

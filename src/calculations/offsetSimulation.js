@@ -14,6 +14,7 @@ import {
 export function calculateLoanWithOffset({
   contributions,
   exceptExpenses,
+  otherExpenseItems = [],
   incomeSources = [],
   expenseFields = null,
   monthlyToOffset,
@@ -54,6 +55,11 @@ export function calculateLoanWithOffset({
     // Calculate Exceptional Expenses for this month
     const monthlyExceptionalCost = getActiveAmount(exceptExpenses, months);
 
+    // Other Expenses (Health/Subscriptions/Entertainment/Debt Repayment/
+    // Custom) - a direct per-occurrence dollar amount, same convention as
+    // Exceptional Expenses above, not a $/week rate.
+    const monthlyOtherExpenseItemsCost = getActiveAmount(otherExpenseItems, months);
+
     // Income sources active this month (salary, other income, one-time
     // payments, and Tenants) - a value that can change mid-simulation (a
     // date-ranged or one-time source) can't be pre-collapsed into a single
@@ -85,8 +91,6 @@ export function calculateLoanWithOffset({
         expenseFields.transportExpenses.changes,
         months
       );
-      const other = getSteppedValue(expenseFields.otherExpenses.base, expenseFields.otherExpenses.changes, months);
-
       const propertyExpenses = calculateMonthlyPropertyExpenses({
         monthlyStrata: calculateMonthlyStrata(strata),
         utilities,
@@ -97,7 +101,7 @@ export function calculateLoanWithOffset({
         monthlyLandTax: calculateMonthlyLandTax(landTax),
         propertyManagement,
       });
-      const personalExpenses = calculateMonthlyPersonalExpenses(calculateWeeklyPersonalExpenses(food, transport, other));
+      const personalExpenses = calculateMonthlyPersonalExpenses(calculateWeeklyPersonalExpenses(food, transport));
       monthlyExpensesForMonth = propertyExpenses + personalExpenses;
     }
 
@@ -110,7 +114,8 @@ export function calculateLoanWithOffset({
     // mid-simulation.
     const netMonthlyDeposit = Math.max(
       0,
-      monthlyToOffset + monthlyIncomeThisMonth - monthlyExpensesForMonth - monthlyExceptionalCost
+      monthlyToOffset + monthlyIncomeThisMonth - monthlyExpensesForMonth
+        - monthlyExceptionalCost - monthlyOtherExpenseItemsCost
     );
     offsetBalance += netMonthlyDeposit;
 
