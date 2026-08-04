@@ -35,6 +35,7 @@ import { sumClosingCosts } from './calculations/closingCosts';
 import { calculateTotalCashRequired, calculateCashRemaining } from './calculations/totalCashRequired';
 import { getSteppedValue } from './calculations/steppedValue';
 import { getActiveAmount, isScheduleActive, countOccurrencesUpTo, formatScheduleLabel, MAX_MONTH } from './calculations/recurringAmount';
+import { INCOME_CATEGORIES, INCOME_CATEGORY_DEFAULTS } from './calculations/incomeCategories';
 import { useSteppedValue } from './hooks/useSteppedValue';
 import SteppedExpenseField from './components/SteppedExpenseField';
 import { loadScenario, saveScenario, clearScenario } from './persistence/scenarioStorage';
@@ -88,7 +89,7 @@ const PropertyInvestmentCalculator = () => {
   const [incomeSources, setIncomeSources] = useState(config.incomeSources ?? []);
   const [showIncome, setShowIncome] = useState(false);
   const [showAddIncome, setShowAddIncome] = useState(false);
-  const [newIncomeCategory, setNewIncomeCategory] = useState('Salary'); // Salary | Freelance | Bonus | Tenants | Other
+  const [newIncomeCategory, setNewIncomeCategory] = useState('Salary/Wages'); // see INCOME_CATEGORIES (src/calculations/incomeCategories.js)
   const [newIncomeCustomName, setNewIncomeCustomName] = useState(''); // only used when category is 'Other'
   const [newIncomeAmount, setNewIncomeAmount] = useState(config.newIncomeAmount);
   const [newIncomeIsShared, setNewIncomeIsShared] = useState(false); // only used when category is 'Tenants'
@@ -418,6 +419,25 @@ const PropertyInvestmentCalculator = () => {
   };
 
   // Income Sources Functions
+
+  // Applies each category's default Schedule (INCOME_CATEGORY_DEFAULTS) when
+  // the user picks a new Income Name, so e.g. a Bonus starts as one-time and
+  // a Salary starts as Monthly/Forever, instead of the form always defaulting
+  // the same way regardless of category. Only touches the Schedule fields -
+  // Tenants' own Shared Room fields (isShared/numPeople) are untouched, and
+  // categories without a listed default (Tenants, Other) keep whatever the
+  // form's current Schedule fields already are.
+  const handleIncomeCategoryChange = (category) => {
+    setNewIncomeCategory(category);
+    const defaults = INCOME_CATEGORY_DEFAULTS[category];
+    if (!defaults) return;
+    setNewIncomeOneTime(defaults.oneTime);
+    if (!defaults.oneTime) {
+      setNewIncomeRecurrence(defaults.recurrence);
+      if (defaults.endMonth !== undefined) setNewIncomeEndMonth(defaults.endMonth);
+    }
+  };
+
   const addIncomeSource = () => {
     const isTenants = newIncomeCategory === 'Tenants';
     const name = newIncomeCategory === 'Other' ? newIncomeCustomName : newIncomeCategory;
@@ -450,7 +470,7 @@ const PropertyInvestmentCalculator = () => {
 
     setIncomeSources([...incomeSources, newIncome]);
     setShowAddIncome(false);
-    setNewIncomeCategory('Salary');
+    setNewIncomeCategory('Salary/Wages');
     setNewIncomeCustomName('');
     setNewIncomeAmount(config.newIncomeAmount);
     setNewIncomeIsShared(false);
@@ -960,14 +980,12 @@ const PropertyInvestmentCalculator = () => {
                       <label className="block font-medium text-gray-700 mb-1">Income Name</label>
                       <select
                         value={newIncomeCategory}
-                        onChange={(e) => setNewIncomeCategory(e.target.value)}
+                        onChange={(e) => handleIncomeCategoryChange(e.target.value)}
                         className="w-full p-2 border rounded"
                       >
-                        <option>Salary</option>
-                        <option>Freelance</option>
-                        <option>Bonus</option>
-                        <option>Tenants</option>
-                        <option>Other</option>
+                        {INCOME_CATEGORIES.map((category) => (
+                          <option key={category}>{category}</option>
+                        ))}
                       </select>
                       {newIncomeCategory === 'Other' && (
                         <input

@@ -687,60 +687,56 @@ optionally reuse in the commit message when you implement it.
   `offsetContributions` entry, and reloaded to confirm the restored
   scenario matched exactly.
 
+- [x] **TODO-34: Expand Income Name to a full 15-type picklist, with a smart default Schedule per type**
+  Requested by the user. Two open questions were resolved with the user
+  before implementing: (1) **"Rental Income" dropped from the list
+  entirely** (14 types, not 15) - `'Tenants'` (TODO-29) already covers
+  both a shared room and a whole property let to one tenant
+  (`isShared: false, numPeople: 1`), so a separate "Rental Income"
+  category would only create ambiguity about which to pick; (2)
+  **Dividends defaults to Quarterly** rather than adding a 5th
+  "Half-Yearly" recurrence to the model - a reasonable approximation the
+  user can override by hand, not worth the extra surface area across the
+  three forms (Income/Expenses/Offset Contributions) that all show the
+  same Monthly/Quarterly/Yearly buttons.
+  Replaced the hardcoded Salary/Freelance/Bonus/Tenants/Other `<option>`s
+  (`src/App.jsx`) with a `.map()` over a new `INCOME_CATEGORIES` list (14
+  types + Tenants + Other) in `src/calculations/incomeCategories.js` (+
+  test): Salary/Wages, Self-Employment, Freelance/Contracting, Business
+  Income, Dividends, Interest, Government Benefits, Pension, Child
+  Support, Bonus, Commission, Tax Refund, Gift, Tenants, Other. A sibling
+  `INCOME_CATEGORY_DEFAULTS` lookup maps each category to its default
+  Schedule (`{oneTime, recurrence, endMonth}`), applied by a new
+  `handleIncomeCategoryChange` handler on the `<select>`'s `onChange` -
+  Salary/Wages, Self-Employment, Business Income, Interest, Government
+  Benefits, Pension, and Commission default to Monthly/Forever;
+  Freelance/Contracting, Bonus, Tax Refund, and Gift default to One-Time;
+  Dividends defaults to Quarterly/Forever. **Child Support is deliberately
+  left out of the `endMonth` default** - it's the one recurring category
+  with no universal sensible end date (until a set age, a custody change,
+  etc.), so switching to it sets `oneTime: false`/`recurrence: 'monthly'`
+  but leaves whatever End Month value is already on the slider untouched,
+  rather than special-casing the UI to hide/reset that field. Categories
+  not listed in the defaults map (`Tenants`, `Other`) keep whatever
+  Schedule fields the form already has - manually toggling One-Time/
+  Recurrence/End Month after picking a category still works exactly as
+  before, since the defaults are just an initial nudge, not a lock.
+  No `SCHEMA_VERSION` bump needed - `incomeSources` entries keep the exact
+  same shape as before (`name` is still just a string), only the picklist
+  offering more name choices and better form-defaults changed.
+  Verified in the browser: confirmed all 14 categories + Tenants + Other
+  appear in the dropdown; selecting "Bonus" auto-checked One-Time and
+  showed "Occurs at Month: 1"; selecting "Dividends" auto-unchecked
+  One-Time, selected "Quarterly", and set "End Month: Forever"; dragged
+  End Month down to 131 while on Dividends, then switched to "Child
+  Support" and confirmed it flipped to Monthly/not-one-time while **End
+  Month stayed at 131** (not reset to Forever); added that Child Support
+  entry and confirmed the list showed "$500/week • Monthly, months
+  1-131" with the loan simulation reacting correctly.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
-
-- [ ] **TODO-34: Expand Income Name to a full 15-type picklist, with a smart default Schedule per type**
-  Requested by the user. TODO-29 (done) has already merged tenants into
-  `incomeSources` as a `'Tenants'` category - not `'Rental Income'`, per
-  the user's explicit choice to keep that name. **Naming overlap to
-  resolve when picking this up**: this 15-type list still includes a
-  separate "Rental Income" entry below - worth double-checking with the
-  user whether that's meant to coexist alongside `'Tenants'` (e.g. for a
-  wholly-rented investment property vs. a room let out in a home the
-  owner also lives in) or whether it should be dropped/renamed now that
-  `'Tenants'` already covers the room-rental case. Replaces the current
-  minimal Salary/Freelance/Bonus/Tenants/Other list (`src/App.jsx`,
-  `newIncomeCategory`)
-  with a comprehensive 15-type list: Salary/Wages, Self-Employment,
-  Freelance/Contracting, Business Income, Rental Income, Dividends,
-  Interest, Government Benefits, Pension, Child Support, Bonus,
-  Commission, Tax Refund, Gift, Other Income.
-  Each type should set a **default Schedule** (recurrence + one-time flag)
-  when selected, analyzed against the actual model (`recurrence: 'none' |
-  'monthly' | 'quarterly' | 'yearly'` - no weekly/fortnightly, since the
-  amount is always entered as a $/week figure regardless of how often the
-  real-world source actually pays; recurrence only controls how often that
-  weekly figure gets added to the simulation):
-  - **Monthly, Forever** (the "ongoing" default): Salary/Wages,
-    Self-Employment, Business Income, Rental Income, Interest, Government
-    Benefits, Pension, Commission.
-  - **One-Time**: Freelance/Contracting (ambiguous/"Variable" duration -
-    one-time is the safer default, user can switch to Monthly for a
-    recurring client), Bonus, Tax Refund, Gift.
-  - **Quarterly**: Dividends (closest available match to
-    Quarterly/Half-Yearly/Yearly - see open question below).
-  - **Monthly, but NOT defaulted to "Forever"**: Child Support - unlike
-    every other recurring type, its natural duration is "until an end
-    date," not open-ended, so the form should NOT auto-set End Month to
-    the max/"Forever" for this one type. No universal sensible end-month
-    default exists, so this likely just means leaving End Month at
-    whatever the user drags it to, without the usual auto-Forever nudge.
-  - **Other Income**: no override, keeps whatever the form's baseline
-    default is.
-  **Two open decisions, not resolved yet:**
-  1. "Half-Yearly" isn't a supported recurrence today (only monthly/
-     quarterly/yearly) - add it as a 5th option (`INTERVAL_MONTHS.halfYearly
-     = 6` in `src/calculations/recurringAmount.js`), or is Quarterly close
-     enough for Dividends without expanding the model?
-  2. Exactly how should the UI avoid auto-defaulting Child Support's End
-     Month to "Forever" without adding a special-cased, confusing
-     exception to the form's otherwise-uniform behavior?
-  Implementation-wise this is mostly a lookup table (`{category: {oneTime,
-  recurrence}}`) consulted in the Income Name `<select>`'s `onChange`
-  handler to also set `newIncomeOneTime`/`newIncomeRecurrence` - small
-  once TODO-29's merge and the two open questions above are settled.
 
 - [ ] **TODO-35: Add Maintenance & Repairs + Water Rates to Property Expenses; gate Land Tax/Property Management behind an investment-property toggle**
   Requested by the user. Two new fixed fields alongside today's 4
