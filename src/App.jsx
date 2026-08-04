@@ -34,7 +34,7 @@ import { estimateLmi } from './calculations/lmi';
 import { sumClosingCosts } from './calculations/closingCosts';
 import { calculateTotalCashRequired, calculateCashRemaining } from './calculations/totalCashRequired';
 import { getSteppedValue } from './calculations/steppedValue';
-import { getActiveAmount, isScheduleActive, formatScheduleLabel, MAX_MONTH } from './calculations/recurringAmount';
+import { getActiveAmount, isScheduleActive, countOccurrencesUpTo, formatScheduleLabel, MAX_MONTH } from './calculations/recurringAmount';
 import { useSteppedValue } from './hooks/useSteppedValue';
 import SteppedExpenseField from './components/SteppedExpenseField';
 import { loadScenario, saveScenario, clearScenario } from './persistence/scenarioStorage';
@@ -104,10 +104,20 @@ const PropertyInvestmentCalculator = () => {
   const otherExpensesField = useSteppedValue(config.otherExpenses, config.otherExpensesChanges);
   const [showPersonalExpenses, setShowPersonalExpenses] = useState(false);
 
-  // Offset contributions state
+  // Offset contributions state. Same Schedule shape as Income Sources/
+  // Exceptional Expenses ({startMonth, recurrence, endMonth}), resolved the
+  // same way via getActiveAmount/isScheduleActive - a contribution can now
+  // recur (e.g. "$500 every quarter") instead of only ever being a single
+  // lump sum.
   const [offsetContributions, setOffsetContributions] = useState(config.offsetContributions ?? []);
   const [showAddContribution, setShowAddContribution] = useState(false);
-  const [newContribMonth, setNewContribMonth] = useState(1);
+  // Contributions default to one-time (unlike Income/Expenses, which default
+  // to recurring) - preserves the pre-TODO-32 behavior where every
+  // contribution was a single lump sum, with recurring now opt-in.
+  const [newContribOneTime, setNewContribOneTime] = useState(true);
+  const [newContribStartMonth, setNewContribStartMonth] = useState(1);
+  const [newContribRecurrence, setNewContribRecurrence] = useState('monthly'); // monthly | quarterly | yearly
+  const [newContribEndMonth, setNewContribEndMonth] = useState(MAX_MONTH);
   const [newContribAmount, setNewContribAmount] = useState(config.newContribAmount);
 
   // Exceptional Expenses State
@@ -131,8 +141,13 @@ const PropertyInvestmentCalculator = () => {
   // no changes needed to scenarioStorage.js's save/load/parse functions.
   const [lastSavedAt, setLastSavedAt] = useState(savedScenario?.savedAt ?? null);
 
-  // Calculate total scheduled offset contributions
+  // Calculate total scheduled offset contributions. Only one-time
+  // contributions count toward this total (see calculateTotalScheduledOffset)
+  // - split out separately here since the recurring count needs its own
+  // wording ("recurring contribution", not "lump sum payment").
   const totalScheduledOffset = calculateTotalScheduledOffset(offsetContributions);
+  const oneTimeContributionsCount = offsetContributions.filter(c => c.recurrence === 'none').length;
+  const recurringContributionsCount = offsetContributions.length - oneTimeContributionsCount;
 
   // Loan calculations
   const loanAmount = calculateLoanAmount(propertyPrice, downPayment);
@@ -362,31 +377,44 @@ const PropertyInvestmentCalculator = () => {
   // Functions for managing offset contributions
   const addOffsetContribution = () => {
     if (newContribAmount <= 0) return;
-
-    // Check if month already exists
-    const monthExists = offsetContributions.some(c => c.month === newContribMonth);
-    if (monthExists) {
-      alert('A contribution already exists for this month. Please remove it first or choose a different month.');
+    if (!newContribOneTime && newContribStartMonth > newContribEndMonth) {
+      alert('Start month must be before end month.');
       return;
+    }
+
+    // Only guards against two one-time lump sums landing on the exact same
+    // month - two independent recurring contributions starting on the same
+    // month aren't a conflict the way two one-time lumps in the same month are.
+    if (newContribOneTime) {
+      const monthExists = offsetContributions.some(c => c.recurrence === 'none' && c.startMonth === newContribStartMonth);
+      if (monthExists) {
+        alert('A contribution already exists for this month. Please remove it first or choose a different month.');
+        return;
+      }
     }
 
     const newContrib = {
       id: Date.now(),
-      month: newContribMonth,
-      amount: newContribAmount
+      amount: newContribAmount,
+      startMonth: newContribStartMonth,
+      recurrence: newContribOneTime ? 'none' : newContribRecurrence,
+      ...(newContribOneTime ? {} : { endMonth: newContribEndMonth }),
     };
 
-    const updatedContributions = [...offsetContributions, newContrib].sort((a, b) => a.month - b.month);
+    const updatedContributions = [...offsetContributions, newContrib].sort((a, b) => a.startMonth - b.startMonth);
     setOffsetContributions(updatedContributions);
     setShowAddContribution(false);
-    setNewContribMonth(getNextSuggestion(updatedContributions));
+    setNewContribStartMonth(getNextSuggestion(updatedContributions));
     setNewContribAmount(10000);
+    setNewContribOneTime(true);
+    setNewContribRecurrence('monthly');
+    setNewContribEndMonth(MAX_MONTH);
   };
 
   const removeOffsetContribution = (id) => {
     const updatedContributions = offsetContributions.filter(c => c.id !== id);
     setOffsetContributions(updatedContributions);
-    setNewContribMonth(getNextSuggestion(updatedContributions));
+    setNewContribStartMonth(getNextSuggestion(updatedContributions));
   };
 
   // Income Sources Functions
@@ -1119,34 +1147,65 @@ const PropertyInvestmentCalculator = () => {
 
                 {/* Add contribution form */}
                 {showAddContribution && (
-                  <div className="mb-3 p-3 bg-cyan-50 rounded-lg border border-cyan-200">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          At Month
-                        </label>
-                        <input
-                          type="range"
-                          min="1"
-                          max="360"
-                          value={newContribMonth}
-                          onChange={(e) => setNewContribMonth(Number(e.target.value))}
-                          className="w-full h-2 bg-cyan-200 rounded-lg appearance-none cursor-pointer"
-                        />
-                        <div className="text-center text-sm font-medium text-gray-700">
-                          {newContribMonth} months
-                        </div>
-                      </div>
-                      <NumberSliderField
-                        label="Amount ($)"
-                        value={newContribAmount}
-                        onChange={setNewContribAmount}
-                        min={0}
-                        max={500000}
-                        prefix="$"
-                        hideSlider
+                  <div className="mb-3 p-3 bg-cyan-50 rounded-lg border border-cyan-200 space-y-3">
+                    <NumberSliderField
+                      label="Amount ($)"
+                      value={newContribAmount}
+                      onChange={setNewContribAmount}
+                      min={0}
+                      max={500000}
+                      prefix="$"
+                      hideSlider
+                    />
+
+                    <label className="flex items-center gap-2 text-xs font-medium text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={newContribOneTime}
+                        onChange={(e) => setNewContribOneTime(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500"
+                      />
+                      One-Time (occurs once, doesn't repeat)
+                    </label>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        {newContribOneTime ? `Occurs at Month: ${newContribStartMonth}` : `Start Month: ${newContribStartMonth}`}
+                      </label>
+                      <input
+                        type="range" min="1" max={MAX_MONTH}
+                        value={newContribStartMonth}
+                        onChange={(e) => setNewContribStartMonth(Number(e.target.value))}
+                        className="w-full h-2 bg-cyan-200 rounded-lg appearance-none cursor-pointer"
                       />
                     </div>
+
+                    {!newContribOneTime && (
+                      <div className="space-y-3">
+                        <div className="flex gap-2 text-xs">
+                          {['monthly', 'quarterly', 'yearly'].map((option) => (
+                            <button
+                              key={option}
+                              onClick={() => setNewContribRecurrence(option)}
+                              className={`flex-1 py-1 rounded border capitalize ${newContribRecurrence === option ? 'bg-blue-200 border-blue-400 font-bold' : 'bg-white'}`}
+                            >{option}</button>
+                          ))}
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-medium mb-1">
+                            End Month: {newContribEndMonth === MAX_MONTH ? 'Forever' : newContribEndMonth}
+                          </label>
+                          <input
+                            type="range" min={newContribStartMonth} max={MAX_MONTH}
+                            value={newContribEndMonth}
+                            onChange={(e) => setNewContribEndMonth(Number(e.target.value))}
+                            className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                    )}
+
                     <button
                       onClick={addOffsetContribution}
                       className="w-full py-3 bg-cyan-600 text-white rounded-lg font-medium hover:bg-cyan-700 transition-colors"
@@ -1168,10 +1227,12 @@ const PropertyInvestmentCalculator = () => {
                           <span className="text-xl">🔵</span>
                           <div>
                             <p className="font-semibold text-gray-800">
-                              Month {contrib.month}
+                              {formatScheduleLabel(contrib)}
                             </p>
                             <p className="text-xs text-gray-600">
-                              {formatMonthsDetailed(contrib.month).human}
+                              {contrib.recurrence === 'none'
+                                ? formatMonthsDetailed(contrib.startMonth).human
+                                : `Starts in ${formatMonthsDetailed(contrib.startMonth).human}`}
                             </p>
                           </div>
                         </div>
@@ -1192,8 +1253,14 @@ const PropertyInvestmentCalculator = () => {
                 {/* Total scheduled */}
                 <div className="mt-3 p-3 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200">
                   <p className="text-sm font-semibold text-gray-700">
-                    📊 Total Scheduled Offset: <span className="text-indigo-700 text-lg">${totalScheduledOffset.toLocaleString()}</span>
+                    📊 One-Time Contributions Total: <span className="text-indigo-700 text-lg">${totalScheduledOffset.toLocaleString()}</span>
                   </p>
+                  {recurringContributionsCount > 0 && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Plus {recurringContributionsCount} recurring contribution{recurringContributionsCount !== 1 ? 's' : ''} - applied
+                      automatically each month it's active, not counted in this total or in Cash Remaining below.
+                    </p>
+                  )}
                   {totalScheduledOffset > 0 && (
                     <div className="mt-1 space-y-1">
                       {/* "% of loan balance" reads as nonsense with no loan, so drop the line entirely. */}
@@ -1488,7 +1555,7 @@ const PropertyInvestmentCalculator = () => {
                   </div>
                   {totalScheduledOffset > 0 && (
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Scheduled Offset Contributions:</span>
+                      <span className="text-gray-600">One-Time Offset Contributions:</span>
                       <span className="font-semibold text-red-600">-${totalScheduledOffset.toLocaleString()}</span>
                     </div>
                   )}
@@ -1669,7 +1736,12 @@ const PropertyInvestmentCalculator = () => {
                 {offsetContributions.length > 1 && (
                   <div className="bg-cyan-400/30 backdrop-blur rounded-lg p-2 text-xs">
                     <p className="font-semibold">💰 Scheduled contributions:</p>
-                    <p>{offsetContributions.length} lump sum payments totaling ${totalScheduledOffset.toLocaleString()}</p>
+                    {oneTimeContributionsCount > 0 && (
+                      <p>{oneTimeContributionsCount} one-time payment{oneTimeContributionsCount !== 1 ? 's' : ''} totaling ${totalScheduledOffset.toLocaleString()}</p>
+                    )}
+                    {recurringContributionsCount > 0 && (
+                      <p>{recurringContributionsCount} recurring contribution{recurringContributionsCount !== 1 ? 's' : ''}</p>
+                    )}
                   </div>
                 )}
 
@@ -1900,16 +1972,18 @@ const PropertyInvestmentCalculator = () => {
                         <p className="font-bold text-cyan-800 border-b border-cyan-200 pb-1 mb-2">Offset History (Cumulative)</p>
                         <div className="space-y-1 text-xs max-h-32 overflow-y-auto">
                           {offsetContributions
-                            .filter(c => c.month <= timelineMonth)
-                            .sort((a, b) => b.month - a.month) // newest first
+                            .filter(c => c.startMonth <= timelineMonth)
+                            .sort((a, b) => b.startMonth - a.startMonth) // newest first
                             .map(c => (
                               <div key={c.id} className="flex justify-between items-center text-cyan-700">
-                                <span>Month {c.month}:</span>
-                                <span className="font-medium">+${c.amount.toLocaleString()}</span>
+                                <span>{formatScheduleLabel(c)}:</span>
+                                <span className="font-medium">
+                                  +${(countOccurrencesUpTo(c, timelineMonth) * c.amount).toLocaleString()}
+                                </span>
                               </div>
                             ))
                           }
-                          {offsetContributions.filter(c => c.month <= timelineMonth).length === 0 && (
+                          {offsetContributions.filter(c => c.startMonth <= timelineMonth).length === 0 && (
                             <span className="italic text-gray-400">No contributions yet</span>
                           )}
                         </div>

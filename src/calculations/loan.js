@@ -93,6 +93,12 @@ export function calculateFortnightlyToOffset(fortnightlyNetBalance) {
   return Math.max(0, fortnightlyNetBalance);
 }
 
+// Only one-time contributions count as "already reserved from today's
+// savings" - a recurring contribution (e.g. "$500 every quarter") comes out
+// of future cash flow, the same as the automatic monthly surplus, not a
+// chunk of savings sitting in the bank right now.
 export function calculateTotalScheduledOffset(offsetContributions) {
-  return offsetContributions.reduce((sum, contrib) => sum + contrib.amount, 0);
+  return offsetContributions
+    .filter(contrib => contrib.recurrence === 'none')
+    .reduce((sum, contrib) => sum + contrib.amount, 0);
 }

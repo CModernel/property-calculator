@@ -6,11 +6,11 @@ describe('getNextSuggestion', () => {
     expect(getNextSuggestion([])).toBe(1);
   });
 
-  it('suggests max month + 1 for an unsorted list', () => {
-    expect(getNextSuggestion([{ month: 3 }, { month: 1 }])).toBe(4);
+  it('suggests max startMonth + 1 for an unsorted list', () => {
+    expect(getNextSuggestion([{ startMonth: 3 }, { startMonth: 1 }])).toBe(4);
   });
 
-  it('suggests element.month + 1 for a single-element list', () => {
-    expect(getNextSuggestion([{ month: 7 }])).toBe(8);
+  it('suggests element.startMonth + 1 for a single-element list', () => {
+    expect(getNextSuggestion([{ startMonth: 7 }])).toBe(8);
   });
 });

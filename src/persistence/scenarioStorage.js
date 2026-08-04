@@ -13,7 +13,11 @@ const STORAGE_KEY = 'propertyCalculator.scenario';
 // incomeSources (each tenant is now an incomeSources entry carrying
 // isShared/numPeople/amountPerPerson) - a saved scenario's top-level
 // `tenants` field no longer exists.
-const SCHEMA_VERSION = 5;
+// Bumped to 6 in TODO-32: offsetContributions entries switched from
+// {id, month, amount} to the same Schedule shape as incomeSources/
+// exceptExpenses ({id, amount, startMonth, recurrence, endMonth}), so a
+// contribution can now recur instead of always being a single lump sum.
+const SCHEMA_VERSION = 6;
 
 // A version mismatch means the saved shape no longer matches what this
 // version of the app expects - discard rather than attempt a migration,

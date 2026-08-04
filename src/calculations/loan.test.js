@@ -215,8 +215,19 @@ describe('amounts available to offset', () => {
 });
 
 describe('calculateTotalScheduledOffset', () => {
-  it('sums all scheduled contribution amounts', () => {
-    expect(calculateTotalScheduledOffset([{ amount: 10000 }, { amount: 5000 }])).toBe(15000);
+  it('sums one-time scheduled contribution amounts', () => {
+    expect(calculateTotalScheduledOffset([
+      { amount: 10000, recurrence: 'none' },
+      { amount: 5000, recurrence: 'none' },
+    ])).toBe(15000);
     expect(calculateTotalScheduledOffset([])).toBe(0);
+  });
+
+  it('excludes recurring contributions - they come from future cash flow, not savings already set aside', () => {
+    expect(calculateTotalScheduledOffset([
+      { amount: 10000, recurrence: 'none' },
+      { amount: 500, recurrence: 'quarterly', startMonth: 1, endMonth: 360 },
+    ])).toBe(10000);
+    expect(calculateTotalScheduledOffset([{ amount: 500, recurrence: 'monthly', startMonth: 1, endMonth: 360 }])).toBe(0);
   });
 });

@@ -33,7 +33,7 @@ describe('calculateLoanWithOffset', () => {
 
   it('does not hit the sentinel when contributions are scheduled even with zero surplus', () => {
     const result = calculateLoanWithOffset({
-      contributions: [{ month: 1, amount: 1000 }],
+      contributions: [{ startMonth: 1, recurrence: 'none', amount: 1000 }],
       exceptExpenses: [],
       monthlyToOffset: 0,
       loanAmount: 1000,
@@ -62,7 +62,7 @@ describe('calculateLoanWithOffset', () => {
 
   it('pays off the loan early via a large contribution (break path), pushing the pre-override balance', () => {
     const result = calculateLoanWithOffset({
-      contributions: [{ month: 1, amount: 200000 }],
+      contributions: [{ startMonth: 1, recurrence: 'none', amount: 200000 }],
       exceptExpenses: [],
       monthlyToOffset: 0,
       loanAmount: 100000,
@@ -137,7 +137,10 @@ describe('calculateLoanWithOffset', () => {
 
   it('applies scheduled contributions by exact month regardless of array order', () => {
     const result = calculateLoanWithOffset({
-      contributions: [{ month: 5, amount: 2000 }, { month: 2, amount: 1000 }],
+      contributions: [
+        { startMonth: 5, recurrence: 'none', amount: 2000 },
+        { startMonth: 2, recurrence: 'none', amount: 1000 },
+      ],
       exceptExpenses: [],
       monthlyToOffset: 0,
       loanAmount: 10_000_000,
@@ -149,6 +152,52 @@ describe('calculateLoanWithOffset', () => {
     expect(offsets).toEqual([0, 1000, 1000, 1000, 3000, 3000]);
   });
 
+  it('applies a recurring "quarterly" contribution every 3rd month, not just once', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [{ startMonth: 1, recurrence: 'quarterly', endMonth: MAX_MONTH, amount: 500 }],
+      exceptExpenses: [],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 4,
+    });
+    const offsets = result.monthlyData.map(d => d.offset);
+    // $500 in months 1 and 4 (every 3rd month from month 1), nothing in between.
+    expect(offsets).toEqual([500, 500, 500, 1000]);
+  });
+
+  it('stops a bounded recurring contribution after its endMonth (inclusive)', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [{ startMonth: 1, recurrence: 'monthly', endMonth: 3, amount: 200 }],
+      exceptExpenses: [],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 4,
+    });
+    const offsets = result.monthlyData.map(d => d.offset);
+    expect(offsets).toEqual([200, 400, 600, 600]);
+  });
+
+  it('sums a one-time and a recurring contribution together in the same month', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [
+        { startMonth: 1, recurrence: 'none', amount: 5000 },
+        { startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH, amount: 200 },
+      ],
+      exceptExpenses: [],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 2,
+    });
+    const offsets = result.monthlyData.map(d => d.offset);
+    expect(offsets).toEqual([5200, 5400]);
+  });
+
   // Regression guard for the bug where the "Interest Amount (monthly)" panel used
   // (loanAmount - month1Offset) * monthlyRate, silently ignoring the recurring
   // monthly surplus that this loop deposits into the offset in month 1. That made
@@ -157,7 +206,7 @@ describe('calculateLoanWithOffset', () => {
     const loanAmount = 250000;
     const monthlyRate = 0.005;
     const monthlyToOffset = 4000;
-    const contributions = [{ month: 1, amount: 20000 }];
+    const contributions = [{ startMonth: 1, recurrence: 'none', amount: 20000 }];
 
     const result = calculateLoanWithOffset({
       contributions,

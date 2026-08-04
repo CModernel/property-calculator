@@ -24,6 +24,17 @@ export function getActiveAmount(items, month) {
   return items.reduce((sum, item) => (isScheduleActive(item, month) ? sum + item.amount : sum), 0);
 }
 
+// How many times a schedule has fired by the given month (inclusive) -
+// used by the Timeline Explorer's cumulative offset history, where a
+// recurring contribution needs a running total instead of a single
+// active/inactive check.
+export function countOccurrencesUpTo(schedule, month) {
+  if (month < schedule.startMonth) return 0;
+  if (schedule.recurrence === 'none') return 1;
+  const cappedMonth = Math.min(month, schedule.endMonth);
+  return Math.floor((cappedMonth - schedule.startMonth) / INTERVAL_MONTHS[schedule.recurrence]) + 1;
+}
+
 const RECURRENCE_LABELS = { monthly: 'Monthly', quarterly: 'Quarterly', yearly: 'Yearly' };
 
 // Human-readable summary for list rows (e.g. "Monthly, from month 1" or

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getActiveAmount, isScheduleActive, formatScheduleLabel, MAX_MONTH } from './recurringAmount';
+import { getActiveAmount, isScheduleActive, countOccurrencesUpTo, formatScheduleLabel, MAX_MONTH } from './recurringAmount';
 
 describe('isScheduleActive', () => {
   it('is active only on its exact month when recurrence is "none"', () => {
@@ -60,6 +60,34 @@ describe('getActiveAmount', () => {
 
   it('returns 0 for an empty list', () => {
     expect(getActiveAmount([], 1)).toBe(0);
+  });
+});
+
+describe('countOccurrencesUpTo', () => {
+  it('returns 0 before the schedule has started', () => {
+    expect(countOccurrencesUpTo({ startMonth: 6, recurrence: 'none' }, 5)).toBe(0);
+  });
+
+  it('counts a one-time schedule as exactly 1 occurrence once reached', () => {
+    expect(countOccurrencesUpTo({ startMonth: 6, recurrence: 'none' }, 6)).toBe(1);
+    expect(countOccurrencesUpTo({ startMonth: 6, recurrence: 'none' }, 50)).toBe(1);
+  });
+
+  it('counts every fired month for a recurring schedule', () => {
+    const schedule = { startMonth: 3, recurrence: 'monthly', endMonth: MAX_MONTH };
+    expect(countOccurrencesUpTo(schedule, 3)).toBe(1);
+    expect(countOccurrencesUpTo(schedule, 5)).toBe(3);
+  });
+
+  it('counts only the fired months for quarterly/yearly recurrence', () => {
+    expect(countOccurrencesUpTo({ startMonth: 1, recurrence: 'quarterly', endMonth: MAX_MONTH }, 9)).toBe(3);
+    expect(countOccurrencesUpTo({ startMonth: 1, recurrence: 'yearly', endMonth: MAX_MONTH }, 25)).toBe(3);
+  });
+
+  it('stops counting past endMonth (inclusive boundary)', () => {
+    const schedule = { startMonth: 1, recurrence: 'monthly', endMonth: 10 };
+    expect(countOccurrencesUpTo(schedule, 10)).toBe(10);
+    expect(countOccurrencesUpTo(schedule, 50)).toBe(10);
   });
 });
 

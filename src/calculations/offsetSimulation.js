@@ -43,12 +43,11 @@ export function calculateLoanWithOffset({
   while (balance > 0.01 && months < maxMonths) {
     months++;
 
-    // Apply any scheduled offset contributions for this month
-    contributions.forEach(contrib => {
-      if (contrib.month === months) {
-        offsetBalance += contrib.amount;
-      }
-    });
+    // Apply any offset contributions active this month - a one-time
+    // contribution (recurrence: 'none') only fires on its exact startMonth,
+    // same as before; a recurring one now fires every month/quarter/year
+    // within its range, same resolution as Income Sources/Exceptional Expenses.
+    offsetBalance += getActiveAmount(contributions, months);
 
     // Calculate Exceptional Expenses for this month
     const monthlyExceptionalCost = getActiveAmount(exceptExpenses, months);

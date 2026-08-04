@@ -627,37 +627,69 @@ optionally reuse in the commit message when you implement it.
   the Tenants entry living inside `incomeSources`; reloaded the page and
   confirmed the restored scenario matched exactly.
 
+- [x] **TODO-32: Apply the Schedule model to Offset Contributions**
+  Requested by the user, following up on TODO-31 - asked whether the
+  unified `Schedule` model should extend to other income/expense-like
+  fields. `offsetContributions` entries switched from `{id, month, amount}`
+  (always a single one-time lump sum) to the same Schedule shape as
+  Income Sources/Exceptional Expenses: `{id, amount, startMonth,
+  recurrence: 'none'|'monthly'|'quarterly'|'yearly', endMonth}` - a
+  contribution can now recur (e.g. "$500 every quarter") instead of only
+  ever being one lump sum. Contributions default to **One-Time** in the
+  add form (unlike Income/Expenses, which default to recurring) to
+  preserve the pre-TODO-32 behavior where every existing contribution was
+  a single lump sum - recurring is opt-in via the same One-Time checkbox/
+  Start Month/Monthly-Quarterly-Yearly/End Month controls already used
+  elsewhere. `offsetSimulation.js`'s contribution-application logic
+  collapsed from a `forEach` matching `contrib.month === months` to a
+  single `offsetBalance += getActiveAmount(contributions, months)` -
+  `getActiveAmount` already handled this shape for Income/Expenses, so no
+  new resolution logic was needed there.
+  **Design question resolved with the user**: should a recurring
+  contribution's *total* commitment (all future occurrences) subtract from
+  `cashRemaining` the same way a one-time lump sum already does? The
+  user's call: **no** - `calculateTotalScheduledOffset`
+  (`src/calculations/loan.js`) now only sums `recurrence === 'none'`
+  contributions, since a recurring contribution is naturally funded by
+  future cash flow (like the automatic monthly surplus already deposited
+  into the offset), not a chunk of today's savings sitting in the bank -
+  summing a "$500/quarter forever" contribution's full 30-year total
+  against savings-on-hand today would be unrealistic. The UI makes this
+  split explicit rather than silently under-counting: "One-Time
+  Contributions Total" (renamed from "Total Scheduled Offset") plus a
+  "Plus N recurring contribution(s) - ... not counted in this total or in
+  Cash Remaining below" note; the Loan Simulation card's summary line
+  similarly split into "N one-time payment(s) totaling $X" and "N
+  recurring contribution(s)" instead of one now-inaccurate "N lump sum
+  payments" line.
+  New `countOccurrencesUpTo(schedule, month)` in
+  `src/calculations/recurringAmount.js` (+ tests) powers the Timeline
+  Explorer's "Offset History (Cumulative)" column, which needed a running
+  total of how many times a recurring contribution has fired by the
+  viewed month, not just an active/inactive check - replaces the old
+  "list every one-time contribution whose month has passed" with
+  "`formatScheduleLabel` + cumulative $ contributed so far" for every
+  entry, one-time or recurring. `getNextSuggestion`
+  (`src/calculations/suggestions.js`) updated to read `.startMonth`
+  instead of the removed `.month` field.
+  `SCHEMA_VERSION` bumped 5→6 (`scenarioStorage.js`), discarding old-shape
+  saved scenarios (`{month, amount}` contributions) cleanly.
+  Verified in the browser: added a $500 quarterly contribution (Forever)
+  alongside the default Salary income, confirmed "One-Time Contributions
+  Total: $0" with "Plus 1 recurring contribution..." shown correctly (not
+  silently omitted), confirmed Remaining Savings was unaffected by the
+  recurring contribution, confirmed Loan Simulation reacted (10.4 years,
+  down from 10.8 with no contributions); jumped the Timeline Explorer to
+  month 73 and confirmed "Offset History" showed "Quarterly, from month
+  1: +$12,500" (25 quarterly occurrences × $500, matching
+  `countOccurrencesUpTo`'s math exactly); saved a scenario and confirmed
+  `version: 6` in `localStorage` with the new Schedule-shaped
+  `offsetContributions` entry, and reloaded to confirm the restored
+  scenario matched exactly.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
-
-- [ ] **TODO-32: Apply the Schedule model to Offset Contributions**
-  Requested by the user, following up on TODO-31 - asked whether the new
-  unified `Schedule` model (`src/calculations/recurringAmount.js`) should
-  extend to other income/expense-like fields. Audited every month/date-
-  bearing field in the app: **Offset Contributions is the other real gap**.
-  Today `offsetContributions` entries are `{id, month, amount}`
-  (`addOffsetContribution`, `src/App.jsx`) - always a single one-time lump
-  sum, with an explicit uniqueness guard preventing two contributions in
-  the same month. There's no way to express "contribute $500 every
-  quarter" - repeating one today means adding N separate entries by hand.
-  Adding `recurrence`/`endMonth` (reusing the same Schedule shape and
-  `getActiveAmount`/`isScheduleActive` from `recurringAmount.js`) would let
-  a contribution recur monthly/quarterly/yearly just like Income Sources
-  and Exceptional Expenses now do. Needs to fold the contribution amount
-  into `offsetBalance` per month inside the loop
-  (`src/calculations/offsetSimulation.js`, currently a simple `forEach`
-  matching `contrib.month === months` at the top of the loop) instead of
-  a single exact-month match - straightforward given `getActiveAmount`
-  already exists, but touches the loop's contribution-application logic,
-  not just `exceptExpenses`/`incomeSources` like TODO-31 did.
-  **Confirmed NOT a fit for the same treatment:** the 7 "stepped" expense
-  fields (strata/utilities/council/insurance/food/transport/other,
-  `useSteppedValue`/`getSteppedValue`) - these model "what's the current
-  rate as of this month" (a base value permanently superseded by a later
-  change, no end date, no repeat interval), not "does a cash event fire
-  this month" - a fundamentally different concept from Schedule, correctly
-  left as-is.
 
 - [ ] **TODO-34: Expand Income Name to a full 15-type picklist, with a smart default Schedule per type**
   Requested by the user. TODO-29 (done) has already merged tenants into
@@ -801,4 +833,14 @@ optionally reuse in the commit message when you implement it.
   longer have callers after TODO-2. They're tested and correct, so they were
   left in place rather than widening a bug-fix diff — decide whether the module
   should be a general formula library or contain only what the app uses.
+
+- [ ] **TODO-37: Replace the Property Type button pair with a dropdown**
+  Requested by the user - the two big House/Unit buttons
+  (`src/App.jsx:538-556`, `handlePropertyTypeChange`) feel oversized for a
+  simple two-option choice; a combo box/dropdown (`<select>`) reads better.
+  Same pattern already used elsewhere in the app (e.g. the Income Name
+  picklist) - swap the two `<button>`s for a single `<select value=
+  {propertyType} onChange={(e) => handlePropertyTypeChange(e.target.value)}>`
+  with House/Unit ⁄ Apartment options; `handlePropertyTypeChange` itself
+  (the strata-default-on-switch-to-unit logic) needs no changes.
   
