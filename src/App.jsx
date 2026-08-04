@@ -37,7 +37,7 @@ import { sumClosingCosts } from './calculations/closingCosts';
 import { calculateTotalCashRequired, calculateCashRemaining } from './calculations/totalCashRequired';
 import { isMonthInRange } from './calculations/dateRange';
 import { getSteppedValue } from './calculations/steppedValue';
-import { getActiveAmount } from './calculations/recurringAmount';
+import { getActiveAmount, formatScheduleLabel, MAX_MONTH } from './calculations/recurringAmount';
 import { useSteppedValue } from './hooks/useSteppedValue';
 import SteppedExpenseField from './components/SteppedExpenseField';
 import { loadScenario, saveScenario, clearScenario } from './persistence/scenarioStorage';
@@ -92,19 +92,20 @@ const PropertyInvestmentCalculator = () => {
   const [newTenantHasEndMonth, setNewTenantHasEndMonth] = useState(false);
   const [newTenantEndMonth, setNewTenantEndMonth] = useState(24);
 
-  // Income sources (salary, other income, one-time payments) - same
-  // one-time/recurring-forever/period shape as Exceptional Expenses, resolved
-  // per month via getActiveAmount (src/calculations/recurringAmount.js).
+  // Income sources (salary, other income, one-time payments) - a single
+  // "Schedule" shape { startMonth, recurrence: 'none'|'monthly'|'quarterly'|
+  // 'yearly', endMonth }, shared with Exceptional Expenses and resolved per
+  // month via getActiveAmount (src/calculations/recurringAmount.js).
   const [incomeSources, setIncomeSources] = useState(config.incomeSources ?? []);
   const [showIncome, setShowIncome] = useState(false);
   const [showAddIncome, setShowAddIncome] = useState(false);
-  const [newIncomeName, setNewIncomeName] = useState('Salary');
+  const [newIncomeCategory, setNewIncomeCategory] = useState('Salary'); // Salary | Freelance | Bonus | Other
+  const [newIncomeCustomName, setNewIncomeCustomName] = useState(''); // only used when category is 'Other'
   const [newIncomeAmount, setNewIncomeAmount] = useState(config.newIncomeAmount);
-  const [newIncomeType, setNewIncomeType] = useState('recurring'); // one-time | recurring
-  const [newIncomeMonth, setNewIncomeMonth] = useState(1); // for one-time
-  const [newIncomeRecurrence, setNewIncomeRecurrence] = useState('forever'); // forever | period
-  const [newIncomeStart, setNewIncomeStart] = useState(1);
-  const [newIncomeEnd, setNewIncomeEnd] = useState(4);
+  const [newIncomeOneTime, setNewIncomeOneTime] = useState(false);
+  const [newIncomeStartMonth, setNewIncomeStartMonth] = useState(1);
+  const [newIncomeRecurrence, setNewIncomeRecurrence] = useState('monthly'); // monthly | quarterly | yearly
+  const [newIncomeEndMonth, setNewIncomeEndMonth] = useState(MAX_MONTH);
 
   // Your personal expenses
   const foodExpensesField = useSteppedValue(config.foodExpenses, config.foodExpensesChanges);
@@ -123,11 +124,10 @@ const PropertyInvestmentCalculator = () => {
   const [showAddExceptExp, setShowAddExceptExp] = useState(false);
   const [newExpName, setNewExpName] = useState('Rent');
   const [newExpAmount, setNewExpAmount] = useState(config.newExpAmount);
-  const [newExpType, setNewExpType] = useState('recurring'); // one-time | recurring
-  const [newExpMonth, setNewExpMonth] = useState(1); // for one-time
-  const [newExpRecurrence, setNewExpRecurrence] = useState('period'); // forever | period
-  const [newExpStart, setNewExpStart] = useState(1);
-  const [newExpEnd, setNewExpEnd] = useState(4);
+  const [newExpOneTime, setNewExpOneTime] = useState(false);
+  const [newExpStartMonth, setNewExpStartMonth] = useState(1);
+  const [newExpRecurrence, setNewExpRecurrence] = useState('monthly'); // monthly | quarterly | yearly
+  const [newExpEndMonth, setNewExpEndMonth] = useState(MAX_MONTH);
 
   // Timeline Explorer State
   const [timelineMonth, setTimelineMonth] = useState(0);
@@ -432,7 +432,8 @@ const PropertyInvestmentCalculator = () => {
 
   // Income Sources Functions
   const addIncomeSource = () => {
-    if (!newIncomeName) {
+    const name = newIncomeCategory === 'Other' ? newIncomeCustomName : newIncomeCategory;
+    if (!name) {
       alert('Please enter a name for the income source.');
       return;
     }
@@ -440,27 +441,29 @@ const PropertyInvestmentCalculator = () => {
       alert('Please enter a valid amount.');
       return;
     }
-
-    if (newIncomeType === 'recurring' && newIncomeRecurrence === 'period' && newIncomeStart > newIncomeEnd) {
+    if (!newIncomeOneTime && newIncomeStartMonth > newIncomeEndMonth) {
       alert('Start month must be before end month.');
       return;
     }
 
     const newIncome = {
       id: Date.now(),
-      name: newIncomeName,
+      name,
       amount: newIncomeAmount,
-      type: newIncomeType,
-      month: newIncomeMonth, // relevant if one-time
-      recurrence: newIncomeRecurrence, // relevant if recurring
-      startMonth: newIncomeStart,
-      endMonth: newIncomeEnd
+      startMonth: newIncomeStartMonth,
+      recurrence: newIncomeOneTime ? 'none' : newIncomeRecurrence,
+      ...(newIncomeOneTime ? {} : { endMonth: newIncomeEndMonth }),
     };
 
     setIncomeSources([...incomeSources, newIncome]);
     setShowAddIncome(false);
-    setNewIncomeName('Salary');
+    setNewIncomeCategory('Salary');
+    setNewIncomeCustomName('');
     setNewIncomeAmount(config.newIncomeAmount);
+    setNewIncomeOneTime(false);
+    setNewIncomeStartMonth(1);
+    setNewIncomeRecurrence('monthly');
+    setNewIncomeEndMonth(MAX_MONTH);
   };
 
   const removeIncomeSource = (id) => {
@@ -477,8 +480,7 @@ const PropertyInvestmentCalculator = () => {
       alert('Please enter a valid amount.');
       return;
     }
-
-    if (newExpType === 'recurring' && newExpRecurrence === 'period' && newExpStart > newExpEnd) {
+    if (!newExpOneTime && newExpStartMonth > newExpEndMonth) {
       alert('Start month must be before end month.');
       return;
     }
@@ -487,17 +489,19 @@ const PropertyInvestmentCalculator = () => {
       id: Date.now(),
       name: newExpName,
       amount: newExpAmount,
-      type: newExpType,
-      month: newExpMonth, // relevant if one-time
-      recurrence: newExpRecurrence, // relevant if recurring
-      startMonth: newExpStart,
-      endMonth: newExpEnd
+      startMonth: newExpStartMonth,
+      recurrence: newExpOneTime ? 'none' : newExpRecurrence,
+      ...(newExpOneTime ? {} : { endMonth: newExpEndMonth }),
     };
 
     setExceptExpenses([...exceptExpenses, newExp]);
     setShowAddExceptExp(false);
     setNewExpName('Rent');
     setNewExpAmount(920);
+    setNewExpOneTime(false);
+    setNewExpStartMonth(1);
+    setNewExpRecurrence('monthly');
+    setNewExpEndMonth(MAX_MONTH);
   };
 
   const removeExceptionalExpense = (id) => {
@@ -959,13 +963,25 @@ const PropertyInvestmentCalculator = () => {
                   <div className="grid gap-3">
                     <div>
                       <label className="block font-medium text-gray-700 mb-1">Income Name</label>
-                      <input
-                        type="text"
-                        value={newIncomeName}
-                        onChange={(e) => setNewIncomeName(e.target.value)}
+                      <select
+                        value={newIncomeCategory}
+                        onChange={(e) => setNewIncomeCategory(e.target.value)}
                         className="w-full p-2 border rounded"
-                        placeholder="e.g. Salary, Freelance, Bonus"
-                      />
+                      >
+                        <option>Salary</option>
+                        <option>Freelance</option>
+                        <option>Bonus</option>
+                        <option>Other</option>
+                      </select>
+                      {newIncomeCategory === 'Other' && (
+                        <input
+                          type="text"
+                          value={newIncomeCustomName}
+                          onChange={(e) => setNewIncomeCustomName(e.target.value)}
+                          className="w-full p-2 border rounded mt-2"
+                          placeholder="e.g. Dividends, Side Business"
+                        />
+                      )}
                     </div>
 
                     <NumberSliderField
@@ -981,64 +997,51 @@ const PropertyInvestmentCalculator = () => {
                       prefix="$"
                     />
 
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setNewIncomeType('one-time')}
-                        className={`flex-1 py-1 rounded border ${newIncomeType === 'one-time' ? 'bg-green-200 border-green-400 font-bold' : 'bg-white'}`}
-                      >One-Time</button>
-                      <button
-                        onClick={() => setNewIncomeType('recurring')}
-                        className={`flex-1 py-1 rounded border ${newIncomeType === 'recurring' ? 'bg-green-200 border-green-400 font-bold' : 'bg-white'}`}
-                      >Recurring</button>
+                    <label className="flex items-center gap-2 text-xs font-medium text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={newIncomeOneTime}
+                        onChange={(e) => setNewIncomeOneTime(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                      />
+                      One-Time (occurs once, doesn't repeat)
+                    </label>
+
+                    <div>
+                      <label className="block text-xs font-medium mb-1">
+                        {newIncomeOneTime ? `Occurs at Month: ${newIncomeStartMonth}` : `Start Month: ${newIncomeStartMonth}`}
+                      </label>
+                      <input
+                        type="range" min="1" max={MAX_MONTH}
+                        value={newIncomeStartMonth}
+                        onChange={(e) => setNewIncomeStartMonth(Number(e.target.value))}
+                        className="w-full h-2 bg-green-200 rounded-lg appearance-none cursor-pointer"
+                      />
                     </div>
 
-                    {newIncomeType === 'one-time' && (
-                      <div>
-                        <label className="block font-medium text-gray-700 mb-1">Occurs at Month: {newIncomeMonth}</label>
-                        <input
-                          type="range" min="1" max="360"
-                          value={newIncomeMonth}
-                          onChange={(e) => setNewIncomeMonth(Number(e.target.value))}
-                          className="w-full h-2 bg-green-200 rounded-lg appearance-none cursor-pointer"
-                        />
-                      </div>
-                    )}
-
-                    {newIncomeType === 'recurring' && (
+                    {!newIncomeOneTime && (
                       <div className="space-y-3">
                         <div className="flex gap-2 text-xs">
-                          <button
-                            onClick={() => setNewIncomeRecurrence('forever')}
-                            className={`flex-1 py-1 rounded border ${newIncomeRecurrence === 'forever' ? 'bg-emerald-200 border-emerald-400 font-bold' : 'bg-white'}`}
-                          >Forever</button>
-                          <button
-                            onClick={() => setNewIncomeRecurrence('period')}
-                            className={`flex-1 py-1 rounded border ${newIncomeRecurrence === 'period' ? 'bg-emerald-200 border-emerald-400 font-bold' : 'bg-white'}`}
-                          >Specific Period</button>
+                          {['monthly', 'quarterly', 'yearly'].map((option) => (
+                            <button
+                              key={option}
+                              onClick={() => setNewIncomeRecurrence(option)}
+                              className={`flex-1 py-1 rounded border capitalize ${newIncomeRecurrence === option ? 'bg-emerald-200 border-emerald-400 font-bold' : 'bg-white'}`}
+                            >{option}</button>
+                          ))}
                         </div>
 
-                        {newIncomeRecurrence === 'period' && (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            <div>
-                              <label className="block text-xs font-medium mb-1">Start Month: {newIncomeStart}</label>
-                              <input
-                                type="range" min="1" max="360"
-                                value={newIncomeStart}
-                                onChange={(e) => setNewIncomeStart(Number(e.target.value))}
-                                className="w-full h-2 bg-emerald-200 rounded-lg appearance-none cursor-pointer"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium mb-1">End Month: {newIncomeEnd}</label>
-                              <input
-                                type="range" min={newIncomeStart} max="360"
-                                value={newIncomeEnd}
-                                onChange={(e) => setNewIncomeEnd(Number(e.target.value))}
-                                className="w-full h-2 bg-emerald-200 rounded-lg appearance-none cursor-pointer"
-                              />
-                            </div>
-                          </div>
-                        )}
+                        <div>
+                          <label className="block text-xs font-medium mb-1">
+                            End Month: {newIncomeEndMonth === MAX_MONTH ? 'Forever' : newIncomeEndMonth}
+                          </label>
+                          <input
+                            type="range" min={newIncomeStartMonth} max={MAX_MONTH}
+                            value={newIncomeEndMonth}
+                            onChange={(e) => setNewIncomeEndMonth(Number(e.target.value))}
+                            className="w-full h-2 bg-emerald-200 rounded-lg appearance-none cursor-pointer"
+                          />
+                        </div>
                       </div>
                     )}
 
@@ -1062,7 +1065,7 @@ const PropertyInvestmentCalculator = () => {
                     <div>
                       <p className="font-bold text-gray-800">{income.name}</p>
                       <p className="text-xs text-gray-600">
-                        ${income.amount}/week • {income.type === 'one-time' ? `Month ${income.month}` : (income.recurrence === 'forever' ? 'Forever' : `Months ${income.startMonth}-${income.endMonth}`)}
+                        ${income.amount}/week • {formatScheduleLabel(income)}
                       </p>
                     </div>
                     <button onClick={() => removeIncomeSource(income.id)} className="text-red-500 font-bold px-2">✕</button>
@@ -1432,64 +1435,51 @@ const PropertyInvestmentCalculator = () => {
                         hideSlider
                       />
 
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setNewExpType('one-time')}
-                          className={`flex-1 py-1 rounded border ${newExpType === 'one-time' ? 'bg-yellow-200 border-yellow-400 font-bold' : 'bg-white'}`}
-                        >One-Time</button>
-                        <button
-                          onClick={() => setNewExpType('recurring')}
-                          className={`flex-1 py-1 rounded border ${newExpType === 'recurring' ? 'bg-yellow-200 border-yellow-400 font-bold' : 'bg-white'}`}
-                        >Recurring</button>
+                      <label className="flex items-center gap-2 text-xs font-medium text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={newExpOneTime}
+                          onChange={(e) => setNewExpOneTime(e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300 text-yellow-600 focus:ring-yellow-500"
+                        />
+                        One-Time (occurs once, doesn't repeat)
+                      </label>
+
+                      <div>
+                        <label className="block font-medium text-gray-700 mb-1">
+                          {newExpOneTime ? `Occurs at Month: ${newExpStartMonth}` : `Start Month: ${newExpStartMonth}`}
+                        </label>
+                        <input
+                          type="range" min="1" max={MAX_MONTH}
+                          value={newExpStartMonth}
+                          onChange={(e) => setNewExpStartMonth(Number(e.target.value))}
+                          className="w-full h-2 bg-yellow-200 rounded-lg appearance-none cursor-pointer"
+                        />
                       </div>
 
-                      {newExpType === 'one-time' && (
-                        <div>
-                          <label className="block font-medium text-gray-700 mb-1">Occurs at Month: {newExpMonth}</label>
-                          <input
-                            type="range" min="1" max="360"
-                            value={newExpMonth}
-                            onChange={(e) => setNewExpMonth(Number(e.target.value))}
-                            className="w-full h-2 bg-yellow-200 rounded-lg appearance-none cursor-pointer"
-                          />
-                        </div>
-                      )}
-
-                      {newExpType === 'recurring' && (
+                      {!newExpOneTime && (
                         <div className="space-y-3">
                           <div className="flex gap-2 text-xs">
-                            <button
-                              onClick={() => setNewExpRecurrence('forever')}
-                              className={`flex-1 py-1 rounded border ${newExpRecurrence === 'forever' ? 'bg-orange-200 border-orange-400 font-bold' : 'bg-white'}`}
-                            >Forever</button>
-                            <button
-                              onClick={() => setNewExpRecurrence('period')}
-                              className={`flex-1 py-1 rounded border ${newExpRecurrence === 'period' ? 'bg-orange-200 border-orange-400 font-bold' : 'bg-white'}`}
-                            >Specific Period</button>
+                            {['monthly', 'quarterly', 'yearly'].map((option) => (
+                              <button
+                                key={option}
+                                onClick={() => setNewExpRecurrence(option)}
+                                className={`flex-1 py-1 rounded border capitalize ${newExpRecurrence === option ? 'bg-orange-200 border-orange-400 font-bold' : 'bg-white'}`}
+                              >{option}</button>
+                            ))}
                           </div>
 
-                          {newExpRecurrence === 'period' && (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              <div>
-                                <label className="block text-xs font-medium mb-1">Start Month: {newExpStart}</label>
-                                <input
-                                  type="range" min="1" max="360"
-                                  value={newExpStart}
-                                  onChange={(e) => setNewExpStart(Number(e.target.value))}
-                                  className="w-full h-2 bg-orange-200 rounded-lg appearance-none cursor-pointer"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs font-medium mb-1">End Month: {newExpEnd}</label>
-                                <input
-                                  type="range" min={newExpStart} max="360"
-                                  value={newExpEnd}
-                                  onChange={(e) => setNewExpEnd(Number(e.target.value))}
-                                  className="w-full h-2 bg-orange-200 rounded-lg appearance-none cursor-pointer"
-                                />
-                              </div>
-                            </div>
-                          )}
+                          <div>
+                            <label className="block text-xs font-medium mb-1">
+                              End Month: {newExpEndMonth === MAX_MONTH ? 'Forever' : newExpEndMonth}
+                            </label>
+                            <input
+                              type="range" min={newExpStartMonth} max={MAX_MONTH}
+                              value={newExpEndMonth}
+                              onChange={(e) => setNewExpEndMonth(Number(e.target.value))}
+                              className="w-full h-2 bg-orange-200 rounded-lg appearance-none cursor-pointer"
+                            />
+                          </div>
                         </div>
                       )}
 
@@ -1512,7 +1502,7 @@ const PropertyInvestmentCalculator = () => {
                       <div>
                         <p className="font-bold text-gray-800">{exp.name}</p>
                         <p className="text-xs text-gray-600">
-                          ${exp.amount} • {exp.type === 'one-time' ? `Month ${exp.month}` : (exp.recurrence === 'forever' ? 'Forever' : `Months ${exp.startMonth}-${exp.endMonth}`)}
+                          ${exp.amount} • {formatScheduleLabel(exp)}
                         </p>
                       </div>
                       <button onClick={() => removeExceptionalExpense(exp.id)} className="text-red-500 font-bold px-2">✕</button>
@@ -2037,12 +2027,10 @@ const PropertyInvestmentCalculator = () => {
                           <div className="mt-2 pt-2 border-t border-green-200">
                             {incomeSources.map(inc => {
                               let status = 'active';
-                              if (inc.type === 'one-time') {
-                                if (inc.month !== timelineMonth) status = inc.month < timelineMonth ? 'past' : 'future';
-                              } else if (inc.recurrence === 'period') {
-                                if (timelineMonth < inc.startMonth) status = 'future';
-                                else if (timelineMonth > inc.endMonth) status = 'past';
-                              }
+                              if (timelineMonth < inc.startMonth) status = 'future';
+                              else if (inc.recurrence === 'none') {
+                                if (timelineMonth > inc.startMonth) status = 'past';
+                              } else if (timelineMonth > inc.endMonth) status = 'past';
                               if (status === 'future') return null;
                               return (
                                 <p key={`income-${inc.id}`} className={`truncate ${status === 'past' ? 'text-gray-400' : 'text-green-700'}`}>
@@ -2101,16 +2089,11 @@ const PropertyInvestmentCalculator = () => {
                         <p className="font-bold text-yellow-800 border-b border-yellow-200 pb-1 mb-2">Expenses Status</p>
                         <div className="space-y-1 text-xs max-h-32 overflow-y-auto">
                           {exceptExpenses.map(exp => {
-                            let status = 'future';
-                            if (exp.type === 'one-time') {
-                              if (exp.month === timelineMonth) status = 'active';
-                              else if (exp.month < timelineMonth) status = 'past';
-                            } else {
-                              // Recurring
-                              if (exp.recurrence === 'forever') status = 'active'; // Simplified
-                              else if (timelineMonth >= exp.startMonth && timelineMonth <= exp.endMonth) status = 'active';
-                              else if (timelineMonth > exp.endMonth) status = 'past';
-                            }
+                            let status = 'active';
+                            if (timelineMonth < exp.startMonth) status = 'future';
+                            else if (exp.recurrence === 'none') {
+                              if (timelineMonth > exp.startMonth) status = 'past';
+                            } else if (timelineMonth > exp.endMonth) status = 'past';
 
                             if (status === 'future') return null;
 
@@ -2121,7 +2104,7 @@ const PropertyInvestmentCalculator = () => {
                               </div>
                             );
                           })}
-                          {exceptExpenses.filter(e => e.month <= timelineMonth || e.startMonth <= timelineMonth).length === 0 && (
+                          {exceptExpenses.filter(e => e.startMonth <= timelineMonth).length === 0 && (
                             <span className="italic text-gray-400">No expenses recorded</span>
                           )}
                         </div>

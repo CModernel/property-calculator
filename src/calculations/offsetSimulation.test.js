@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { calculateLoanWithOffset } from './offsetSimulation';
+import { MAX_MONTH } from './recurringAmount';
 
 describe('calculateLoanWithOffset', () => {
   it('returns the sentinel result when there is no surplus and no contributions', () => {
@@ -94,7 +95,7 @@ describe('calculateLoanWithOffset', () => {
   it('clamps the net monthly deposit to 0 when an exceptional expense exceeds the surplus', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [{ type: 'one-time', month: 1, amount: 1000 }],
+      exceptExpenses: [{ startMonth: 1, recurrence: 'none', amount: 1000 }],
       monthlyToOffset: 500,
       loanAmount: 100000,
       monthlyRate: 0.005,
@@ -104,10 +105,10 @@ describe('calculateLoanWithOffset', () => {
     expect(result.monthlyData[0].offset).toBe(0);
   });
 
-  it('applies a "period" recurring expense only within the inclusive start/end month range', () => {
+  it('applies a "monthly" recurring expense only within the inclusive start/end month range', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [{ type: 'recurring', recurrence: 'period', startMonth: 3, endMonth: 5, amount: 400 }],
+      exceptExpenses: [{ startMonth: 3, recurrence: 'monthly', endMonth: 5, amount: 400 }],
       monthlyToOffset: 1000,
       loanAmount: 10_000_000, // large enough that effectiveOffset is never capped by balance
       monthlyRate: 0,
@@ -120,10 +121,10 @@ describe('calculateLoanWithOffset', () => {
     expect(offsets).toEqual([1000, 2000, 2600, 3200, 3800, 4800]);
   });
 
-  it('applies a "forever" recurring expense in every month, including far into the future', () => {
+  it('applies an open-ended ("Forever") recurring expense in every month, including far into the future', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [{ type: 'recurring', recurrence: 'forever', amount: 300 }],
+      exceptExpenses: [{ startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH, amount: 300 }],
       monthlyToOffset: 1000,
       loanAmount: 10_000_000,
       monthlyRate: 0,
@@ -262,7 +263,7 @@ describe('calculateLoanWithOffset', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
       exceptExpenses: [],
-      incomeSources: [{ id: 1, name: 'Bonus', amount: 300, type: 'one-time', month: 3 }],
+      incomeSources: [{ id: 1, name: 'Bonus', amount: 300, startMonth: 3, recurrence: 'none' }],
       monthlyToOffset: 0,
       loanAmount: 10_000_000,
       monthlyRate: 0,
@@ -274,11 +275,11 @@ describe('calculateLoanWithOffset', () => {
     expect(offsets).toEqual([0, 0, 1300, 1300]);
   });
 
-  it('adds a "forever" recurring income source every month', () => {
+  it('adds an open-ended ("Forever") monthly income source every month', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
       exceptExpenses: [],
-      incomeSources: [{ id: 1, name: 'Salary', amount: 300, type: 'recurring', recurrence: 'forever' }],
+      incomeSources: [{ id: 1, name: 'Salary', amount: 300, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
       monthlyToOffset: 0,
       loanAmount: 10_000_000,
       monthlyRate: 0,
@@ -289,12 +290,12 @@ describe('calculateLoanWithOffset', () => {
     expect(offsets).toEqual([1300, 2600, 3900]);
   });
 
-  it('adds a "period" recurring income source only within its inclusive range', () => {
+  it('adds a bounded monthly income source only within its inclusive range', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
       exceptExpenses: [],
       incomeSources: [
-        { id: 1, name: 'Freelance', amount: 300, type: 'recurring', recurrence: 'period', startMonth: 3, endMonth: 5 },
+        { id: 1, name: 'Freelance', amount: 300, startMonth: 3, recurrence: 'monthly', endMonth: 5 },
       ],
       monthlyToOffset: 0,
       loanAmount: 10_000_000,
@@ -306,12 +307,30 @@ describe('calculateLoanWithOffset', () => {
     expect(offsets).toEqual([0, 0, 1300, 2600, 3900, 3900]);
   });
 
+  it('adds a quarterly income source only every 3rd month', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      exceptExpenses: [],
+      incomeSources: [
+        { id: 1, name: 'Bonus', amount: 300, startMonth: 1, recurrence: 'quarterly', endMonth: MAX_MONTH },
+      ],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 4,
+    });
+    const offsets = result.monthlyData.map(d => d.offset);
+    // $300/week -> $1,300/month, only in months 1 and 4 (every 3rd month from month 1).
+    expect(offsets).toEqual([1300, 1300, 1300, 2600]);
+  });
+
   it('sums income sources and tenant rent together per month', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
       exceptExpenses: [],
       tenants: [{ id: 1, amount: 300, startMonth: null, endMonth: null }],
-      incomeSources: [{ id: 1, name: 'Salary', amount: 300, type: 'recurring', recurrence: 'forever' }],
+      incomeSources: [{ id: 1, name: 'Salary', amount: 300, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
       monthlyToOffset: 0,
       loanAmount: 10_000_000,
       monthlyRate: 0,
@@ -327,7 +346,7 @@ describe('calculateLoanWithOffset', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
       exceptExpenses: [],
-      incomeSources: [{ id: 1, name: 'Salary', amount: 0, type: 'recurring', recurrence: 'forever' }],
+      incomeSources: [{ id: 1, name: 'Salary', amount: 0, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
       monthlyToOffset: 0,
       loanAmount: 10_000_000,
       monthlyRate: 0,

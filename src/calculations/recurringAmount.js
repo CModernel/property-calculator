@@ -1,20 +1,37 @@
-import { isMonthInRange } from './dateRange';
+// Same max month used everywhere else in the app (tenant/exceptional-expense
+// sliders) - also doubles as the "Forever" sentinel for endMonth, per the
+// user's own suggestion: an item ending at the max month never gets cut off
+// before the simulation itself ends, so there's no need for a separate
+// null-means-unbounded case.
+export const MAX_MONTH = 360;
 
-// Sums the `amount` of every item active in the given month. Each item is
-// either a one-time hit (`type: 'one-time'`, active only when `month` matches
-// exactly) or recurring (`type: 'recurring'`), either forever
-// (`recurrence: 'forever'`) or for an inclusive `[startMonth, endMonth]`
-// window (`recurrence: 'period'`). Shared by exceptional expenses and income
-// sources, which use the exact same shape.
+const INTERVAL_MONTHS = { monthly: 1, quarterly: 3, yearly: 12 };
+
+// A single "Schedule" shape replaces the old one-time/recurring-forever/
+// period split: { startMonth, recurrence: 'none'|'monthly'|'quarterly'|
+// 'yearly', endMonth }. `endMonth` is only meaningful (and only stored) when
+// recurrence isn't 'none'.
+export function isScheduleActive(schedule, month) {
+  if (month < schedule.startMonth) return false;
+  if (schedule.recurrence === 'none') return month === schedule.startMonth;
+  if (month > schedule.endMonth) return false;
+  return (month - schedule.startMonth) % INTERVAL_MONTHS[schedule.recurrence] === 0;
+}
+
+// Sums the `amount` of every item active in the given month. Shared by
+// Income Sources and Exceptional Expenses, which use the exact same shape.
 export function getActiveAmount(items, month) {
-  return items.reduce((sum, item) => {
-    if (item.type === 'one-time') {
-      return item.month === month ? sum + item.amount : sum;
-    }
-    if (item.recurrence === 'forever') return sum + item.amount;
-    if (item.recurrence === 'period' && isMonthInRange(month, item.startMonth, item.endMonth)) {
-      return sum + item.amount;
-    }
-    return sum;
-  }, 0);
+  return items.reduce((sum, item) => (isScheduleActive(item, month) ? sum + item.amount : sum), 0);
+}
+
+const RECURRENCE_LABELS = { monthly: 'Monthly', quarterly: 'Quarterly', yearly: 'Yearly' };
+
+// Human-readable summary for list rows (e.g. "Monthly, from month 1" or
+// "Quarterly, months 3-12").
+export function formatScheduleLabel(schedule) {
+  if (schedule.recurrence === 'none') return `Month ${schedule.startMonth}`;
+  const label = RECURRENCE_LABELS[schedule.recurrence];
+  return schedule.endMonth === MAX_MONTH
+    ? `${label}, from month ${schedule.startMonth}`
+    : `${label}, months ${schedule.startMonth}-${schedule.endMonth}`;
 }

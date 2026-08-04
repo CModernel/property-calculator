@@ -11,7 +11,7 @@ describe('parseScenarioPayload', () => {
   });
 
   it('returns the data when the version matches', () => {
-    const raw = JSON.stringify({ version: 2, data: { propertyPrice: 900000 } });
+    const raw = JSON.stringify({ version: 3, data: { propertyPrice: 900000 } });
     expect(parseScenarioPayload(raw)).toEqual({ propertyPrice: 900000 });
   });
 
@@ -26,7 +26,7 @@ describe('parseScenarioPayload', () => {
   });
 
   it('returns null when data is missing', () => {
-    const raw = JSON.stringify({ version: 2 });
+    const raw = JSON.stringify({ version: 3 });
     expect(parseScenarioPayload(raw)).toBeNull();
   });
 });

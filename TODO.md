@@ -509,6 +509,53 @@ optionally reuse in the commit message when you implement it.
     $197,291); Financial Events Log correctly showed "Tax Refund (Done)"
     past month 31; save/reload round-tripped `incomeSources` correctly.
 
+- [x] **TODO-31: Unify One-Time/Recurring/Forever/Period into a single "Schedule" model**
+  Requested by the user, applied to both Income Sources and Exceptional
+  Expenses (decided together with the user upfront). The insight: these
+  weren't different types, they were all one concept - a vigency rule -
+  modeled the way Google Calendar models recurring events, adapted for
+  this app's month-granular (1-360) simulation (no Daily/Weekly/Fortnightly
+  recurrence, since the sim doesn't run at that resolution):
+  ```
+  Schedule
+  ├── Start Month (required, default 1)
+  ├── Recurrence: None | Monthly | Quarterly | Yearly (Custom interval left out for now)
+  └── End Month (only when recurrence != None; endMonth === 360 displays as "Forever")
+  ```
+  Replaced `{type: 'one-time'|'recurring', month, recurrence:
+  'forever'|'period', startMonth, endMonth}` with a single `{startMonth,
+  recurrence: 'none'|'monthly'|'quarterly'|'yearly', endMonth}` shape used
+  by both `incomeSources` and `exceptExpenses`. `getActiveAmount`'s public
+  signature was untouched, so `offsetSimulation.js`'s two call sites needed
+  **zero changes** - only its internal `isScheduleActive` logic changed,
+  now interval-aware (`monthly`/`quarterly`/`yearly` check `(month -
+  startMonth) % interval === 0`) instead of "every month in range". This is
+  a genuine new capability, not just a simplification: a quarterly bill or
+  annual bonus can now be modeled natively, which the old "period"
+  recurrence (active *every* month in range) couldn't express at all.
+  New `formatScheduleLabel(schedule)` (`src/calculations/recurringAmount.js`)
+  replaces the duplicated ternary that used to live in both Income's and
+  Exceptional Expenses' list rendering.
+  **UI**: the old One-Time/Recurring button pair became a single "One-Time"
+  checkbox (default unchecked = recurring); the old Forever/Specific-Period
+  button pair disappeared entirely - just one Start Month slider (always
+  shown) and one End Month slider (shown when not one-time, labelled
+  "Forever" at its max value of 360 instead of the number, per the user's
+  own suggestion) plus a Monthly/Quarterly/Yearly selector. Income Sources
+  additionally got a Name picklist (Salary/Freelance/Bonus/Other+custom)
+  resolving the other half of the now-superseded TODO-30 - "Rental Income"
+  was deliberately left out of the preset list per the user's own choice,
+  reserved for when TODO-29 actually merges tenants in.
+  `SCHEMA_VERSION` bumped 2→3 (`scenarioStorage.js`) so scenarios saved
+  under the old shape are cleanly discarded rather than merged into the
+  new one. Verified in the browser: the default "Salary" entry still
+  produces the same 10.8-year payoff (equivalent to the old "Forever"
+  encoded as `endMonth: 360`); added a Quarterly income and confirmed the
+  label ("Quarterly, months 1-132") and subtotal math were correct; the
+  One-Time checkbox correctly swapped between "Start Month" and "Occurs at
+  Month" wording on both forms; saved a scenario and confirmed
+  `version: 3` with the new shape in `localStorage`.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -517,79 +564,16 @@ optionally reuse in the commit message when you implement it.
   Deferred from TODO-26, whose Phase 1 only generalized personal income
   (see that entry in Completed) - tenants/"Rental Income" still exist as
   their own separate card/state (`tenants`, `src/App.jsx`), not yet folded
-  into `incomeSources`. **Superseded in approach by TODO-31**: once every
-  income/expense entry shares TODO-31's unified `Schedule` shape, merging
-  tenants in becomes mostly a data-shape exercise (map `startMonth`/
-  `endMonth` into a `Schedule`, and give the "Income Name" picklist a
-  "Rental Income" preset) rather than a separate one-off migration. Still
-  needs its own pass to decide: does "shared room splits amount ÷2" stay a
-  tenant-specific display quirk, or does it need a `roomType` field
-  alongside the generic entry? Do this after TODO-31, not before.
-
-- [ ] **TODO-30: Simplify the Income Sources add-form UX**
-  **Superseded by TODO-31.** The three simplifications requested here
-  (Income Name as a picklist; a single "One-Time" checkbox instead of a
-  toggle; merging Forever/Specific Period into one Start/End range) are
-  all fully subsumed by TODO-31's unified `Schedule` model, which the user
-  proposed after this was written - implement that instead of this.
-
-- [ ] **TODO-31 (important): Unify One-Time/Recurring/Forever/Period into a single "Schedule" model**
-  Requested by the user - the same "One-Time vs. Recurring, Forever vs.
-  Specific Period" pattern is duplicated (and slightly inconsistent) across
-  Income Sources, Exceptional Expenses, and Tenants. The user's insight:
-  these aren't different types, they're all one concept - a **vigency
-  rule** (when something starts, whether/how it repeats, when it stops) -
-  modeled the way Google Calendar models recurring events (Start Date, End
-  Condition, Recurrence). **Adapted for this app**, since the simulation is
-  month-granular (month 1-360), not calendar-day granular - Daily/Weekly/
-  Fortnightly recurrence don't apply here, only month-based intervals do:
-  ```
-  Schedule
-  ├── Start Month (required, default 1)
-  ├── Recurrence
-  │     ├── None       -> occurs once, at Start Month only (replaces "One-Time")
-  │     ├── Monthly    -> every month (replaces today's "Recurring")
-  │     ├── Quarterly  -> every 3 months (NEW - not expressible today)
-  │     └── Yearly     -> every 12 months (NEW - not expressible today)
-  └── End (only relevant when Recurrence != None)
-        ├── Never      -> replaces "Forever"
-        └── On Month X -> replaces "Specific Period"
-  ```
-  This is a genuine improvement, not just a UI simplification: today's
-  "period" recurrence means "active *every* month between start and end" -
-  there's no way to express "every 3rd month" or "once a year" at all. A
-  single object shape `{startMonth, recurrence: 'none' | 'monthly' |
-  'quarterly' | 'yearly', endMonth}` would replace the current `{type:
-  'one-time' | 'recurring', month, recurrence: 'forever' | 'period',
-  startMonth, endMonth}` used by `incomeSources`/`exceptExpenses`, and
-  (via TODO-29) eventually `tenants` too - one shared resolver function
-  replaces `getActiveAmount` (`src/calculations/recurringAmount.js`,
-  itself already a TODO-26 unification of what was previously two
-  separate inline implementations) with an interval-aware version, e.g.:
-  ```js
-  const INTERVAL_MONTHS = { monthly: 1, quarterly: 3, yearly: 12 };
-  function isScheduleActive(schedule, month) {
-    if (month < schedule.startMonth) return false;
-    if (schedule.recurrence === 'none') return month === schedule.startMonth;
-    if (schedule.endMonth != null && month > schedule.endMonth) return false;
-    return (month - schedule.startMonth) % INTERVAL_MONTHS[schedule.recurrence] === 0;
-  }
-  ```
-  Also connects directly to the user's separate request that "Rental
-  Income" belongs inside "Income" as a type, not its own concept: once
-  every entry shares this `Schedule`, the "Income Name" field (TODO-30)
-  becomes a picklist of common categories - **Salary, Rental Income,
-  Freelance, Other -** with a "custom" escape hatch, and a tenant/rental
-  entry is just another Income entry with a category instead of a
-  fundamentally different data shape.
-  **Scope note:** this is a bigger redesign than any single TODO so far -
-  it touches the data model (3 features), the simulation loop, and the UI
-  of 2-3 add-forms at once. Needs its own dedicated design/planning pass
-  (data migration for existing saved scenarios - another `SCHEMA_VERSION`
-  bump per TODO-26's precedent - plus deciding whether "After N
-  Occurrences" as an end condition is worth adding alongside "Never"/"On
-  Month", or left out as the user's own sketch already dropped it) before
-  implementation starts.
+  into `incomeSources`. Now that TODO-31 has shipped the unified `Schedule`
+  shape (`{startMonth, recurrence: 'none'|'monthly'|'quarterly'|'yearly',
+  endMonth}`) for `incomeSources`/`exceptExpenses`, merging tenants in is
+  mostly a data-shape exercise: map tenant `startMonth`/`endMonth` into a
+  `Schedule` (tenants are always "monthly, no end" or "monthly, period" in
+  today's terms - never one-time/quarterly/yearly), and add "Rental Income"
+  as a preset in the Income Name dropdown (`src/App.jsx`, currently
+  Salary/Freelance/Bonus/Other). Still needs its own pass to decide: does
+  "shared room splits amount ÷2" stay a tenant-specific display quirk, or
+  does it need a `roomType` field alongside the generic entry?
 
 ---
 

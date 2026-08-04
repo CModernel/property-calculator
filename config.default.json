@@ -9,7 +9,7 @@
   "councilRates": 450,
   "insurance": 80,
   "incomeSources": [
-    { "id": 1, "name": "Salary", "amount": 1614, "type": "recurring", "recurrence": "forever", "month": null, "startMonth": null, "endMonth": null }
+    { "id": 1, "name": "Salary", "amount": 1614, "startMonth": 1, "recurrence": "monthly", "endMonth": 360 }
   ],
   "foodExpenses": 100,
   "transportExpenses": 50,
