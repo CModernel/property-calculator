@@ -460,48 +460,136 @@ optionally reuse in the commit message when you implement it.
   layout. Verified in the browser: hovering the badge at both call sites
   now shows the full, unclipped tooltip.
 
+- [x] **TODO-26 (Phase 1): Generalize personal income into multiple sources**
+  Requested by the user, scoped to Phase 1 with the user directly: only
+  personal income was generalized this pass - tenants/"Rental Income" stay
+  as their own separate concept for now (see TODO-29 for the deferred
+  merge). Confirmed income was never hardcoded - `fortnightlyIncome` was a
+  real, editable `useState` - the actual gap was the single-scalar model.
+  The single `fortnightlyIncome` scalar was replaced by `incomeSources`, a
+  list of named entries (`{id, name, amount, type: 'one-time' |
+  'recurring', month, recurrence: 'forever' | 'period', startMonth,
+  endMonth}`) - **the exact same shape Exceptional Expenses already used**,
+  reused directly rather than inventing a new one. **Cadence switched to
+  weekly** (per the user's preference, matching Sydney/NSW convention and
+  Rental Income's existing cadence) - `amount` is now $/week everywhere,
+  with month/year views still derived.
+  - New shared pure function `getActiveAmount(items, month)`
+    (`src/calculations/recurringAmount.js` + tests) resolves any one-time/
+    forever/period item for a given month - extracted so Exceptional
+    Expenses' inline per-month loop in `offsetSimulation.js` and the new
+    Income Sources both use the same logic instead of duplicating it. This
+    also fixed a real inconsistency: expenses previously checked date
+    ranges with raw `months >= start && months <= end` instead of
+    `isMonthInRange` (harmless in practice since expenses always set both
+    bounds, but a divergence nonetheless) - now both paths share one
+    implementation.
+  - Personal income moved **inside** the simulation loop (`offsetSimulation.js`),
+    resolved per month exactly like tenant rent and exceptional expenses,
+    instead of being pre-collapsed into `baseMonthlySurplus` before the
+    loop starts - required for a one-time or date-ranged income source to
+    actually affect the simulation. `calculateWeeklyIncome`/
+    `calculateMonthlyIncome` (which converted *from* fortnightly) were
+    removed as dead code and replaced by a generic `calculateMonthlyFromWeekly`.
+  - New "Income" card (`src/App.jsx`), placed before "Rental Income",
+    mirroring Exceptional Expenses' add-form/list UI (name, weekly amount,
+    one-time-vs-recurring, forever-vs-period) with its own collapsible
+    toggle (TODO-24/20 pattern). The Timeline Explorer's "Financial Events
+    Log" was also extended to show income sources' active/future/past
+    status alongside tenants, for parity.
+  - `SCHEMA_VERSION` bumped 1→2 in `scenarioStorage.js` so old saved
+    scenarios (built around the removed `fortnightlyIncome` field) are
+    cleanly discarded on load rather than silently merged into the new
+    shape - verified in the browser with a real leftover v1 scenario.
+  - Verified in the browser: default $1,614/week "Salary" entry produces
+    identical results to the pre-refactor $3,228/fortnight default (same
+    10.8-year payoff), confirming the migration preserves existing
+    behavior; added a one-time $500 income at month 31 and confirmed the
+    simulation reacted (129 months, interest dropped from $198,712 to
+    $197,291); Financial Events Log correctly showed "Tax Refund (Done)"
+    past month 31; save/reload round-tripped `incomeSources` correctly.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
 
-- [ ] **TODO-26: Generalize "Rental Income" into a broader "Income" section**
-  Requested by the user - "Rental Income" is too narrow today; personal
-  income (`fortnightlyIncome`, `src/App.jsx:96`) is a single recurring
-  scalar with no support for multiple sources, date ranges, or one-time
-  amounts, while tenants already support exactly that flexibility. Confirmed
-  **not hardcoded** - `fortnightlyIncome` is a real `useState` seeded from
-  `config.fortnightlyIncome` (`config.default.json:11`, currently `3228`),
-  editable via its own `NumberSliderField` and flowing through the full
-  config/localStorage precedence chain (TODO-16/21) - the actual gap is the
-  single-scalar model, not a fake/fixed value.
-  Requested shape: **Salary** (recurring), **Other income** (recurring,
-  optional start/end date), and **one-time income at a specific date** -
-  i.e. merge the flexibility already proven by two existing models instead
-  of inventing a third:
-  - The **tenant model** (`src/App.jsx` tenants array: `{id, type,
-    amount, startMonth, endMonth}`, resolved via `isMonthInRange` from
-    `src/calculations/dateRange.js`) already covers "recurring, with an
-    optional date range."
-  - The **exceptional expense model** (`exceptExpenses` array: `{id, name,
-    amount, type: 'one-time' | 'recurring', month, recurrence: 'forever' |
-    'period', startMonth, endMonth}`) already covers "one-time at a specific
-    month" alongside "recurring, forever or for a period."
-  A generalized `incomeSources` list combining both shapes (name/label +
-  amount + one-time-vs-recurring + optional date range) could replace both
-  the single `fortnightlyIncome` scalar and the tenant-specific "Rental
-  Income" card, unifying "salary," "rental income," "other income," and
-  "one-time income" under one model and one card - `tenants` would likely
-  become just one more entry type within it rather than its own concept.
-  **Open decision, per the user's own framing:** should the recurring
-  cadence be weekly instead of fortnightly? The user's opinion is weekly,
-  since that's standard in Sydney/NSW - today `fortnightlyIncome` is the
-  source of truth and week/month are derived from it
-  (`calculateWeeklyIncome`/`calculateMonthlyIncome` in `loan.js`); switching
-  the source of truth to weekly would need the same treatment (and check
-  whether rental income, already weekly, would then share the same base
-  cadence as personal income for the first time). This is a substantial
-  redesign (data model + simulation loop + UI) - needs a proper design pass
-  before implementing, not a quick patch.
+- [ ] **TODO-29 (Phase 2): Merge tenants/"Rental Income" into the unified Income model**
+  Deferred from TODO-26, whose Phase 1 only generalized personal income
+  (see that entry in Completed) - tenants/"Rental Income" still exist as
+  their own separate card/state (`tenants`, `src/App.jsx`), not yet folded
+  into `incomeSources`. **Superseded in approach by TODO-31**: once every
+  income/expense entry shares TODO-31's unified `Schedule` shape, merging
+  tenants in becomes mostly a data-shape exercise (map `startMonth`/
+  `endMonth` into a `Schedule`, and give the "Income Name" picklist a
+  "Rental Income" preset) rather than a separate one-off migration. Still
+  needs its own pass to decide: does "shared room splits amount ÷2" stay a
+  tenant-specific display quirk, or does it need a `roomType` field
+  alongside the generic entry? Do this after TODO-31, not before.
+
+- [ ] **TODO-30: Simplify the Income Sources add-form UX**
+  **Superseded by TODO-31.** The three simplifications requested here
+  (Income Name as a picklist; a single "One-Time" checkbox instead of a
+  toggle; merging Forever/Specific Period into one Start/End range) are
+  all fully subsumed by TODO-31's unified `Schedule` model, which the user
+  proposed after this was written - implement that instead of this.
+
+- [ ] **TODO-31 (important): Unify One-Time/Recurring/Forever/Period into a single "Schedule" model**
+  Requested by the user - the same "One-Time vs. Recurring, Forever vs.
+  Specific Period" pattern is duplicated (and slightly inconsistent) across
+  Income Sources, Exceptional Expenses, and Tenants. The user's insight:
+  these aren't different types, they're all one concept - a **vigency
+  rule** (when something starts, whether/how it repeats, when it stops) -
+  modeled the way Google Calendar models recurring events (Start Date, End
+  Condition, Recurrence). **Adapted for this app**, since the simulation is
+  month-granular (month 1-360), not calendar-day granular - Daily/Weekly/
+  Fortnightly recurrence don't apply here, only month-based intervals do:
+  ```
+  Schedule
+  ├── Start Month (required, default 1)
+  ├── Recurrence
+  │     ├── None       -> occurs once, at Start Month only (replaces "One-Time")
+  │     ├── Monthly    -> every month (replaces today's "Recurring")
+  │     ├── Quarterly  -> every 3 months (NEW - not expressible today)
+  │     └── Yearly     -> every 12 months (NEW - not expressible today)
+  └── End (only relevant when Recurrence != None)
+        ├── Never      -> replaces "Forever"
+        └── On Month X -> replaces "Specific Period"
+  ```
+  This is a genuine improvement, not just a UI simplification: today's
+  "period" recurrence means "active *every* month between start and end" -
+  there's no way to express "every 3rd month" or "once a year" at all. A
+  single object shape `{startMonth, recurrence: 'none' | 'monthly' |
+  'quarterly' | 'yearly', endMonth}` would replace the current `{type:
+  'one-time' | 'recurring', month, recurrence: 'forever' | 'period',
+  startMonth, endMonth}` used by `incomeSources`/`exceptExpenses`, and
+  (via TODO-29) eventually `tenants` too - one shared resolver function
+  replaces `getActiveAmount` (`src/calculations/recurringAmount.js`,
+  itself already a TODO-26 unification of what was previously two
+  separate inline implementations) with an interval-aware version, e.g.:
+  ```js
+  const INTERVAL_MONTHS = { monthly: 1, quarterly: 3, yearly: 12 };
+  function isScheduleActive(schedule, month) {
+    if (month < schedule.startMonth) return false;
+    if (schedule.recurrence === 'none') return month === schedule.startMonth;
+    if (schedule.endMonth != null && month > schedule.endMonth) return false;
+    return (month - schedule.startMonth) % INTERVAL_MONTHS[schedule.recurrence] === 0;
+  }
+  ```
+  Also connects directly to the user's separate request that "Rental
+  Income" belongs inside "Income" as a type, not its own concept: once
+  every entry shares this `Schedule`, the "Income Name" field (TODO-30)
+  becomes a picklist of common categories - **Salary, Rental Income,
+  Freelance, Other -** with a "custom" escape hatch, and a tenant/rental
+  entry is just another Income entry with a category instead of a
+  fundamentally different data shape.
+  **Scope note:** this is a bigger redesign than any single TODO so far -
+  it touches the data model (3 features), the simulation loop, and the UI
+  of 2-3 add-forms at once. Needs its own dedicated design/planning pass
+  (data migration for existing saved scenarios - another `SCHEMA_VERSION`
+  bump per TODO-26's precedent - plus deciding whether "After N
+  Occurrences" as an end condition is worth adding alongside "Never"/"On
+  Month", or left out as the user's own sketch already dropped it) before
+  implementation starts.
 
 ---
 

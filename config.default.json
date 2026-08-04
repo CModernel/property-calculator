@@ -8,7 +8,9 @@
   "utilities": 200,
   "councilRates": 450,
   "insurance": 80,
-  "fortnightlyIncome": 3228,
+  "incomeSources": [
+    { "id": 1, "name": "Salary", "amount": 1614, "type": "recurring", "recurrence": "forever", "month": null, "startMonth": null, "endMonth": null }
+  ],
   "foodExpenses": 100,
   "transportExpenses": 50,
   "otherExpenses": 50,
@@ -16,6 +18,7 @@
   "newTenantStartMonth": 13,
   "newContribAmount": 10000,
   "newExpAmount": 920,
+  "newIncomeAmount": 500,
   "isFirstHomeBuyer": true,
   "totalSavings": 350000,
   "conveyancing": 2000,

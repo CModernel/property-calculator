@@ -1,7 +1,9 @@
 import { isMonthInRange } from './dateRange';
 import { getSteppedValue } from './steppedValue';
+import { getActiveAmount } from './recurringAmount';
 import {
   calculateMonthlyRentalIncome,
+  calculateMonthlyFromWeekly,
   calculateMonthlyStrata,
   calculateMonthlyCouncil,
   calculateMonthlyPropertyExpenses,
@@ -13,6 +15,7 @@ export function calculateLoanWithOffset({
   contributions,
   exceptExpenses,
   tenants = [],
+  incomeSources = [],
   expenseFields = null,
   monthlyToOffset,
   loanAmount,
@@ -20,12 +23,18 @@ export function calculateLoanWithOffset({
   monthlyPayment,
   maxMonths = 30 * 12,
 }) {
-  // Nothing to offset: no surplus, no scheduled contributions, and no tenants
-  // that could contribute rent in some future month. The sentinel years/
-  // interest values mean "does not pay off early". `months` must be present
-  // and match the full term - callers read it for the timeline bounds, and
-  // omitting it used to render "Middle (NaN)" / "End (undefined)".
-  if (monthlyToOffset <= 0 && tenants.length === 0 && contributions.reduce((s, c) => s + c.amount, 0) === 0) {
+  // Nothing to offset: no surplus, no scheduled contributions, no tenants
+  // that could contribute rent in some future month, and no income sources
+  // that could kick in later either. The sentinel years/interest values mean
+  // "does not pay off early". `months` must be present and match the full
+  // term - callers read it for the timeline bounds, and omitting it used to
+  // render "Middle (NaN)" / "End (undefined)".
+  if (
+    monthlyToOffset <= 0 &&
+    tenants.length === 0 &&
+    incomeSources.length === 0 &&
+    contributions.reduce((s, c) => s + c.amount, 0) === 0
+  ) {
     return { years: 999, months: maxMonths, totalInterest: 999999, monthlyData: [] };
   }
 
@@ -46,18 +55,7 @@ export function calculateLoanWithOffset({
     });
 
     // Calculate Exceptional Expenses for this month
-    let monthlyExceptionalCost = 0;
-    exceptExpenses.forEach(exp => {
-      if (exp.type === 'one-time' && exp.month === months) {
-        monthlyExceptionalCost += exp.amount;
-      } else if (exp.type === 'recurring') {
-        if (exp.recurrence === 'forever') {
-          monthlyExceptionalCost += exp.amount;
-        } else if (exp.recurrence === 'period' && months >= exp.startMonth && months <= exp.endMonth) {
-          monthlyExceptionalCost += exp.amount;
-        }
-      }
-    });
+    const monthlyExceptionalCost = getActiveAmount(exceptExpenses, months);
 
     // Rent from tenants active this month. Tenants with no startMonth/endMonth
     // are always active; those with a range only contribute within it.
@@ -66,6 +64,13 @@ export function calculateLoanWithOffset({
       0
     );
     const monthlyRentalIncomeThisMonth = calculateMonthlyRentalIncome(activeWeeklyRent);
+
+    // Personal income sources active this month (salary, other income, one-
+    // time payments) - same reasoning as rent above: a value that can change
+    // mid-simulation (a date-ranged or one-time source) can't be pre-collapsed
+    // into a single constant outside the loop, unlike the old single
+    // fortnightlyIncome scalar this replaced.
+    const monthlyIncomeThisMonth = calculateMonthlyFromWeekly(getActiveAmount(incomeSources, months));
 
     // Property/personal expenses for this month, each resolved to whichever
     // scheduled change (if any) is in effect - same reasoning as tenant rent
@@ -95,15 +100,20 @@ export function calculateLoanWithOffset({
       monthlyExpensesForMonth = propertyExpenses + personalExpenses;
     }
 
-    // Add regular monthly deposit to offset (this month's rent, minus this
-    // month's property/personal expenses and exceptional expenses). We assume
-    // exceptional expenses come out of the surplus first. `monthlyToOffset`
-    // here excludes tenant rent and expenseFields - both are added/subtracted
-    // per month above instead, since they can no longer be pre-collapsed into
-    // a single constant once either can change mid-simulation.
+    // Add regular monthly deposit to offset (this month's income, rent, minus
+    // this month's property/personal expenses and exceptional expenses). We
+    // assume exceptional expenses come out of the surplus first.
+    // `monthlyToOffset` here excludes personal income, tenant rent, and
+    // expenseFields - all three are added/subtracted per month above instead,
+    // since none of them can be pre-collapsed into a single constant once any
+    // of them can change mid-simulation.
     const netMonthlyDeposit = Math.max(
       0,
-      monthlyToOffset + monthlyRentalIncomeThisMonth - monthlyExpensesForMonth - monthlyExceptionalCost
+      monthlyToOffset +
+        monthlyIncomeThisMonth +
+        monthlyRentalIncomeThisMonth -
+        monthlyExpensesForMonth -
+        monthlyExceptionalCost
     );
     offsetBalance += netMonthlyDeposit;
 

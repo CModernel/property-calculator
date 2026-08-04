@@ -258,6 +258,85 @@ describe('calculateLoanWithOffset', () => {
     expect(offsets).toEqual([1300, 3900, 6500, 7800]);
   });
 
+  it('adds a one-time income source only on its exact month', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      exceptExpenses: [],
+      incomeSources: [{ id: 1, name: 'Bonus', amount: 300, type: 'one-time', month: 3 }],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 4,
+    });
+    const offsets = result.monthlyData.map(d => d.offset);
+    // $300/week -> $1,300/month, deposited only in month 3.
+    expect(offsets).toEqual([0, 0, 1300, 1300]);
+  });
+
+  it('adds a "forever" recurring income source every month', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      exceptExpenses: [],
+      incomeSources: [{ id: 1, name: 'Salary', amount: 300, type: 'recurring', recurrence: 'forever' }],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 3,
+    });
+    const offsets = result.monthlyData.map(d => d.offset);
+    expect(offsets).toEqual([1300, 2600, 3900]);
+  });
+
+  it('adds a "period" recurring income source only within its inclusive range', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      exceptExpenses: [],
+      incomeSources: [
+        { id: 1, name: 'Freelance', amount: 300, type: 'recurring', recurrence: 'period', startMonth: 3, endMonth: 5 },
+      ],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 6,
+    });
+    const offsets = result.monthlyData.map(d => d.offset);
+    expect(offsets).toEqual([0, 0, 1300, 2600, 3900, 3900]);
+  });
+
+  it('sums income sources and tenant rent together per month', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      exceptExpenses: [],
+      tenants: [{ id: 1, amount: 300, startMonth: null, endMonth: null }],
+      incomeSources: [{ id: 1, name: 'Salary', amount: 300, type: 'recurring', recurrence: 'forever' }],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 2,
+    });
+    const offsets = result.monthlyData.map(d => d.offset);
+    // $300/week rent + $300/week income -> $2,600/month.
+    expect(offsets).toEqual([2600, 5200]);
+  });
+
+  it('does not take the sentinel shortcut when an income source is present, even if the base surplus is <= 0', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      exceptExpenses: [],
+      incomeSources: [{ id: 1, name: 'Salary', amount: 0, type: 'recurring', recurrence: 'forever' }],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 2,
+    });
+    expect(result.monthlyData.length).toBeGreaterThan(0);
+  });
+
   it('ignores expenseFields entirely when omitted, matching the pre-TODO-19 behavior', () => {
     const result = calculateLoanWithOffset({
       contributions: [],

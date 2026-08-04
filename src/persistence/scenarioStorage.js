@@ -1,5 +1,8 @@
 const STORAGE_KEY = 'propertyCalculator.scenario';
-const SCHEMA_VERSION = 1;
+// Bumped to 2 in TODO-26: fortnightlyIncome (a single scalar) was replaced by
+// incomeSources (a list) - old saved scenarios are cleanly discarded rather
+// than merged into the new shape.
+const SCHEMA_VERSION = 2;
 
 // A version mismatch means the saved shape no longer matches what this
 // version of the app expects - discard rather than attempt a migration,

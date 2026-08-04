@@ -19,8 +19,7 @@ import {
   calculateMonthlyRentalIncome,
   calculateWeeklyPersonalExpenses,
   calculateMonthlyPersonalExpenses,
-  calculateWeeklyIncome,
-  calculateMonthlyIncome,
+  calculateMonthlyFromWeekly,
   calculateMonthlyNetBalance,
   calculateWeeklyNetBalance,
   calculateFortnightlyNetBalance,
@@ -38,6 +37,7 @@ import { sumClosingCosts } from './calculations/closingCosts';
 import { calculateTotalCashRequired, calculateCashRemaining } from './calculations/totalCashRequired';
 import { isMonthInRange } from './calculations/dateRange';
 import { getSteppedValue } from './calculations/steppedValue';
+import { getActiveAmount } from './calculations/recurringAmount';
 import { useSteppedValue } from './hooks/useSteppedValue';
 import SteppedExpenseField from './components/SteppedExpenseField';
 import { loadScenario, saveScenario, clearScenario } from './persistence/scenarioStorage';
@@ -92,8 +92,21 @@ const PropertyInvestmentCalculator = () => {
   const [newTenantHasEndMonth, setNewTenantHasEndMonth] = useState(false);
   const [newTenantEndMonth, setNewTenantEndMonth] = useState(24);
 
+  // Income sources (salary, other income, one-time payments) - same
+  // one-time/recurring-forever/period shape as Exceptional Expenses, resolved
+  // per month via getActiveAmount (src/calculations/recurringAmount.js).
+  const [incomeSources, setIncomeSources] = useState(config.incomeSources ?? []);
+  const [showIncome, setShowIncome] = useState(false);
+  const [showAddIncome, setShowAddIncome] = useState(false);
+  const [newIncomeName, setNewIncomeName] = useState('Salary');
+  const [newIncomeAmount, setNewIncomeAmount] = useState(config.newIncomeAmount);
+  const [newIncomeType, setNewIncomeType] = useState('recurring'); // one-time | recurring
+  const [newIncomeMonth, setNewIncomeMonth] = useState(1); // for one-time
+  const [newIncomeRecurrence, setNewIncomeRecurrence] = useState('forever'); // forever | period
+  const [newIncomeStart, setNewIncomeStart] = useState(1);
+  const [newIncomeEnd, setNewIncomeEnd] = useState(4);
+
   // Your personal expenses
-  const [fortnightlyIncome, setFortnightlyIncome] = useState(config.fortnightlyIncome);
   const foodExpensesField = useSteppedValue(config.foodExpenses, config.foodExpensesChanges);
   const transportExpensesField = useSteppedValue(config.transportExpenses, config.transportExpensesChanges);
   const otherExpensesField = useSteppedValue(config.otherExpenses, config.otherExpensesChanges);
@@ -198,9 +211,11 @@ const PropertyInvestmentCalculator = () => {
   const weeklyPersonalExpenses = calculateWeeklyPersonalExpenses(foodExpenses, transportExpenses, otherExpenses);
   const monthlyPersonalExpenses = calculateMonthlyPersonalExpenses(weeklyPersonalExpenses);
 
-  // Total cash flow
-  const weeklyIncome = calculateWeeklyIncome(fortnightlyIncome);
-  const monthlyIncome = calculateMonthlyIncome(fortnightlyIncome);
+  // Total cash flow. Same "right now" (month 1) convention as tenants/
+  // exceptional expenses - an income source that hasn't started yet, or
+  // already ended, shouldn't count here.
+  const weeklyIncome = getActiveAmount(incomeSources, 1);
+  const monthlyIncome = calculateMonthlyFromWeekly(weeklyIncome);
 
   // NET WEEKLY/MONTHLY BALANCE
   // Logic: (Personal Income + Rental Income) - (Personal Expenses + Property Expenses)
@@ -214,13 +229,13 @@ const PropertyInvestmentCalculator = () => {
   const weeklyToOffset = calculateWeeklyToOffset(weeklyNetBalance);
   const fortnightlyToOffset = calculateFortnightlyToOffset(fortnightlyNetBalance);
 
-  // Surplus feeding the simulation, EXCLUDING tenant rent and the 7 expense
-  // fields, left unclamped. The loop adds/subtracts each of those back in per
-  // month instead, since any of them can now change mid-simulation and so can
-  // no longer be pre-collapsed into a single constant - clamping here first
-  // would lose information once they're summed in afterwards (see
-  // offsetSimulation.js).
-  const baseMonthlySurplus = calculateMonthlyNetBalance(monthlyIncome, 0, 0, monthlyPayment);
+  // Surplus feeding the simulation, EXCLUDING personal income, tenant rent,
+  // and the 7 expense fields, left unclamped. The loop adds/subtracts each of
+  // those back in per month instead, since any of them can now change
+  // mid-simulation and so can no longer be pre-collapsed into a single
+  // constant - clamping here first would lose information once they're
+  // summed in afterwards (see offsetSimulation.js).
+  const baseMonthlySurplus = calculateMonthlyNetBalance(0, 0, 0, monthlyPayment);
 
   const expenseFields = {
     // A house has no strata for the whole simulation, no matter what's
@@ -242,6 +257,7 @@ const PropertyInvestmentCalculator = () => {
     contributions: offsetContributions,
     exceptExpenses,
     tenants,
+    incomeSources,
     expenseFields,
     monthlyToOffset: baseMonthlySurplus,
     loanAmount,
@@ -253,6 +269,7 @@ const PropertyInvestmentCalculator = () => {
     contributions: [], // No offsets
     exceptExpenses,
     tenants,
+    incomeSources,
     expenseFields,
     monthlyToOffset: baseMonthlySurplus,
     loanAmount,
@@ -331,7 +348,7 @@ const PropertyInvestmentCalculator = () => {
       conveyancing, buildingInspection, pestInspection, registrationFees, searches,
       loanEstablishmentFee, propertyValuation, homeInsurance, rateAdjustments,
       tenants,
-      fortnightlyIncome,
+      incomeSources,
       foodExpenses: foodExpensesField.base, foodExpensesChanges: foodExpensesField.changes,
       transportExpenses: transportExpensesField.base, transportExpensesChanges: transportExpensesField.changes,
       otherExpenses: otherExpensesField.base, otherExpensesChanges: otherExpensesField.changes,
@@ -411,6 +428,43 @@ const PropertyInvestmentCalculator = () => {
 
   const removeTenant = (id) => {
     setTenants(tenants.filter(t => t.id !== id));
+  };
+
+  // Income Sources Functions
+  const addIncomeSource = () => {
+    if (!newIncomeName) {
+      alert('Please enter a name for the income source.');
+      return;
+    }
+    if (newIncomeAmount <= 0) {
+      alert('Please enter a valid amount.');
+      return;
+    }
+
+    if (newIncomeType === 'recurring' && newIncomeRecurrence === 'period' && newIncomeStart > newIncomeEnd) {
+      alert('Start month must be before end month.');
+      return;
+    }
+
+    const newIncome = {
+      id: Date.now(),
+      name: newIncomeName,
+      amount: newIncomeAmount,
+      type: newIncomeType,
+      month: newIncomeMonth, // relevant if one-time
+      recurrence: newIncomeRecurrence, // relevant if recurring
+      startMonth: newIncomeStart,
+      endMonth: newIncomeEnd
+    };
+
+    setIncomeSources([...incomeSources, newIncome]);
+    setShowAddIncome(false);
+    setNewIncomeName('Salary');
+    setNewIncomeAmount(config.newIncomeAmount);
+  };
+
+  const removeIncomeSource = (id) => {
+    setIncomeSources(incomeSources.filter(i => i.id !== id));
   };
 
   // Exceptional Expenses Functions
@@ -872,6 +926,153 @@ const PropertyInvestmentCalculator = () => {
             )}
           </div>
 
+          {/* Income */}
+          <div className="bg-white rounded-lg shadow-md p-5">
+            <h2 className="text-xl font-bold text-gray-700 mb-4 flex items-center gap-2">
+              <DollarSign size={24} className="text-green-600" />
+              Income
+            </h2>
+
+            <button
+              type="button"
+              onClick={() => setShowIncome(!showIncome)}
+              className="text-sm font-medium text-blue-600 hover:text-blue-700"
+            >
+              {showIncome ? '▾' : '▸'} Income breakdown (subtotal: ${weeklyIncome.toLocaleString()}/week)
+            </button>
+
+            {showIncome && (
+            <div className="space-y-4 mt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-md font-bold text-gray-700">💵 Income Sources</h3>
+                <button
+                  onClick={() => setShowAddIncome(!showAddIncome)}
+                  className="px-3 py-1 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600 transition-colors"
+                >
+                  {showAddIncome ? '✕ Cancel' : '+ Add'}
+                </button>
+              </div>
+
+              {/* Add income form */}
+              {showAddIncome && (
+                <div className="mb-3 p-3 bg-green-50 rounded-lg border border-green-200 text-sm">
+                  <div className="grid gap-3">
+                    <div>
+                      <label className="block font-medium text-gray-700 mb-1">Income Name</label>
+                      <input
+                        type="text"
+                        value={newIncomeName}
+                        onChange={(e) => setNewIncomeName(e.target.value)}
+                        className="w-full p-2 border rounded"
+                        placeholder="e.g. Salary, Freelance, Bonus"
+                      />
+                    </div>
+
+                    <NumberSliderField
+                      label="Weekly Amount ($)"
+                      value={newIncomeAmount}
+                      onChange={setNewIncomeAmount}
+                      min={0}
+                      max={50000}
+                      sliderMin={0}
+                      sliderMax={5000}
+                      step={10}
+                      color="green"
+                      prefix="$"
+                    />
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setNewIncomeType('one-time')}
+                        className={`flex-1 py-1 rounded border ${newIncomeType === 'one-time' ? 'bg-green-200 border-green-400 font-bold' : 'bg-white'}`}
+                      >One-Time</button>
+                      <button
+                        onClick={() => setNewIncomeType('recurring')}
+                        className={`flex-1 py-1 rounded border ${newIncomeType === 'recurring' ? 'bg-green-200 border-green-400 font-bold' : 'bg-white'}`}
+                      >Recurring</button>
+                    </div>
+
+                    {newIncomeType === 'one-time' && (
+                      <div>
+                        <label className="block font-medium text-gray-700 mb-1">Occurs at Month: {newIncomeMonth}</label>
+                        <input
+                          type="range" min="1" max="360"
+                          value={newIncomeMonth}
+                          onChange={(e) => setNewIncomeMonth(Number(e.target.value))}
+                          className="w-full h-2 bg-green-200 rounded-lg appearance-none cursor-pointer"
+                        />
+                      </div>
+                    )}
+
+                    {newIncomeType === 'recurring' && (
+                      <div className="space-y-3">
+                        <div className="flex gap-2 text-xs">
+                          <button
+                            onClick={() => setNewIncomeRecurrence('forever')}
+                            className={`flex-1 py-1 rounded border ${newIncomeRecurrence === 'forever' ? 'bg-emerald-200 border-emerald-400 font-bold' : 'bg-white'}`}
+                          >Forever</button>
+                          <button
+                            onClick={() => setNewIncomeRecurrence('period')}
+                            className={`flex-1 py-1 rounded border ${newIncomeRecurrence === 'period' ? 'bg-emerald-200 border-emerald-400 font-bold' : 'bg-white'}`}
+                          >Specific Period</button>
+                        </div>
+
+                        {newIncomeRecurrence === 'period' && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-xs font-medium mb-1">Start Month: {newIncomeStart}</label>
+                              <input
+                                type="range" min="1" max="360"
+                                value={newIncomeStart}
+                                onChange={(e) => setNewIncomeStart(Number(e.target.value))}
+                                className="w-full h-2 bg-emerald-200 rounded-lg appearance-none cursor-pointer"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium mb-1">End Month: {newIncomeEnd}</label>
+                              <input
+                                type="range" min={newIncomeStart} max="360"
+                                value={newIncomeEnd}
+                                onChange={(e) => setNewIncomeEnd(Number(e.target.value))}
+                                className="w-full h-2 bg-emerald-200 rounded-lg appearance-none cursor-pointer"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <button
+                      onClick={addIncomeSource}
+                      className="w-full py-2 bg-green-600 text-white rounded font-bold hover:bg-green-700"
+                    >
+                      Add Income
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* List of income sources */}
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {incomeSources.length === 0 && !showAddIncome && (
+                  <p className="text-sm text-gray-500 italic text-center">No income sources added.</p>
+                )}
+                {incomeSources.map(income => (
+                  <div key={income.id} className="flex justify-between items-center p-2 bg-green-50 border border-green-200 rounded text-sm">
+                    <div>
+                      <p className="font-bold text-gray-800">{income.name}</p>
+                      <p className="text-xs text-gray-600">
+                        ${income.amount}/week • {income.type === 'one-time' ? `Month ${income.month}` : (income.recurrence === 'forever' ? 'Forever' : `Months ${income.startMonth}-${income.endMonth}`)}
+                      </p>
+                    </div>
+                    <button onClick={() => removeIncomeSource(income.id)} className="text-red-500 font-bold px-2">✕</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+            )}
+          </div>
+
           {/* Rental */}
           <div className="bg-white rounded-lg shadow-md p-5">
             <h2 className="text-xl font-bold text-gray-700 mb-4 flex items-center gap-2">
@@ -1052,23 +1253,8 @@ const PropertyInvestmentCalculator = () => {
 
             {showPersonalExpenses && (
             <div className="space-y-4 mt-4">
-              <NumberSliderField
-                label="Fortnightly Income"
-                value={fortnightlyIncome}
-                onChange={setFortnightlyIncome}
-                min={0}
-                max={100000}
-                sliderMin={1000}
-                sliderMax={12000}
-                step={100}
-                color="indigo"
-                prefix="$"
-              >
-                ≈ ${Math.round(weeklyIncome)}/week
-              </NumberSliderField>
-
               {/* OFFSET CONTRIBUTIONS SECTION */}
-              <div className="border-t pt-4 mt-4">
+              <div>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-md font-bold text-gray-700">💰 Offset Contributions Schedule</h3>
                   <button
@@ -1671,7 +1857,7 @@ const PropertyInvestmentCalculator = () => {
         <div className="text-sm text-gray-600 space-y-2">
           <p><strong>Flow:</strong></p>
           <ol className="list-decimal list-inside space-y-1 ml-3">
-            <li>Receive your fortnightly income</li>
+            <li>Receive your income</li>
             <li>Pay your personal expenses (food, transport, etc.)</li>
             <li>Property has costs (loan payment + strata + utilities...)</li>
             <li><strong>What's left after EVERYTHING → goes automatically to offset</strong></li>
@@ -1830,8 +2016,13 @@ const PropertyInvestmentCalculator = () => {
                           {(() => {
                             const tenantsActiveHere = tenants.filter(t => isMonthInRange(timelineMonth, t.startMonth, t.endMonth));
                             const rentalIncomeHere = calculateMonthlyRentalIncome(calculateWeeklyRentalIncome(tenantsActiveHere));
+                            const personalIncomeHere = calculateMonthlyFromWeekly(getActiveAmount(incomeSources, timelineMonth));
                             return (
                               <>
+                                <p className="flex justify-between">
+                                  <span>Personal Income:</span>
+                                  <span className="font-medium">${Math.round(personalIncomeHere).toLocaleString()}/mo</span>
+                                </p>
                                 <p className="flex justify-between">
                                   <span>Tenants Active:</span>
                                   <span className="font-medium">{tenantsActiveHere.length}</span>
@@ -1844,6 +2035,21 @@ const PropertyInvestmentCalculator = () => {
                             );
                           })()}
                           <div className="mt-2 pt-2 border-t border-green-200">
+                            {incomeSources.map(inc => {
+                              let status = 'active';
+                              if (inc.type === 'one-time') {
+                                if (inc.month !== timelineMonth) status = inc.month < timelineMonth ? 'past' : 'future';
+                              } else if (inc.recurrence === 'period') {
+                                if (timelineMonth < inc.startMonth) status = 'future';
+                                else if (timelineMonth > inc.endMonth) status = 'past';
+                              }
+                              if (status === 'future') return null;
+                              return (
+                                <p key={`income-${inc.id}`} className={`truncate ${status === 'past' ? 'text-gray-400' : 'text-green-700'}`}>
+                                  • {inc.name}{status === 'past' && ' (Done)'}
+                                </p>
+                              );
+                            })}
                             {tenants.map(t => {
                               // No bound at all = always active. An unset endMonth
                               // means "ongoing" - never past, not "compare against null".
@@ -1863,7 +2069,9 @@ const PropertyInvestmentCalculator = () => {
                                 </p>
                               );
                             })}
-                            {tenants.length === 0 && <span className="italic text-gray-400">No tenants</span>}
+                            {tenants.length === 0 && incomeSources.length === 0 && (
+                              <span className="italic text-gray-400">No tenants or income sources</span>
+                            )}
                           </div>
                         </div>
                       </div>

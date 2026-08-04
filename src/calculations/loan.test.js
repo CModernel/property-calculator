@@ -18,8 +18,7 @@ import {
   calculateWeeklyPropertyBalance,
   calculateWeeklyPersonalExpenses,
   calculateMonthlyPersonalExpenses,
-  calculateWeeklyIncome,
-  calculateMonthlyIncome,
+  calculateMonthlyFromWeekly,
   calculateMonthlyNetBalance,
   calculateWeeklyNetBalance,
   calculateFortnightlyNetBalance,
@@ -39,7 +38,6 @@ const DEFAULTS = {
   utilities: 200,
   councilRates: 450,
   insurance: 80,
-  fortnightlyIncome: 3228,
   foodExpenses: 100,
   transportExpenses: 50,
   otherExpenses: 50,
@@ -176,9 +174,8 @@ describe('personal expenses and income', () => {
     expect(calculateMonthlyPersonalExpenses(200)).toBeCloseTo(866.67, 1);
   });
 
-  it('derives weekly and monthly income from fortnightly income', () => {
-    expect(calculateWeeklyIncome(DEFAULTS.fortnightlyIncome)).toBe(1614);
-    expect(calculateMonthlyIncome(DEFAULTS.fortnightlyIncome)).toBeCloseTo(6994, 0);
+  it('converts a weekly amount to a monthly figure', () => {
+    expect(calculateMonthlyFromWeekly(1614)).toBeCloseTo(6994, 0);
   });
 });
 

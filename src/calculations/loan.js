@@ -71,12 +71,8 @@ export function calculateMonthlyPersonalExpenses(weeklyPersonalExpenses) {
   return weeklyPersonalExpenses * 52 / 12;
 }
 
-export function calculateWeeklyIncome(fortnightlyIncome) {
-  return fortnightlyIncome * 26 / 52;
-}
-
-export function calculateMonthlyIncome(fortnightlyIncome) {
-  return fortnightlyIncome * 26 / 12;
+export function calculateMonthlyFromWeekly(weeklyAmount) {
+  return weeklyAmount * 52 / 12;
 }
 
 // Logic: (Personal Income + Rental Income) - (Personal Expenses + Property Expenses)

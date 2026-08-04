@@ -67,7 +67,7 @@ range, or type an exact value such as `742,500` when the slider is too coarse.
 - Adjustable weekly rent rates
 
 ### 👤 Personal Finances
-- **Fortnightly income** input
+- **Income sources**: salary, other income, or one-off payments - each optionally recurring, date-ranged, or a single one-time amount, entered as a weekly figure
 - **Food expenses** (weekly)
 - **Transport costs** (weekly)
 - **Other expenses** (weekly)
@@ -192,7 +192,7 @@ npm run test:watch
 2. Adjust weekly rent to match market rates
 
 ### Step 4: Enter Your Personal Finances
-1. Input your **fortnightly income**
+1. Add your **income sources** (salary, other income, or one-off payments), each as a weekly amount
 2. Estimate **food expenses** (weekly)
 3. Add **transport costs** (weekly)
 4. Include **other expenses** (weekly)
@@ -216,7 +216,7 @@ The calculator instantly shows:
 
 ```
 Monthly Cash Flow:
-├─ Income (fortnightly × 26 / 12)
+├─ Income (weekly × 52 / 12)
 ├─ Personal Expenses (weekly × 52 / 12)
 ├─ Property Costs (loan payment + strata + utilities + council + insurance)
 ├─ Rental Income (weekly × 52 / 12)
