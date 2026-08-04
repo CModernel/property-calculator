@@ -36,11 +36,13 @@ import { estimateLmi } from './calculations/lmi';
 import { sumClosingCosts } from './calculations/closingCosts';
 import { calculateTotalCashRequired, calculateCashRemaining } from './calculations/totalCashRequired';
 import { getSteppedValue } from './calculations/steppedValue';
-import { getActiveAmount, isScheduleActive, countOccurrencesUpTo, formatScheduleLabel, MAX_MONTH } from './calculations/recurringAmount';
+import { getActiveAmount, isScheduleActive, countOccurrencesUpTo, classifyScheduleStatus, formatScheduleLabel, MAX_MONTH } from './calculations/recurringAmount';
+import { getTimelineSnapshot, calculateEffectiveProgress, calculateTimeRemaining } from './calculations/timelineSnapshot';
 import { INCOME_CATEGORIES, INCOME_CATEGORY_DEFAULTS } from './calculations/incomeCategories';
 import { useSteppedValue } from './hooks/useSteppedValue';
 import SteppedExpenseField from './components/SteppedExpenseField';
 import { loadScenario, saveScenario, clearScenario } from './persistence/scenarioStorage';
+import { validateAmount, validateScheduleRange, hasDuplicateOneTimeMonth } from './calculations/scheduleFormValidation';
 import defaultConfig from '../config.default.json';
 
 // config.local.json is git-ignored and optional - import.meta.glob resolves to
@@ -456,8 +458,8 @@ const PropertyInvestmentCalculator = () => {
 
   // Functions for managing offset contributions
   const addOffsetContribution = () => {
-    if (newContribAmount <= 0) return;
-    if (!newContribOneTime && newContribStartMonth > newContribEndMonth) {
+    if (!validateAmount(newContribAmount)) return;
+    if (!validateScheduleRange(newContribOneTime, newContribStartMonth, newContribEndMonth)) {
       alert('Start month must be before end month.');
       return;
     }
@@ -465,12 +467,9 @@ const PropertyInvestmentCalculator = () => {
     // Only guards against two one-time lump sums landing on the exact same
     // month - two independent recurring contributions starting on the same
     // month aren't a conflict the way two one-time lumps in the same month are.
-    if (newContribOneTime) {
-      const monthExists = offsetContributions.some(c => c.recurrence === 'none' && c.startMonth === newContribStartMonth);
-      if (monthExists) {
-        alert('A contribution already exists for this month. Please remove it first or choose a different month.');
-        return;
-      }
+    if (newContribOneTime && hasDuplicateOneTimeMonth(offsetContributions, newContribStartMonth)) {
+      alert('A contribution already exists for this month. Please remove it first or choose a different month.');
+      return;
     }
 
     const newContrib = {
@@ -524,11 +523,11 @@ const PropertyInvestmentCalculator = () => {
       alert('Please enter a name for the income source.');
       return;
     }
-    if (newIncomeAmount <= 0) {
+    if (!validateAmount(newIncomeAmount)) {
       alert('Please enter a valid amount.');
       return;
     }
-    if (!newIncomeOneTime && newIncomeStartMonth > newIncomeEndMonth) {
+    if (!validateScheduleRange(newIncomeOneTime, newIncomeStartMonth, newIncomeEndMonth)) {
       alert('Start month must be before end month.');
       return;
     }
@@ -570,11 +569,11 @@ const PropertyInvestmentCalculator = () => {
       alert('Please enter a name for the expense.');
       return;
     }
-    if (newExpAmount <= 0) {
+    if (!validateAmount(newExpAmount)) {
       alert('Please enter a valid amount.');
       return;
     }
-    if (!newExpOneTime && newExpStartMonth > newExpEndMonth) {
+    if (!validateScheduleRange(newExpOneTime, newExpStartMonth, newExpEndMonth)) {
       alert('Start month must be before end month.');
       return;
     }
@@ -609,11 +608,11 @@ const PropertyInvestmentCalculator = () => {
       alert('Please enter a name for the expense.');
       return;
     }
-    if (newOtherExpenseAmount <= 0) {
+    if (!validateAmount(newOtherExpenseAmount)) {
       alert('Please enter a valid amount.');
       return;
     }
-    if (!newOtherExpenseOneTime && newOtherExpenseStartMonth > newOtherExpenseEndMonth) {
+    if (!validateScheduleRange(newOtherExpenseOneTime, newOtherExpenseStartMonth, newOtherExpenseEndMonth)) {
       alert('Start month must be before end month.');
       return;
     }
@@ -2178,28 +2177,11 @@ const PropertyInvestmentCalculator = () => {
             </div>
 
             {(() => {
-              // Get data for selected month (handle month 0 case)
-              const snapshot = timelineMonth === 0
-                ? {
-                  balance: loanAmount,
-                  offset: 0,
-                  effectiveBalance: loanAmount,
-                  monthlyInterestPaid: Math.round(monthZeroInterest),
-                  totalInterestPaid: 0,
-                  totalPrincipalPaid: 0
-                }
-                : (loanSimulation.monthlyData.find(d => d.month === timelineMonth) || loanSimulation.monthlyData[loanSimulation.monthlyData.length - 1]);
-
+              const snapshot = getTimelineSnapshot(timelineMonth, loanSimulation.monthlyData, loanAmount, monthZeroInterest);
               if (!snapshot) return null;
 
-              // No loan at all means the property is owned outright, so the bar is full.
-              const effectiveProgress = Math.min(
-                100,
-                safePercentage(loanAmount - snapshot.effectiveBalance, loanAmount, 100)
-              );
-              const monthsRemaining = loanSimulation.months - timelineMonth;
-              const yearsRem = Math.floor(Math.max(0, monthsRemaining) / 12);
-              const monthsRem = Math.max(0, monthsRemaining) % 12;
+              const effectiveProgress = calculateEffectiveProgress(loanAmount, snapshot.effectiveBalance);
+              const { years: yearsRem, months: monthsRem } = calculateTimeRemaining(loanSimulation.months, timelineMonth);
 
               return (
                 <div className="space-y-6">
@@ -2301,11 +2283,7 @@ const PropertyInvestmentCalculator = () => {
                           })()}
                           <div className="mt-2 pt-2 border-t border-green-200">
                             {incomeSources.map(inc => {
-                              let status = 'active';
-                              if (timelineMonth < inc.startMonth) status = 'future';
-                              else if (inc.recurrence === 'none') {
-                                if (timelineMonth > inc.startMonth) status = 'past';
-                              } else if (timelineMonth > inc.endMonth) status = 'past';
+                              const status = classifyScheduleStatus(inc, timelineMonth);
                               if (status === 'future') return null;
                               return (
                                 <p key={`income-${inc.id}`} className={`truncate ${status === 'past' ? 'text-gray-400' : 'text-green-700'}`}>
@@ -2348,12 +2326,7 @@ const PropertyInvestmentCalculator = () => {
                         <p className="font-bold text-yellow-800 border-b border-yellow-200 pb-1 mb-2">Expenses Status</p>
                         <div className="space-y-1 text-xs max-h-32 overflow-y-auto">
                           {[...exceptExpenses, ...otherExpenseItems].map(exp => {
-                            let status = 'active';
-                            if (timelineMonth < exp.startMonth) status = 'future';
-                            else if (exp.recurrence === 'none') {
-                              if (timelineMonth > exp.startMonth) status = 'past';
-                            } else if (timelineMonth > exp.endMonth) status = 'past';
-
+                            const status = classifyScheduleStatus(exp, timelineMonth);
                             if (status === 'future') return null;
 
                             return (

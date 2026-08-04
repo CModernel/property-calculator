@@ -45,14 +45,6 @@ export function calculateTotalPropertyCost(monthlyPayment, monthlyPropertyExpens
   return monthlyPayment + monthlyPropertyExpenses;
 }
 
-export function getMonth1Offset(offsetContributions) {
-  return offsetContributions.find(c => c.month === 1)?.amount || 0;
-}
-
-export function calculateInitialPrincipal(loanAmount, month1Offset) {
-  return Math.max(0, loanAmount - month1Offset);
-}
-
 export function calculateInitialMonthlyInterest(initialPrincipal, monthlyRate) {
   return initialPrincipal * monthlyRate;
 }
@@ -61,14 +53,6 @@ export function calculateInitialMonthlyInterest(initialPrincipal, monthlyRate) {
 // in full over the whole term, so everything above the principal is interest.
 export function calculateNoOffsetTotalInterest(monthlyPayment, loanAmount, totalMonths = TOTAL_MONTHS) {
   return monthlyPayment * totalMonths - loanAmount;
-}
-
-export function calculateMonthlyPropertyBalance(monthlyRentalIncome, totalPropertyCost) {
-  return monthlyRentalIncome - totalPropertyCost;
-}
-
-export function calculateWeeklyPropertyBalance(monthlyPropertyBalance) {
-  return monthlyPropertyBalance * 12 / 52;
 }
 
 export function calculateWeeklyPersonalExpenses(foodExpenses, transportExpenses) {

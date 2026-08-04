@@ -861,33 +861,123 @@ optionally reuse in the commit message when you implement it.
   present and no `otherExpenses`/`otherExpensesChanges` fields, reloaded
   and confirmed the restored scenario matched exactly.
 
+- [x] **TODO-8: Extract and test the Timeline Explorer snapshot**
+  Left out of scope of the original tests work (TODO-1). Extracted the
+  month-by-month snapshot logic from the Timeline Explorer's inline IIFE
+  (`src/App.jsx`) into new `src/calculations/timelineSnapshot.js` (+
+  tests): `getTimelineSnapshot` (month-0 synthetic snapshot vs. real
+  `monthlyData` lookup, with a fallback to the last recorded month past
+  the simulation's end), `calculateEffectiveProgress` (the "% Owned"
+  figure), and `calculateTimeRemaining` (years/months split, clamped at
+  zero). **Also extracted beyond the TODO's literal example**: the
+  future/active/past status classifier was duplicated verbatim in two
+  places (Income Context column and Expenses Status column) - pulled into
+  a single `classifyScheduleStatus(schedule, month)` in the existing
+  `src/calculations/recurringAmount.js` (same file as `isScheduleActive`,
+  since it's the same Schedule-model concept), replacing both inline
+  copies. Purely a refactor - no behavior change, verified by keeping
+  every UI figure identical before/after.
+  Verified in the browser: moved the Timeline Explorer to month 64,
+  confirmed "5 Years, 4 Months", Net Effective Balance/Loan/Offset
+  figures, "42.0% Owned", and "5y 4m" Time Remaining all matched the
+  pre-refactor values; added a one-time "Bonus" income at month 30 and
+  confirmed the Income Context column correctly showed "• Bonus (Done)"
+  once the timeline passed month 30, proving `classifyScheduleStatus`
+  behaves identically to the two inline copies it replaced.
+
+- [x] **TODO-9: Extract and test form validations**
+  Also left out of scope originally. New
+  `src/calculations/scheduleFormValidation.js` (+ tests):
+  `validateAmount(amount)`, `validateScheduleRange(oneTime, startMonth,
+  endMonth)`, and the Offset-Contribution-specific
+  `hasDuplicateOneTimeMonth(items, startMonth)` - the exact predicates
+  that were previously inlined as boolean expressions inside
+  `addOffsetContribution`/`addIncomeSource`/`addExceptionalExpense`/
+  `addOtherExpenseItem` (`src/App.jsx`; the last two didn't exist yet at
+  the time this TODO was originally written - TODO-34/36 added Income
+  Sources' category picklist and the Other Expenses list since then, both
+  sharing the identical validation shape). Each `add*` function keeps its
+  own `alert(...)` wording (they differ: "income source" vs "expense")
+  and call order - only the boolean checks themselves became calls to the
+  shared, tested predicates. No behavior change - verified in the browser
+  that the happy-path add flow still works identically for all four forms
+  (Income Source, Exceptional Expense, Other Expense, Offset Contribution).
+
+- [x] **TODO-10: Decide the fate of uncalled functions in `src/calculations/loan.js`**
+  Requested a decision from the user - **delete them**, rather than
+  keeping `loan.js` as a general formula library. Removed
+  `getMonth1Offset`, `calculateInitialPrincipal`,
+  `calculateMonthlyPropertyBalance`, and `calculateWeeklyPropertyBalance`
+  (confirmed via grep: zero callers anywhere in `src/` outside their own
+  tests). `getMonth1Offset` had also gone silently stale - it still read
+  `c.month`, a field TODO-32 renamed to `startMonth` months ago, so it
+  would have always returned 0 against real data. `calculateInitialMonthlyInterest`
+  stays (it's genuinely called, with `loanAmount` passed directly) - its
+  test that piped `calculateInitialPrincipal(250000, 20000)` in as input
+  was rewritten to inline the arithmetic (`230000`) instead.
+
+---
+
+## 🟡 MEDIUM PRIORITY (Important, but not blocking)
+
+- [ ] **TODO-39: Make "Monthly Expenses" (Property Balance panel) smaller/collapsible**
+  Requested by the user - the "💳 Monthly Expenses" block in the results
+  panel (`src/App.jsx`, inside "🏠 Property Balance") now has 9+ line items
+  (Loan Payment, Strata, Council, Utilities, Insurance, Maintenance &
+  Repairs, Water Rates, optionally Land Tax/Property Management, Personal
+  Expenses, Total) after TODO-35/36 each added their own row, and feels
+  too tall relative to the rest of the results column. Analyze whether to
+  collapse it behind a toggle (same pattern already used for "Property
+  expenses breakdown" on the input side), show only the Total by default
+  with a "breakdown" expander, or some other layout - needs its own look
+  before deciding, not just "add a toggle" on reflex.
+
+- [ ] **TODO-40: Simplify/clarify the "Upfront Costs (NSW)" results panel**
+  Requested by the user - the panel (Stamp Duty, LMI, Closing Costs, Total
+  Cash Required, Available Savings, Remaining Savings) reads as unclear to
+  a first-time user: what LMI is and why it often shows $0 (LMI only
+  applies above 80% LVR - `src/calculations/lmi.js` - that threshold isn't
+  explained anywhere in the UI), what "Total Cash Required" actually sums
+  (deposit + stamp duty + closing costs, per TODO-11), and what "Remaining
+  Savings" means relative to "Available Savings" (`totalSavings -
+  totalCashRequired - totalScheduledOffset`, per TODO-12's double-counting
+  fix - also not explained in the UI). Needs a proper redesign pass (more
+  inline explanation text, tooltips, or a restructured layout), not just a
+  quick label tweak.
+
+- [ ] **TODO-41: Consider moving "Upfront Costs (NSW)" higher on the page**
+  Requested by the user - today it's the 3rd input card (after Purchase
+  Details, Financial Position) and appears roughly in the same position
+  in the results panel. Worth discussing whether upfront/purchase-time
+  costs deserve more prominence (e.g. right after Purchase Details, before
+  Property Expenses/Income) since they're a one-time decision-point figure
+  rather than an ongoing monthly one - needs to weigh this against how the
+  page currently reads top-to-bottom as "purchase details → ongoing
+  income/expenses → results."
+
+- [ ] **TODO-42: Rethink "Property Summary" when there's no rental income**
+  Requested by the user - "Property Summary" (Total Property Monthly
+  Expenses / Income / Net Property Monthly Balance, `src/App.jsx`) always
+  shows a "Net Property Monthly Balance" even when `monthlyRentalIncome`
+  is $0 (no Tenants added - i.e. not actually being rented out), where the
+  figure is just "-(all property costs)" and doesn't read as a meaningful
+  comparison. Needs analysis of what this card is actually _for_: is it
+  meant only for a genuine investment scenario (in which case, hide/
+  relabel it when there's no rental income at all, similar to how Land
+  Tax/Property Management are already gated behind `isInvestmentProperty`
+  from TODO-35), or does it need reframing to also make sense for an
+  owner-occupier who isn't renting anything out at all?
+
 ---
 
 ## 🟢 LOW PRIORITY (Polish, refactoring, cleanup)
 
-- [ ] **TODO-8: Extract and test the Timeline Explorer snapshot**
-  Left out of scope of the tests work (TODO-1): the logic starting at
-  `src/App.jsx:1093` (month-by-month snapshot, `effectiveProgress`,
-  classifying each exceptional expense's status as future/active/past)
-  still lives inline in JSX, not extracted to `src/calculations/`.
-
-- [ ] **TODO-9: Extract and test form validations**
-  Also left out of scope: the validation predicates inside
-  `addOffsetContribution` (`src/App.jsx:149`) and `addExceptionalExpense`
-  (`src/App.jsx:195`) — duplicate month, start > end, required fields — are
-  mixed in with `setState` calls and aren't independently testable yet.
-
-- [ ] **TODO-10: Decide the fate of uncalled functions in `src/calculations/loan.js`**
-  `getMonth1Offset`, `calculateInitialPrincipal`,
-  `calculateMonthlyPropertyBalance` and `calculateWeeklyPropertyBalance` no
-  longer have callers after TODO-2. They're tested and correct, so they were
-  left in place rather than widening a bug-fix diff — decide whether the module
-  should be a general formula library or contain only what the app uses.
-
 - [ ] **TODO-37: Replace the Property Type button pair with a dropdown**
   Requested by the user - the two big House/Unit buttons
   (`src/App.jsx:538-556`, `handlePropertyTypeChange`) feel oversized for a
-  simple two-option choice; a combo box/dropdown (`<select>`) reads better.
+  simple two-option choice; a combo box/dropdown (`<select>`) reads
+  better - re-raised again later in the session, this time also
+  mentioning radio buttons as an acceptable alternative to a dropdown.
   Same pattern already used elsewhere in the app (e.g. the Income Name
   picklist) - swap the two `<button>`s for a single `<select value=
   {propertyType} onChange={(e) => handlePropertyTypeChange(e.target.value)}>`

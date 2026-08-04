@@ -35,6 +35,17 @@ export function countOccurrencesUpTo(schedule, month) {
   return Math.floor((cappedMonth - schedule.startMonth) / INTERVAL_MONTHS[schedule.recurrence]) + 1;
 }
 
+// Coarser than isScheduleActive - the Timeline Explorer's status lists
+// (Income Context, Expenses Status) want to keep showing an item through its
+// whole "past" life once it's over, not just flicker active on its exact
+// firing months, so a recurring item counts as 'active' for its entire
+// [startMonth, endMonth] range rather than only on months it actually fires.
+export function classifyScheduleStatus(schedule, month) {
+  if (month < schedule.startMonth) return 'future';
+  if (schedule.recurrence === 'none') return month > schedule.startMonth ? 'past' : 'active';
+  return month > schedule.endMonth ? 'past' : 'active';
+}
+
 const RECURRENCE_LABELS = { monthly: 'Monthly', quarterly: 'Quarterly', yearly: 'Yearly' };
 
 // Human-readable summary for list rows (e.g. "Monthly, from month 1" or

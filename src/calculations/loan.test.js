@@ -10,12 +10,8 @@ import {
   calculateMonthlyLandTax,
   calculateMonthlyPropertyExpenses,
   calculateTotalPropertyCost,
-  getMonth1Offset,
-  calculateInitialPrincipal,
   calculateInitialMonthlyInterest,
   calculateNoOffsetTotalInterest,
-  calculateMonthlyPropertyBalance,
-  calculateWeeklyPropertyBalance,
   calculateWeeklyPersonalExpenses,
   calculateMonthlyPersonalExpenses,
   calculateMonthlyFromWeekly,
@@ -122,23 +118,10 @@ describe('calculateTotalPropertyCost', () => {
   });
 });
 
-describe('getMonth1Offset / calculateInitialPrincipal / calculateInitialMonthlyInterest', () => {
-  it('returns 0 when there is no contribution scheduled for month 1', () => {
-    expect(getMonth1Offset([])).toBe(0);
-    expect(getMonth1Offset([{ month: 2, amount: 5000 }])).toBe(0);
-  });
-
-  it('returns the amount scheduled for month 1', () => {
-    expect(getMonth1Offset([{ month: 1, amount: 20000 }])).toBe(20000);
-  });
-
-  it('clamps initial principal to 0 when month1Offset exceeds the loan amount', () => {
-    expect(calculateInitialPrincipal(250000, 300000)).toBe(0);
-  });
-
+describe('calculateInitialMonthlyInterest', () => {
   it('computes initial monthly interest from the initial principal', () => {
-    const initialPrincipal = calculateInitialPrincipal(250000, 20000);
-    expect(calculateInitialMonthlyInterest(initialPrincipal, 0.004483333333333333)).toBeCloseTo(1031.17, 1);
+    // 250000 loan minus a 20000 month-1 offset lump sum = 230000 principal.
+    expect(calculateInitialMonthlyInterest(230000, 0.004483333333333333)).toBeCloseTo(1031.17, 1);
   });
 });
 
@@ -172,16 +155,6 @@ describe('calculateNoOffsetTotalInterest', () => {
       calculateMonthlyPayment(loanAmount, calculateMonthlyRate(8)), loanAmount
     );
     expect(pricey).toBeGreaterThan(cheap);
-  });
-});
-
-describe('property balance', () => {
-  it('subtracts total property cost from monthly rental income', () => {
-    expect(calculateMonthlyPropertyBalance(1950, 2043.21)).toBeCloseTo(-93.21, 1);
-  });
-
-  it('converts the monthly property balance to a weekly figure', () => {
-    expect(calculateWeeklyPropertyBalance(-93.21)).toBeCloseTo(-21.51, 1);
   });
 });
 

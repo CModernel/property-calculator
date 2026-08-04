@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getActiveAmount, isScheduleActive, countOccurrencesUpTo, formatScheduleLabel, MAX_MONTH } from './recurringAmount';
+import { getActiveAmount, isScheduleActive, countOccurrencesUpTo, classifyScheduleStatus, formatScheduleLabel, MAX_MONTH } from './recurringAmount';
 
 describe('isScheduleActive', () => {
   it('is active only on its exact month when recurrence is "none"', () => {
@@ -88,6 +88,34 @@ describe('countOccurrencesUpTo', () => {
     const schedule = { startMonth: 1, recurrence: 'monthly', endMonth: 10 };
     expect(countOccurrencesUpTo(schedule, 10)).toBe(10);
     expect(countOccurrencesUpTo(schedule, 50)).toBe(10);
+  });
+});
+
+describe('classifyScheduleStatus', () => {
+  it('is "future" before the schedule starts', () => {
+    expect(classifyScheduleStatus({ startMonth: 6, recurrence: 'none' }, 5)).toBe('future');
+  });
+
+  it('a one-time schedule is "active" only on its exact month, "past" after', () => {
+    const schedule = { startMonth: 6, recurrence: 'none' };
+    expect(classifyScheduleStatus(schedule, 6)).toBe('active');
+    expect(classifyScheduleStatus(schedule, 7)).toBe('past');
+  });
+
+  it('a recurring schedule is "active" for its whole range, not just firing months', () => {
+    const schedule = { startMonth: 3, recurrence: 'quarterly', endMonth: 12 };
+    expect(classifyScheduleStatus(schedule, 3)).toBe('active');
+    expect(classifyScheduleStatus(schedule, 4)).toBe('active'); // doesn't fire this month, but still active
+    expect(classifyScheduleStatus(schedule, 12)).toBe('active');
+  });
+
+  it('a recurring schedule is "past" once past its endMonth', () => {
+    const schedule = { startMonth: 3, recurrence: 'monthly', endMonth: 12 };
+    expect(classifyScheduleStatus(schedule, 13)).toBe('past');
+  });
+
+  it('a "Forever" (endMonth === MAX_MONTH) schedule never becomes "past"', () => {
+    expect(classifyScheduleStatus({ startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }, MAX_MONTH)).toBe('active');
   });
 });
 
