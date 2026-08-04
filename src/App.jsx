@@ -373,9 +373,15 @@ const PropertyInvestmentCalculator = () => {
   // non-zero starting point if they're still at 0; switching off doesn't
   // touch the stored values, since they're simply zeroed at the calculation
   // level and hidden from the UI, in case the user switches back.
+  // In NSW the First Home Buyer stamp duty concession requires occupying the
+  // property, which an investment property by definition isn't - switching
+  // investment on forces FHB off (and the checkbox disables, see its JSX) so
+  // the two can't be ticked together; switching investment back off doesn't
+  // re-tick FHB, since that's a decision only the user should make.
   const handleInvestmentPropertyChange = (checked) => {
     setIsInvestmentProperty(checked);
     if (checked) {
+      setIsFirstHomeBuyer(false);
       if (landTaxField.base === 0) landTaxField.setBase(2000);
       if (propertyManagementField.base === 0) propertyManagementField.setBase(150);
     }
@@ -657,15 +663,21 @@ const PropertyInvestmentCalculator = () => {
                 )}
               </div>
 
-              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={isFirstHomeBuyer}
-                  onChange={(e) => setIsFirstHomeBuyer(e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                First Home Buyer (NSW stamp duty concession)
-              </label>
+              <div>
+                <label className={`flex items-center gap-2 text-sm font-medium ${isInvestmentProperty ? 'text-gray-400' : 'text-gray-700'}`}>
+                  <input
+                    type="checkbox"
+                    checked={isFirstHomeBuyer}
+                    disabled={isInvestmentProperty}
+                    onChange={(e) => setIsFirstHomeBuyer(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
+                  />
+                  First Home Buyer (NSW stamp duty concession)
+                </label>
+                {isInvestmentProperty && (
+                  <p className="text-xs text-gray-500 mt-1">Not available for an investment property - the FHB concession requires occupying it.</p>
+                )}
+              </div>
 
               <div>
                 <label className="flex items-center gap-2 text-sm font-medium text-gray-700">

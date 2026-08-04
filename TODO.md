@@ -790,25 +790,33 @@ optionally reuse in the commit message when you implement it.
   Management line items (added there too, for parity with the existing
   Strata/Council/Utilities/Insurance lines).
 
+- [x] **TODO-38: Decide how "Investment Property" should interact with First Home Buyer / stamp duty concession**
+  Deferred from TODO-35 by explicit user choice, to keep that diff scoped
+  to just Land Tax/Property Management. In NSW, the First Home Buyer
+  stamp duty concession requires occupying the property, but
+  `isInvestmentProperty` and `isFirstHomeBuyer`/`calculateStampDuty` had
+  zero interaction - a user could tick both and still get the FHB
+  discount. Resolved with the user: ticking "Investment Property"
+  (`handleInvestmentPropertyChange`, `src/App.jsx`) now force-unchecks
+  "First Home Buyer" if it was on, and the FHB checkbox becomes
+  `disabled` (greyed out, with a note: "Not available for an investment
+  property - the FHB concession requires occupying it.") for as long as
+  Investment Property stays checked - mirrors the existing
+  `handlePropertyTypeChange`/Strata-seeding pattern rather than adding a
+  new kind of cross-field validation. Un-checking Investment Property
+  re-enables the FHB checkbox but does **not** auto-re-check it - that's
+  a decision only the user should make, not something to guess on their
+  behalf.
+  Verified in the browser: checked Investment Property while First Home
+  Buyer was on, confirmed it un-checked automatically and greyed out with
+  the explanatory note; confirmed clicking the disabled checkbox does
+  nothing; unchecked Investment Property and confirmed First Home Buyer
+  re-enabled (still unchecked, not force-re-checked) and could be ticked
+  normally again.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
-
-- [ ] **TODO-38: Decide how "Investment Property" should interact with First Home Buyer / stamp duty concession**
-  Deferred from TODO-35 (done) by explicit user choice, to keep that
-  diff scoped to just Land Tax/Property Management. In NSW, the First
-  Home Buyer stamp duty concession requires occupying the property (not
-  renting it out), but `isInvestmentProperty` (`src/App.jsx`) and
-  `isFirstHomeBuyer`/`calculateStampDuty`
-  (`src/calculations/stampDuty.js`) today have zero interaction - a user
-  can tick both "First Home Buyer" and "Investment Property" and still
-  get the FHB stamp duty discount, which doesn't reflect the real rule.
-  Needs a decision on how far to take this: at minimum, hide/disable/
-  uncheck "First Home Buyer" when "Investment Property" is on; possibly
-  also a disclaimer noting the two are mutually exclusive in practice.
-  Small in code once decided (a one-line effect or conditional render in
-  `App.jsx`), but the policy call itself needs its own discussion, same
-  as TODO-35's original open question.
 
 - [ ] **TODO-36: Add a Schedule-based expense list for Health/Subscriptions/Entertainment/Debt Repayments; replace "Other" with custom expenses**
   Requested by the user, referencing a bank-style Housing/Living/Debt
