@@ -455,9 +455,16 @@ const PropertyInvestmentCalculator = () => {
       <div className="bg-white rounded-xl shadow-xl p-6 mb-6">
         <h1 className="text-3xl font-bold text-gray-800 mb-2 flex items-center gap-3">
           <Home className="text-blue-600" size={36} />
-          Property Investment Cash Flow Calculator
+          NSW Property Investment Cash Flow Calculator
         </h1>
         <p className="text-gray-600">How much is left after EVERYTHING? That goes to offset automatically.</p>
+      </div>
+
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+        <p className="text-xs text-amber-800">
+          ⚠️ Personal project for illustrative purposes only — not financial advice. Always consult a licensed
+          financial adviser before making property decisions.
+        </p>
       </div>
 
       <div className="bg-white rounded-lg shadow-md p-4 mb-4 flex items-center justify-between gap-3 flex-wrap">

@@ -359,29 +359,27 @@ optionally reuse in the commit message when you implement it.
   Exceptional Expenses all together, and collapsing hides all of it again
   cleanly.
 
+- [x] **TODO-25: Title change + financial-advice disclaimer**
+  Requested by the user, for legal-safety reasons. Title changed to "NSW
+  Property Investment Cash Flow Calculator" (NSW moved to the front, per
+  the user's choice among 3 preview options) - the app already hardcodes
+  NSW-specific stamp duty/LMI/closing-cost rules, so this makes the scope
+  explicit instead of reading as general-purpose. Added a small always-
+  visible amber disclaimer box (`bg-amber-50`/`border-amber-200`/
+  `text-amber-800` - amber rather than the `yellow` "Exceptional Expenses"
+  already uses, so the two don't get visually confused) between the header
+  and the Save bar: "⚠️ Personal project for illustrative purposes only —
+  not financial advice. Always consult a licensed financial adviser before
+  making property decisions." Chose always-visible over a hover-tooltip
+  variant (also offered as an option) since legal-safety text shouldn't be
+  hidden by default. No new state/logic - pure text + a static Tailwind
+  card. Verified in the browser (title and disclaimer both render
+  correctly, don't overlap the Save bar) and re-ran the Spanish-text sweep
+  from TODO-23 to confirm the new copy is 100% English.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
-
-- [ ] **TODO-25: Title change + financial-advice disclaimer**
-  Requested by the user, for legal-safety reasons. Two changes to
-  `src/App.jsx`'s header (currently `<h1>Property Investment Cash Flow
-  Calculator</h1>` at line ~458, subtitle "How much is left after
-  EVERYTHING? That goes to offset automatically." at line ~460):
-  1. Clarify the title is NSW-specific - the app already hardcodes NSW
-     stamp duty/LMI/closing-cost rules (`src/calculations/stampDuty.js`,
-     `lmi.js`, the "Upfront Costs (NSW)" card), so the title/subtitle should
-     say so explicitly rather than reading as a general-Australia or
-     general-purpose calculator.
-  2. Add a visible disclaimer that this is a personal project, not
-     financial advice, and is only meant to give a hypothetical/rough idea
-     of loan payoff timelines etc. - not a recommendation to act on. Needs
-     wording that's clearly visible (near the header, not buried in a
-     footer) without overwhelming the page - a small dismissible or
-     always-visible note under the title, similar in weight to the
-     Save-bar's status line, is probably the right size. English only (see
-     TODO-23's Spanish-sweep confirmation that everything else in the app
-     is already English).
 
 ---
 
