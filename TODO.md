@@ -343,6 +343,22 @@ optionally reuse in the commit message when you implement it.
     merging 90 and 95 into one `min: 90` band. Tests and the tooltip were
     updated to match; re-verified in the browser.
 
+- [x] **TODO-24: Make "Your Personal Expenses (Weekly)" fully collapsible, like Property Expenses/Rental Income**
+  Requested by the user; scope question resolved by asking directly -
+  chose "everything behind one toggle" over keeping Fortnightly Income
+  always visible, matching the Property Expenses/Rental Income pattern
+  exactly. The pre-existing inner toggle from TODO-20
+  (`showPersonalExpenses`, previously only wrapping the Food/Transport/
+  Other `SteppedExpenseField`s) was repurposed to wrap the entire card
+  instead: the toggle button moved to right after the `<h2>`, and
+  everything from "Fortnightly Income" through the "Exceptional Expenses"
+  sub-card now sits inside the same `{showPersonalExpenses && (...)}`
+  block - no new state needed. Verified in the browser: collapsed by
+  default (consistent with the other cards), expanding shows Fortnightly
+  Income, Offset Contributions Schedule, the 3 expense fields, and
+  Exceptional Expenses all together, and collapsing hides all of it again
+  cleanly.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -366,22 +382,6 @@ optionally reuse in the commit message when you implement it.
      Save-bar's status line, is probably the right size. English only (see
      TODO-23's Spanish-sweep confirmation that everything else in the app
      is already English).
-
-- [ ] **TODO-24: Make "Your Personal Expenses (Weekly)" fully collapsible, like Property Expenses/Rental Income**
-  Requested by the user. Note there's already a *partial* collapse here from
-  TODO-20 (`showPersonalExpenses` in `src/App.jsx`, toggling just the Food/
-  Transport/Other `SteppedExpenseField`s) - but unlike the "Property
-  Expenses" and "Rental Income" cards, where the toggle hides the card's
-  *entire* content, this card also always shows Fortnightly Income, the
-  "Offset Contributions Schedule" sub-section, and the "Exceptional
-  Expenses" sub-card outside that toggle. Needs a decision on scope before
-  implementing: collapse the whole card's content behind one toggle
-  (matching Property Expenses/Rental Income exactly, at the cost of hiding
-  Fortnightly Income - arguably the single most important input on the
-  page - behind a click), or keep Fortnightly Income always visible and
-  only fold Offset Contributions + the expense fields + Exceptional
-  Expenses under the toggle. Clarify with the user which before writing
-  code.
 
 ---
 

@@ -1023,7 +1023,17 @@ const PropertyInvestmentCalculator = () => {
               Your Personal Expenses (Weekly)
             </h2>
 
-            <div className="space-y-4">
+            <button
+              type="button"
+              onClick={() => setShowPersonalExpenses(!showPersonalExpenses)}
+              className="text-sm font-medium text-blue-600 hover:text-blue-700"
+            >
+              {showPersonalExpenses ? '▾' : '▸'} Personal expenses breakdown (subtotal: $
+              {Math.round(weeklyPersonalExpenses).toLocaleString()}/week)
+            </button>
+
+            {showPersonalExpenses && (
+            <div className="space-y-4 mt-4">
               <NumberSliderField
                 label="Fortnightly Income"
                 value={fortnightlyIncome}
@@ -1149,17 +1159,7 @@ const PropertyInvestmentCalculator = () => {
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setShowPersonalExpenses(!showPersonalExpenses)}
-                className="text-sm font-medium text-blue-600 hover:text-blue-700"
-              >
-                {showPersonalExpenses ? '▾' : '▸'} Personal expenses breakdown (subtotal: $
-                {Math.round(weeklyPersonalExpenses).toLocaleString()}/week)
-              </button>
-
-              {showPersonalExpenses && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <SteppedExpenseField
                     field={foodExpensesField}
                     label="Food"
@@ -1192,8 +1192,7 @@ const PropertyInvestmentCalculator = () => {
                     color="purple"
                     prefix="$"
                   />
-                </div>
-              )}
+              </div>
 
               {/* EXCEPTIONAL EXPENSES */}
               <div className="bg-white rounded-lg shadow-md p-5 border-t-4 border-yellow-400">
@@ -1323,6 +1322,7 @@ const PropertyInvestmentCalculator = () => {
                 </div>
               </div>
             </div>
+            )}
           </div>
 
         </div>
