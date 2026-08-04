@@ -4,6 +4,8 @@ import {
   calculateMonthlyFromWeekly,
   calculateMonthlyStrata,
   calculateMonthlyCouncil,
+  calculateMonthlyWaterRates,
+  calculateMonthlyLandTax,
   calculateMonthlyPropertyExpenses,
   calculateWeeklyPersonalExpenses,
   calculateMonthlyPersonalExpenses,
@@ -69,6 +71,14 @@ export function calculateLoanWithOffset({
       const utilities = getSteppedValue(expenseFields.utilities.base, expenseFields.utilities.changes, months);
       const council = getSteppedValue(expenseFields.councilRates.base, expenseFields.councilRates.changes, months);
       const insurance = getSteppedValue(expenseFields.insurance.base, expenseFields.insurance.changes, months);
+      const maintenance = getSteppedValue(expenseFields.maintenance.base, expenseFields.maintenance.changes, months);
+      const waterRates = getSteppedValue(expenseFields.waterRates.base, expenseFields.waterRates.changes, months);
+      const landTax = getSteppedValue(expenseFields.landTax.base, expenseFields.landTax.changes, months);
+      const propertyManagement = getSteppedValue(
+        expenseFields.propertyManagement.base,
+        expenseFields.propertyManagement.changes,
+        months
+      );
       const food = getSteppedValue(expenseFields.foodExpenses.base, expenseFields.foodExpenses.changes, months);
       const transport = getSteppedValue(
         expenseFields.transportExpenses.base,
@@ -77,12 +87,16 @@ export function calculateLoanWithOffset({
       );
       const other = getSteppedValue(expenseFields.otherExpenses.base, expenseFields.otherExpenses.changes, months);
 
-      const propertyExpenses = calculateMonthlyPropertyExpenses(
-        calculateMonthlyStrata(strata),
+      const propertyExpenses = calculateMonthlyPropertyExpenses({
+        monthlyStrata: calculateMonthlyStrata(strata),
         utilities,
-        calculateMonthlyCouncil(council),
-        insurance
-      );
+        monthlyCouncil: calculateMonthlyCouncil(council),
+        insurance,
+        maintenance,
+        monthlyWaterRates: calculateMonthlyWaterRates(waterRates),
+        monthlyLandTax: calculateMonthlyLandTax(landTax),
+        propertyManagement,
+      });
       const personalExpenses = calculateMonthlyPersonalExpenses(calculateWeeklyPersonalExpenses(food, transport, other));
       monthlyExpensesForMonth = propertyExpenses + personalExpenses;
     }

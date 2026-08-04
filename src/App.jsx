@@ -11,6 +11,8 @@ import {
   calculateMonthlyPayment,
   calculateMonthlyStrata,
   calculateMonthlyCouncil,
+  calculateMonthlyWaterRates,
+  calculateMonthlyLandTax,
   calculateMonthlyPropertyExpenses,
   calculateTotalPropertyCost,
   calculateInitialMonthlyInterest,
@@ -62,7 +64,17 @@ const PropertyInvestmentCalculator = () => {
   const utilitiesField = useSteppedValue(config.utilities, config.utilitiesChanges);
   const councilRatesField = useSteppedValue(config.councilRates, config.councilRatesChanges);
   const insuranceField = useSteppedValue(config.insurance, config.insuranceChanges);
+  const maintenanceField = useSteppedValue(config.maintenance, config.maintenanceChanges);
+  const waterRatesField = useSteppedValue(config.waterRates, config.waterRatesChanges);
   const [showPropertyExpenses, setShowPropertyExpenses] = useState(false);
+
+  // Investment-property-only expenses. Deliberately NOT wired to
+  // isFirstHomeBuyer/calculateStampDuty (NSW's FHB concession really
+  // requires occupying the property) - that interaction is a known,
+  // documented gap (see TODO-38), not solved here.
+  const [isInvestmentProperty, setIsInvestmentProperty] = useState(config.isInvestmentProperty ?? false);
+  const landTaxField = useSteppedValue(config.landTax, config.landTaxChanges);
+  const propertyManagementField = useSteppedValue(config.propertyManagement, config.propertyManagementChanges);
 
   // Upfront purchase costs (NSW)
   const [isFirstHomeBuyer, setIsFirstHomeBuyer] = useState(config.isFirstHomeBuyer);
@@ -192,6 +204,14 @@ const PropertyInvestmentCalculator = () => {
   const utilities = getSteppedValue(utilitiesField.base, utilitiesField.changes, 1);
   const councilRates = getSteppedValue(councilRatesField.base, councilRatesField.changes, 1);
   const insurance = getSteppedValue(insuranceField.base, insuranceField.changes, 1);
+  const maintenance = getSteppedValue(maintenanceField.base, maintenanceField.changes, 1);
+  const waterRates = getSteppedValue(waterRatesField.base, waterRatesField.changes, 1);
+  // Land Tax/Property Management only apply to an investment property,
+  // regardless of whatever value is stored (see handleInvestmentPropertyChange).
+  const landTax = isInvestmentProperty ? getSteppedValue(landTaxField.base, landTaxField.changes, 1) : 0;
+  const propertyManagement = isInvestmentProperty
+    ? getSteppedValue(propertyManagementField.base, propertyManagementField.changes, 1)
+    : 0;
   const foodExpenses = getSteppedValue(foodExpensesField.base, foodExpensesField.changes, 1);
   const transportExpenses = getSteppedValue(transportExpensesField.base, transportExpensesField.changes, 1);
   const otherExpenses = getSteppedValue(otherExpensesField.base, otherExpensesField.changes, 1);
@@ -199,7 +219,12 @@ const PropertyInvestmentCalculator = () => {
   // Monthly property expenses
   const monthlyStrata = calculateMonthlyStrata(strataFees);
   const monthlyCouncil = calculateMonthlyCouncil(councilRates);
-  const monthlyPropertyExpenses = calculateMonthlyPropertyExpenses(monthlyStrata, utilities, monthlyCouncil, insurance);
+  const monthlyWaterRates = calculateMonthlyWaterRates(waterRates);
+  const monthlyLandTax = calculateMonthlyLandTax(landTax);
+  const monthlyPropertyExpenses = calculateMonthlyPropertyExpenses({
+    monthlyStrata, utilities, monthlyCouncil, insurance,
+    maintenance, monthlyWaterRates, monthlyLandTax, propertyManagement,
+  });
   const totalPropertyCost = calculateTotalPropertyCost(monthlyPayment, monthlyPropertyExpenses);
 
   // Interest on the full balance, before any offset is applied.
@@ -249,6 +274,13 @@ const PropertyInvestmentCalculator = () => {
     utilities: utilitiesField,
     councilRates: councilRatesField,
     insurance: insuranceField,
+    maintenance: maintenanceField,
+    waterRates: waterRatesField,
+    // Land Tax/Property Management only apply for the whole simulation when
+    // the property is marked as an investment - matches the static landTax/
+    // propertyManagement values above.
+    landTax: isInvestmentProperty ? landTaxField : { base: 0, changes: [] },
+    propertyManagement: isInvestmentProperty ? propertyManagementField : { base: 0, changes: [] },
     foodExpenses: foodExpensesField,
     transportExpenses: transportExpensesField,
     otherExpenses: otherExpensesField,
@@ -336,6 +368,19 @@ const PropertyInvestmentCalculator = () => {
     }
   };
 
+  // Same "seed a sensible default" pattern as handlePropertyTypeChange above -
+  // switching investment status on gives Land Tax/Property Management a
+  // non-zero starting point if they're still at 0; switching off doesn't
+  // touch the stored values, since they're simply zeroed at the calculation
+  // level and hidden from the UI, in case the user switches back.
+  const handleInvestmentPropertyChange = (checked) => {
+    setIsInvestmentProperty(checked);
+    if (checked) {
+      if (landTaxField.base === 0) landTaxField.setBase(2000);
+      if (propertyManagementField.base === 0) propertyManagementField.setBase(150);
+    }
+  };
+
   // Only the ~24 "data" inputs are saved - ephemeral UI state (collapsed
   // sections, in-progress "Add" form drafts, the Timeline Explorer's
   // selected month) isn't part of a scenario.
@@ -347,6 +392,11 @@ const PropertyInvestmentCalculator = () => {
       utilities: utilitiesField.base, utilitiesChanges: utilitiesField.changes,
       councilRates: councilRatesField.base, councilRatesChanges: councilRatesField.changes,
       insurance: insuranceField.base, insuranceChanges: insuranceField.changes,
+      maintenance: maintenanceField.base, maintenanceChanges: maintenanceField.changes,
+      waterRates: waterRatesField.base, waterRatesChanges: waterRatesField.changes,
+      isInvestmentProperty,
+      landTax: landTaxField.base, landTaxChanges: landTaxField.changes,
+      propertyManagement: propertyManagementField.base, propertyManagementChanges: propertyManagementField.changes,
       isFirstHomeBuyer, totalSavings, payLmiUpfront,
       conveyancing, buildingInspection, pestInspection, registrationFees, searches,
       loanEstablishmentFee, propertyValuation, homeInsurance, rateAdjustments,
@@ -616,6 +666,21 @@ const PropertyInvestmentCalculator = () => {
                 />
                 First Home Buyer (NSW stamp duty concession)
               </label>
+
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={isInvestmentProperty}
+                    onChange={(e) => handleInvestmentPropertyChange(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  Investment Property
+                </label>
+                {isInvestmentProperty && (
+                  <p className="text-xs text-gray-500 mt-1">Adds Land Tax and Property Management to Property Expenses.</p>
+                )}
+              </div>
 
               <NumberSliderField
                 label="Property Price"
@@ -891,56 +956,113 @@ const PropertyInvestmentCalculator = () => {
             </button>
 
             {showPropertyExpenses && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                {propertyType !== 'house' && (
+              <div className="mt-4 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {propertyType !== 'house' && (
+                    <SteppedExpenseField
+                      field={strataFeesField}
+                      label="Strata (quarterly)"
+                      min={0}
+                      max={20000}
+                      sliderMax={5000}
+                      step={100}
+                      color="orange"
+                      prefix="$"
+                    >
+                      ≈ ${Math.round(strataFees / 4)}/month
+                    </SteppedExpenseField>
+                  )}
+
                   <SteppedExpenseField
-                    field={strataFeesField}
-                    label="Strata (quarterly)"
+                    field={utilitiesField}
+                    label="Utilities (monthly)"
                     min={0}
-                    max={20000}
-                    sliderMax={5000}
-                    step={100}
+                    max={2000}
+                    sliderMax={600}
+                    step={10}
+                    color="orange"
+                    prefix="$"
+                  />
+
+                  <SteppedExpenseField
+                    field={councilRatesField}
+                    label="Council Rates (quarterly)"
+                    min={0}
+                    max={10000}
+                    sliderMax={2000}
+                    step={50}
                     color="orange"
                     prefix="$"
                   >
-                    ≈ ${Math.round(strataFees / 4)}/month
+                    ≈ ${Math.round(councilRates / 4)}/month
                   </SteppedExpenseField>
+
+                  <SteppedExpenseField
+                    field={insuranceField}
+                    label="Insurance (monthly)"
+                    min={0}
+                    max={2000}
+                    sliderMax={500}
+                    step={10}
+                    color="orange"
+                    prefix="$"
+                  />
+
+                  <SteppedExpenseField
+                    field={maintenanceField}
+                    label="Maintenance & Repairs (monthly)"
+                    min={0}
+                    max={2000}
+                    sliderMax={500}
+                    step={10}
+                    color="orange"
+                    prefix="$"
+                  />
+
+                  <SteppedExpenseField
+                    field={waterRatesField}
+                    label="Water Rates (quarterly)"
+                    min={0}
+                    max={5000}
+                    sliderMax={1000}
+                    step={25}
+                    color="orange"
+                    prefix="$"
+                  >
+                    ≈ ${Math.round(waterRates / 4)}/month
+                  </SteppedExpenseField>
+                </div>
+
+                {isInvestmentProperty && (
+                  <div className="border-t border-orange-200 pt-4">
+                    <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Investment Property</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <SteppedExpenseField
+                        field={landTaxField}
+                        label="Land Tax (yearly)"
+                        min={0}
+                        max={50000}
+                        sliderMax={10000}
+                        step={100}
+                        color="orange"
+                        prefix="$"
+                      >
+                        ≈ ${Math.round(landTax / 12)}/month
+                      </SteppedExpenseField>
+
+                      <SteppedExpenseField
+                        field={propertyManagementField}
+                        label="Property Management (monthly)"
+                        min={0}
+                        max={2000}
+                        sliderMax={500}
+                        step={10}
+                        color="orange"
+                        prefix="$"
+                      />
+                    </div>
+                  </div>
                 )}
-
-                <SteppedExpenseField
-                  field={utilitiesField}
-                  label="Utilities (monthly)"
-                  min={0}
-                  max={2000}
-                  sliderMax={600}
-                  step={10}
-                  color="orange"
-                  prefix="$"
-                />
-
-                <SteppedExpenseField
-                  field={councilRatesField}
-                  label="Council Rates (quarterly)"
-                  min={0}
-                  max={10000}
-                  sliderMax={2000}
-                  step={50}
-                  color="orange"
-                  prefix="$"
-                >
-                  ≈ ${Math.round(councilRates / 4)}/month
-                </SteppedExpenseField>
-
-                <SteppedExpenseField
-                  field={insuranceField}
-                  label="Insurance (monthly)"
-                  min={0}
-                  max={2000}
-                  sliderMax={500}
-                  step={10}
-                  color="orange"
-                  prefix="$"
-                />
               </div>
             )}
           </div>
@@ -1503,6 +1625,30 @@ const PropertyInvestmentCalculator = () => {
                     <span className="text-gray-600">Insurance (monthly):</span>
                     <span className="font-semibold text-red-600">-${insurance.toLocaleString()}</span>
                   </div>
+
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Maintenance & Repairs (monthly):</span>
+                    <span className="font-semibold text-red-600">-${maintenance.toLocaleString()}</span>
+                  </div>
+
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Water Rates (monthly):</span>
+                    <span className="font-semibold text-red-600">-${Math.round(monthlyWaterRates).toLocaleString()}</span>
+                  </div>
+
+                  {isInvestmentProperty && (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Land Tax (monthly):</span>
+                        <span className="font-semibold text-red-600">-${Math.round(monthlyLandTax).toLocaleString()}</span>
+                      </div>
+
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Property Management (monthly):</span>
+                        <span className="font-semibold text-red-600">-${propertyManagement.toLocaleString()}</span>
+                      </div>
+                    </>
+                  )}
 
                   <div className="flex justify-between">
                     <span className="text-gray-600">Personal Expenses:</span>

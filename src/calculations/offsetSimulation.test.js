@@ -432,6 +432,10 @@ describe('calculateLoanWithOffset', () => {
         utilities: emptyField,
         councilRates: { base: 400, changes: [] }, // quarterly -> $100/month
         insurance: emptyField,
+        maintenance: emptyField,
+        waterRates: emptyField,
+        landTax: emptyField,
+        propertyManagement: emptyField,
         foodExpenses: emptyField,
         transportExpenses: emptyField,
         otherExpenses: emptyField,
@@ -457,6 +461,10 @@ describe('calculateLoanWithOffset', () => {
         // quarterly -> $100/month until month 3, then $800/quarter -> $200/month
         councilRates: { base: 400, changes: [{ startMonth: 3, amount: 800 }] },
         insurance: emptyField,
+        maintenance: emptyField,
+        waterRates: emptyField,
+        landTax: emptyField,
+        propertyManagement: emptyField,
         foodExpenses: emptyField,
         transportExpenses: emptyField,
         otherExpenses: emptyField,
@@ -468,5 +476,34 @@ describe('calculateLoanWithOffset', () => {
     });
     const offsets = result.monthlyData.map(d => d.offset);
     expect(offsets).toEqual([900, 1800, 2600, 3400]);
+  });
+
+  it('subtracts maintenance (monthly), water rates (quarterly) and land tax (yearly) every month', () => {
+    const emptyField = { base: 0, changes: [] };
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      exceptExpenses: [],
+      monthlyToOffset: 1000,
+      expenseFields: {
+        strataFees: emptyField,
+        utilities: emptyField,
+        councilRates: emptyField,
+        insurance: emptyField,
+        maintenance: { base: 100, changes: [] }, // $100/month
+        waterRates: { base: 200, changes: [] }, // quarterly -> $50/month
+        landTax: { base: 2400, changes: [] }, // yearly -> $200/month
+        propertyManagement: { base: 150, changes: [] }, // $150/month
+        foodExpenses: emptyField,
+        transportExpenses: emptyField,
+        otherExpenses: emptyField,
+      },
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 2,
+    });
+    const offsets = result.monthlyData.map(d => d.offset);
+    // $1000 surplus - ($100 + $50 + $200 + $150) = $500/month net.
+    expect(offsets).toEqual([500, 1000]);
   });
 });

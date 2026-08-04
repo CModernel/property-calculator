@@ -21,8 +21,24 @@ export function calculateMonthlyCouncil(councilRates) {
   return councilRates / 4;
 }
 
-export function calculateMonthlyPropertyExpenses(monthlyStrata, utilities, monthlyCouncil, insurance) {
-  return monthlyStrata + utilities + monthlyCouncil + insurance;
+export function calculateMonthlyWaterRates(waterRates) {
+  return waterRates / 4;
+}
+
+// NSW Land Tax is assessed annually.
+export function calculateMonthlyLandTax(landTax) {
+  return landTax / 12;
+}
+
+// A single object param instead of 8 positionals - past 4 args the risk of
+// mixing up the order outweighs the terseness, and every caller passes named
+// values anyway.
+export function calculateMonthlyPropertyExpenses({
+  monthlyStrata, utilities, monthlyCouncil, insurance,
+  maintenance, monthlyWaterRates, monthlyLandTax, propertyManagement,
+}) {
+  return monthlyStrata + utilities + monthlyCouncil + insurance
+    + maintenance + monthlyWaterRates + monthlyLandTax + propertyManagement;
 }
 
 export function calculateTotalPropertyCost(monthlyPayment, monthlyPropertyExpenses) {

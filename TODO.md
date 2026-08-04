@@ -734,33 +734,81 @@ optionally reuse in the commit message when you implement it.
   entry and confirmed the list showed "$500/week • Monthly, months
   1-131" with the loan simulation reacting correctly.
 
+- [x] **TODO-35: Add Maintenance & Repairs + Water Rates to Property Expenses; gate Land Tax/Property Management behind an investment-property toggle**
+  Requested by the user. Two decisions resolved with the user before
+  implementing: (1) **FHB/investment interaction scope: minimal** - the
+  new `isInvestmentProperty` flag only gates Land Tax/Property Management;
+  it does NOT touch `isFirstHomeBuyer`/`calculateStampDuty`, even though in
+  NSW the FHB concession really requires occupying the property - that
+  interaction is a known, deliberately deferred gap (see TODO-38); (2)
+  **Property Management modeled as a flat monthly `SteppedExpenseField`**
+  (like Utilities/Insurance), not a % of rental income - keeps it
+  decoupled from `incomeSources`/Tenants and the simulation loop.
+  **Maintenance & Repairs** (monthly) and **Water Rates** (quarterly, with
+  the same "≈ $X/month" helper Strata/Council already show) were added as
+  2 more always-visible `SteppedExpenseField`s in the "Property Expenses"
+  card - Water Rates has no toggle of its own; like Strata already does
+  for houses, it just defaults to $0 when it doesn't apply (e.g. the
+  tenant pays it), no new control needed for that.
+  **Land Tax** (yearly - NSW land tax is assessed annually, so it gets its
+  own `calculateMonthlyLandTax` divide-by-12 conversion, distinct from the
+  existing divide-by-4 quarterly ones) and **Property Management**
+  (monthly) are gated behind a new `isInvestmentProperty` checkbox in
+  "Purchase Details" (right after "First Home Buyer"), following the
+  exact same 3-part pattern `propertyType`/Strata already established:
+  a "month 1" ternary, an `expenseFields` ternary (both zero out to
+  `{ base: 0, changes: [] }` when off), and a JSX `&&` guard - plus a
+  `handleInvestmentPropertyChange` handler that seeds Land Tax/Property
+  Management to sensible non-zero defaults ($2,000/year, $150/month) the
+  first time the toggle turns on, mirroring `handlePropertyTypeChange`'s
+  strata-seeding behavior.
+  `calculateMonthlyPropertyExpenses` (`src/calculations/loan.js`)
+  refactored from 4 positional params to a single object param - at 8
+  inputs (4 new fields added) positional args risked silent
+  argument-order mistakes, and it's a pure function with full test
+  coverage protecting the refactor. `offsetSimulation.js` needed 4 more
+  `getSteppedValue` calls inside its `expenseFields` block, in the exact
+  same shape as the 7 existing sub-fields.
+  **No `SCHEMA_VERSION` bump** (stayed at 6) - unlike every prior bump,
+  this change is purely additive (5 new top-level keys, no changed shape
+  of any existing field), so an old saved scenario still loads fine and
+  the new keys simply fall through to `config.default.json`'s defaults
+  via the existing `{...defaultConfig, ...localConfig, ...savedScenario}`
+  merge - verified directly rather than assumed.
+  Verified in the browser: confirmed Maintenance & Repairs and Water
+  Rates appear always, with the subtotal going from $393 to $543/month;
+  checked "Investment Property" and confirmed Land Tax ($2,000/year seed)
+  and Property Management ($150/month seed) appeared under an "INVESTMENT
+  PROPERTY" separator, subtotal rising to $859/month and "Time to pay
+  off" rising from 11.3 to 12.3 years; unchecked it and confirmed both
+  fields disappeared **and** the subtotal/payoff time reverted exactly
+  (not just hidden - genuinely excluded from the simulation); saved a
+  scenario with Investment Property on, confirmed `version: 6` (no bump)
+  in `localStorage` with all 5 new keys present, reloaded and confirmed
+  the restored scenario matched exactly, including the "Monthly Expenses"
+  breakdown panel's new Maintenance/Water Rates/Land Tax/Property
+  Management line items (added there too, for parity with the existing
+  Strata/Council/Utilities/Insurance lines).
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
 
-- [ ] **TODO-35: Add Maintenance & Repairs + Water Rates to Property Expenses; gate Land Tax/Property Management behind an investment-property toggle**
-  Requested by the user. Two new fixed fields alongside today's 4
-  (Strata/Utilities/Council Rates/Insurance, `src/App.jsx`, all
-  `SteppedExpenseField`s): **Maintenance & Repairs** (monthly estimate,
-  same model as Utilities/Insurance) and **Water Rates** (quarterly, same
-  model as Strata/Council Rates - the user notes it's genuinely optional,
-  since depending on the state either the tenant or the owner pays it).
-  Also requested as **optional/toggleable** rather than always-shown:
-  **Land Tax** (normally investment-only) and **Property Management**
-  (investment-only) - the user explicitly flagged this needs its own
-  discussion on how to turn them on/off.
-  **Open design gap found while reviewing this:** the app has no explicit
-  "is this an investment property?" concept today - `propertyType`
-  (`house`/`unit`) only distinguishes the building type (it's what
-  currently gates Strata on/off, `src/App.jsx` `propertyType !== 'house'`),
-  and the app already conflates "you live here and rent out a room"
-  (tenants) with "you rent the whole place out" without a clear
-  owner-occupied-vs-investment distinction anywhere else. Introducing Land
-  Tax/Property Management toggles probably means introducing that concept
-  for the first time (a new top-level flag), which has implications beyond
-  just these two fields (e.g. should First Home Buyer concession even be
-  offered if the property is marked investment-only?) - needs a proper
-  discussion before implementing, not just two new checkboxes.
+- [ ] **TODO-38: Decide how "Investment Property" should interact with First Home Buyer / stamp duty concession**
+  Deferred from TODO-35 (done) by explicit user choice, to keep that
+  diff scoped to just Land Tax/Property Management. In NSW, the First
+  Home Buyer stamp duty concession requires occupying the property (not
+  renting it out), but `isInvestmentProperty` (`src/App.jsx`) and
+  `isFirstHomeBuyer`/`calculateStampDuty`
+  (`src/calculations/stampDuty.js`) today have zero interaction - a user
+  can tick both "First Home Buyer" and "Investment Property" and still
+  get the FHB stamp duty discount, which doesn't reflect the real rule.
+  Needs a decision on how far to take this: at minimum, hide/disable/
+  uncheck "First Home Buyer" when "Investment Property" is on; possibly
+  also a disclaimer noting the two are mutually exclusive in practice.
+  Small in code once decided (a one-line effect or conditional render in
+  `App.jsx`), but the policy call itself needs its own discussion, same
+  as TODO-35's original open question.
 
 - [ ] **TODO-36: Add a Schedule-based expense list for Health/Subscriptions/Entertainment/Debt Repayments; replace "Other" with custom expenses**
   Requested by the user, referencing a bank-style Housing/Living/Debt

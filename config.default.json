@@ -8,6 +8,11 @@
   "utilities": 200,
   "councilRates": 450,
   "insurance": 80,
+  "maintenance": 100,
+  "waterRates": 200,
+  "isInvestmentProperty": false,
+  "landTax": 0,
+  "propertyManagement": 0,
   "incomeSources": [
     { "id": 1, "name": "Salary", "amount": 1614, "startMonth": 1, "recurrence": "monthly", "endMonth": 360 }
   ],

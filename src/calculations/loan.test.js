@@ -6,6 +6,8 @@ import {
   calculateMonthlyPayment,
   calculateMonthlyStrata,
   calculateMonthlyCouncil,
+  calculateMonthlyWaterRates,
+  calculateMonthlyLandTax,
   calculateMonthlyPropertyExpenses,
   calculateTotalPropertyCost,
   getMonth1Offset,
@@ -72,12 +74,46 @@ describe('property expenses', () => {
     expect(calculateMonthlyCouncil(DEFAULTS.councilRates)).toBe(112.5);
   });
 
-  it('sums strata, utilities, council and insurance', () => {
+  it('sums strata, utilities, council, insurance, maintenance, water rates, land tax and property management', () => {
     const monthlyStrata = calculateMonthlyStrata(DEFAULTS.strataFees);
     const monthlyCouncil = calculateMonthlyCouncil(DEFAULTS.councilRates);
     expect(
-      calculateMonthlyPropertyExpenses(monthlyStrata, DEFAULTS.utilities, monthlyCouncil, DEFAULTS.insurance)
+      calculateMonthlyPropertyExpenses({
+        monthlyStrata,
+        utilities: DEFAULTS.utilities,
+        monthlyCouncil,
+        insurance: DEFAULTS.insurance,
+        maintenance: 0,
+        monthlyWaterRates: 0,
+        monthlyLandTax: 0,
+        propertyManagement: 0,
+      })
     ).toBe(642.5);
+  });
+
+  it('includes maintenance, water rates, land tax and property management when present', () => {
+    expect(
+      calculateMonthlyPropertyExpenses({
+        monthlyStrata: 0,
+        utilities: 0,
+        monthlyCouncil: 0,
+        insurance: 0,
+        maintenance: 100,
+        monthlyWaterRates: 50,
+        monthlyLandTax: 200,
+        propertyManagement: 150,
+      })
+    ).toBe(500);
+  });
+});
+
+describe('calculateMonthlyWaterRates / calculateMonthlyLandTax', () => {
+  it('converts quarterly water rates to a monthly figure', () => {
+    expect(calculateMonthlyWaterRates(200)).toBe(50);
+  });
+
+  it('converts yearly land tax to a monthly figure', () => {
+    expect(calculateMonthlyLandTax(2400)).toBe(200);
   });
 });
 
