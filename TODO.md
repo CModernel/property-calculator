@@ -916,21 +916,30 @@ optionally reuse in the commit message when you implement it.
   test that piped `calculateInitialPrincipal(250000, 20000)` in as input
   was rewritten to inline the arithmetic (`230000`) instead.
 
+- [x] **TODO-39: Make "Monthly Expenses" (Property Balance panel) smaller/collapsible**
+  Requested by the user - the "💳 Monthly Expenses" block (`src/App.jsx`,
+  inside "🏠 Property Balance") had grown to 9+ line items after TODO-35/36
+  each added their own row. Rather than reflexively wrapping the whole
+  card in a toggle, grouped the property-expense-specific rows (Strata,
+  Council, Utilities, Insurance, Maintenance & Repairs, Water Rates, and
+  Land Tax/Property Management when Investment Property is on) behind a
+  single "Property Expenses" subtotal line (reusing the already-computed
+  `monthlyPropertyExpenses`), collapsed by default behind a new
+  `showMonthlyExpensesBreakdown` toggle - the exact same "▸ breakdown
+  (subtotal: $X)" pattern already used on the input side (e.g. "Property
+  expenses breakdown"). This cuts the card from 9-11 rows down to 4 by
+  default (Loan Payment, Property Expenses subtotal, Personal Expenses,
+  Total), with the full itemized breakdown one click away.
+  Verified in the browser: confirmed the collapsed card shows exactly 4
+  rows with the correct $543/month subtotal; expanded the breakdown and
+  confirmed all 6 property expense line items matched their individual
+  values exactly; toggled "Investment Property" on and confirmed Land Tax
+  ($167) and Property Management ($150) appeared in the expanded
+  breakdown too, with the subtotal updating to $859.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
-
-- [ ] **TODO-39: Make "Monthly Expenses" (Property Balance panel) smaller/collapsible**
-  Requested by the user - the "💳 Monthly Expenses" block in the results
-  panel (`src/App.jsx`, inside "🏠 Property Balance") now has 9+ line items
-  (Loan Payment, Strata, Council, Utilities, Insurance, Maintenance &
-  Repairs, Water Rates, optionally Land Tax/Property Management, Personal
-  Expenses, Total) after TODO-35/36 each added their own row, and feels
-  too tall relative to the rest of the results column. Analyze whether to
-  collapse it behind a toggle (same pattern already used for "Property
-  expenses breakdown" on the input side), show only the Total by default
-  with a "breakdown" expander, or some other layout - needs its own look
-  before deciding, not just "add a toggle" on reflex.
 
 - [ ] **TODO-40: Simplify/clarify the "Upfront Costs (NSW)" results panel**
   Requested by the user - the panel (Stamp Duty, LMI, Closing Costs, Total
@@ -968,6 +977,205 @@ optionally reuse in the commit message when you implement it.
   from TODO-35), or does it need reframing to also make sense for an
   owner-occupier who isn't renting anything out at all?
 
+- [ ] **TODO-44: Make the First Home Buyer / Investment Property mutual exclusion symmetric**
+  Requested by the user, correcting a mistake in my own earlier read of
+  the TODO-38 code: the two checkboxes (`src/App.jsx`, "Purchase Details")
+  are only disabled in **one direction** today. Checking "Investment
+  Property" disables "First Home Buyer" (and auto-unchecks it) with an
+  explanatory note - but checking "First Home Buyer" does **not** disable
+  "Investment Property" at all; the Investment Property checkbox
+  (`src/App.jsx:746-751`) has no `disabled` attribute or dependency on
+  `isFirstHomeBuyer` whatsoever. In practice the two can still never both
+  end up `true` (checking Investment while FHB is on force-unchecks FHB
+  via `handleInvestmentPropertyChange`), but the UI doesn't communicate
+  that up front from the FHB side the way it does from the Investment
+  side - a user with FHB checked can freely click Investment Property
+  with no warning, only to see FHB silently disappear. Fix: add
+  `disabled={isFirstHomeBuyer}` (mirroring the existing
+  `disabled={isInvestmentProperty}` on the FHB checkbox) plus the same
+  style of explanatory note (e.g. "Not available for a first home buyer -
+  occupying the property and investing in it are mutually exclusive.")
+  when First Home Buyer is checked. Needs a decision on the resulting
+  UX: with both checkboxes able to disable each other, whichever is
+  checked first "wins" and blocks the other entirely - the user must
+  uncheck it first to switch. That's consistent with how the Investment
+  side already behaves today (once Investment is checked, FHB is fully
+  blocked until Investment is unchecked), just extended to work from the
+  other direction too.
+
+- [ ] **TODO-45: Persist expanded/collapsed panel state on Save**
+  Requested by the user - today `handleSaveScenario` (`src/App.jsx`)
+  deliberately treats all `show*` toggles as ephemeral UI state, not part
+  of the saved scenario ("Only the ~24 'data' inputs are saved - ephemeral
+  UI state (collapsed sections, in-progress 'Add' form drafts...) isn't
+  part of a scenario"). The user wants this changed: which
+  breakdown/section panels are expanded should itself be saved and
+  restored - explicitly including whatever new collapsible TODO-39
+  introduces for "Monthly Expenses".
+  Current `show*` toggles (`src/App.jsx`): `showPropertyExpenses`,
+  `showClosingCostsBreakdown`, `showIncome`, `showPersonalExpenses` (view/
+  breakdown toggles - the likely candidates for "expanded/collapsed page
+  state"), vs. `showAddIncome`, `showAddOtherExpense`,
+  `showAddContribution`, `showAddExceptExp` (in-progress "Add" form
+  visibility, arguably a different kind of state that shouldn't survive a
+  save/reload the same way). **Open question for whoever implements
+  this**: does "expanded/collapsed state" mean only the breakdown/view
+  toggles, or literally everything including the four "Add" form
+  toggles? Needs confirming with the user before implementing, since the
+  answer changes what `handleSaveScenario`/`handleClearSavedScenario`
+  need to read and reset.
+
+- [ ] **TODO-46: Reconsider the "Tenants" name - maybe "House Rent"?**
+  Requested by the user, reopening a naming question that was already
+  discussed once during TODO-29: back then, offered Lodgers/Boarders/Room
+  Rentals as alternatives, and the user's explicit call at the time was
+  **"Dejalo como Tenants"** (keep it as-is). Now re-raising it, proposing
+  **"House Rent"** specifically because "tenants" reads as "lodgers/room-
+  renters" in English and it's unclear whether it also covers renting out
+  the *entire* house (not just a room) - which is exactly the case
+  `isShared: false, numPeople: 1` already models today
+  (`src/App.jsx`, Income Sources' `'Tenants'` category). Needs a fresh
+  decision with the user on the exact label (and whether "Individual
+  Room" - the label shown for a non-shared entry, `src/App.jsx` list
+  rendering - also needs rewording if the category itself gets renamed,
+  since "Individual Room" reads oddly for "the whole house is rented
+  out"). Low-risk to implement once decided - it's a display-string-only
+  change, since `isShared !== undefined` (not the name) is what
+  identifies a Tenants-category entry everywhere in the code.
+
+- [ ] **TODO-47: Add dark mode (mobile + web)**
+  Requested by the user. The entire app today is hardcoded to a light
+  Tailwind palette (`bg-white`, `bg-gray-50`, text colors, etc.) with no
+  dark-mode variants anywhere - would need a systematic pass adding
+  `dark:` variants across every card/component (`src/App.jsx`,
+  `src/components/*.jsx`), plus a toggle (or `prefers-color-scheme`
+  detection) and persisting the choice. Sizeable, mechanical effort given
+  how many color classes exist across the app, not a quick add.
+
+- [ ] **TODO-48 (Analysis only, no code): Evaluate decoupling NSW-specific logic for other Australian states**
+  Requested by the user - explicitly an analysis task, not implementation.
+  The app is hardcoded to NSW today: `src/calculations/stampDuty.js`
+  (NSW transfer duty tiers + FHB Assistance Scheme), `src/calculations/lmi.js`,
+  `src/calculations/closingCosts.js` (NSW-average line items), the
+  "NSW Property Investment Cash Flow Calculator" title and disclaimer
+  (TODO-25), and now Land Tax (TODO-35, NSW-specific rates/thresholds
+  too, though currently just a flat editable figure). Evaluate whether
+  these can be cleanly encapsulated behind a "state" module boundary
+  (e.g. one stamp-duty/LMI/closing-costs module per state, selected via a
+  `state` config value) so supporting a second state later is a matter of
+  adding a module, not restructuring the app - report findings/a design,
+  don't implement.
+
+- [ ] **TODO-49: Let the user choose how much of the automatic surplus goes to Offset vs. Savings**
+  Requested by the user. Today **100% of the monthly surplus automatically
+  goes to the loan offset** - this is the app's core premise, stated
+  right in the header tagline ("How much is left after EVERYTHING? That
+  goes to offset automatically.") and implemented via
+  `calculateMonthlyToOffset`/`baseMonthlySurplus`
+  (`src/App.jsx`/`src/calculations/loan.js`) feeding straight into
+  `offsetSimulation.js`'s loop with no split. Adding a user-configurable
+  split (e.g. "70% to offset, 30% to savings") touches the core
+  simulation loop and probably the header's own framing/tagline - a
+  bigger change than it sounds, not a small settings tweak.
+
+- [ ] **TODO-50: Model bank interest on Available Savings (customizable rate)**
+  Requested by the user. `totalSavings`/`cashRemaining`
+  (`src/calculations/totalCashRequired.js`) are static figures today -
+  no interest accrual is modeled on the savings pool at all. Would need a
+  new customizable interest rate input and a calculation for how much the
+  remaining/unallocated savings earn over time, feeding into... unclear
+  yet where this should surface (a new figure in "Financial Position"? in
+  the Timeline Explorer?) - needs its own design pass.
+
+- [ ] **TODO-51: Add more charts to visualize progress**
+  Requested by the user, who asked for concrete suggestions on which
+  charts matter most - proposed here, in priority order, all backed by
+  data the simulation already computes (`loanSimulation.monthlyData`/
+  `baselineSimulation.monthlyData`, `src/App.jsx`), so none need new
+  calculation logic, only visualization:
+  1. **Loan Balance vs. Offset vs. Effective Balance over time** (line/
+     area) - the user's own suggestion ("Load balance over time...shows
+     how the debt decreases"); the most fundamental chart, a full-timeline
+     version of what the Timeline Explorer already shows one month at a
+     time.
+  2. **With-offset vs. without-offset comparison** (two lines - total
+     interest accrued, or balance, over time) - today "Savings vs no
+     offset" is a single "~$X saved" number; charting
+     `loanSimulation.monthlyData` against `baselineSimulation.monthlyData`
+     directly would make that gap visually obvious instead of a static
+     figure.
+  3. **Principal vs. Interest split per month** (stacked area) - the
+     user's other suggestion; the classic amortization chart, showing the
+     crossover point and how offset shifts it earlier.
+  4. Optionally, **Effective Ownership % over time** - a full-timeline
+     version of the Timeline Explorer's single-point progress bar.
+  `recharts` (`package.json`) is already a dependency but **currently
+  unused anywhere in `src/`** - the only "chart" today is the Total
+  Summary's income/expense ring, which is a plain CSS `conic-gradient`
+  (`src/App.jsx:1981`), not a recharts component - so building any of
+  these means the first real recharts usage in the app. Still needs a
+  decision on which 1-2 to build first, and where they'd live on the page
+  (their own new card? inside the Timeline Explorer?).
+
+- [ ] **TODO-52 (Analysis only, no code): When does it make sense to invest in ETFs instead of paying down the offset?**
+  Requested by the user - explicitly an analysis task. The question:
+  at what point (if any) does investing the surplus in ETFs (dividend-
+  paying or growth) out-earn the guaranteed, tax-free "return" of
+  reducing loan interest via the offset account? This is a genuine
+  personal-finance modeling question (comparing a risk-free guaranteed
+  rate - the loan's interest rate - against a variable, taxable
+  investment return) - needs research/modeling before any code, and
+  should be explicit that this app does not and should not give
+  personalized financial advice (see the existing disclaimer, TODO-25) -
+  any output here would need to stay clearly illustrative/educational.
+
+- [ ] **TODO-53 (Analysis only, no code): How should variable bank interest rates be modeled?**
+  Requested by the user - explicitly an analysis task. `interestRate`
+  (`src/App.jsx`) is a single static value for the whole simulation today
+  - in reality NSW mortgage rates change over time (RBA cash rate moves).
+  Evaluate how best to let a rate change mid-simulation: reuse the
+  existing Schedule model (`src/calculations/recurringAmount.js`) with a
+  list of `{startMonth, rate}` changes similar to `useSteppedValue`'s
+  "Schedule a change" pattern (TODO-19), or something else - report a
+  recommended approach, don't implement yet.
+
+- [ ] **TODO-54: "Realistic Mode" - model income tax on salary**
+  Requested by the user, who flagged this as a **hard task with priority
+  still to be decided**. Would need: accepting either gross or net weekly
+  salary as input (with net→gross needing an approximate reverse
+  calculation, since Australian income tax is progressive), accounting
+  for any other income across the financial year, and modeling **when**
+  tax is actually paid - e.g. as a periodic average (starting month 6,
+  then every 12 months) vs. letting the user specify their actual next
+  tax payment date/cadence. Touches `incomeSources`, the simulation loop,
+  and probably needs new NSW/Australian tax-bracket data - a substantial
+  feature, not a quick toggle. Needs a priority discussion with the user
+  before scheduling. **Also requested**: a floating `(?)` help dialog
+  explaining what Realistic Mode does and the tax assumptions behind it -
+  reuse the existing hover-tooltip pattern from `src/components/LvrBadge.jsx`
+  (TODO-23, a `group`/`group-focus-within` Tailwind tooltip, no new
+  dependency needed).
+
+- [ ] **TODO-55: Add a credit card usage option (delayed payment benefit)**
+  Requested by the user, flagged as **hard, similar in scope to Realistic
+  Mode (TODO-54)**. The idea: using a credit card for day-to-day spending
+  (food, etc.) lets that cash sit in the offset account longer before the
+  card's monthly statement is actually paid, effectively adding a bit of
+  extra offset benefit - modeling this properly means simulating the
+  card's billing cycle and payment timing against the existing monthly
+  loop. The user offered a **fallback if the full simulation is too
+  complex**: instead, just estimate a flat % benefit (they suggested ~2%)
+  from paying eligible expenses by credit card instead of debit - net of
+  any bank account fee some accounts charge for not using debit (which
+  can wipe out the benefit entirely if not accounted for). Needs a design
+  decision on which of the two approaches (full cycle simulation vs. flat
+  %-benefit estimate) before implementing either. **Also requested**: a
+  floating `(?)` help dialog (same `LvrBadge`-style tooltip pattern as
+  TODO-54) explaining how to use the feature, including concrete guidance
+  on which kinds of expenses should stay on debit instead of credit card
+  (e.g. anything where the account charges an extra fee for not using
+  debit, which would erase the benefit).
+
 ---
 
 ## 🟢 LOW PRIORITY (Polish, refactoring, cleanup)
@@ -983,4 +1191,20 @@ optionally reuse in the commit message when you implement it.
   {propertyType} onChange={(e) => handlePropertyTypeChange(e.target.value)}>`
   with House/Unit ⁄ Apartment options; `handlePropertyTypeChange` itself
   (the strata-default-on-switch-to-unit logic) needs no changes.
+
+- [ ] **TODO-43: Add NSW Foreign Purchaser Additional Duty Surcharge (8% extra)**
+  Requested by the user, explicitly flagged as **not urgent**. NSW charges
+  foreign persons an extra 8% surcharge purchaser duty on residential
+  property, on top of the standard transfer duty tiers
+  (`src/calculations/stampDuty.js`) - a completely different axis from
+  `isFirstHomeBuyer`/`isInvestmentProperty` (it depends on residency/
+  citizenship status, not on occupancy intent or investment status - a
+  foreign buyer could be either a first home buyer or an investor
+  overseas, or neither). Would need a new `isForeignPurchaser` flag
+  (independent of the other two) and a new surcharge calculation added on
+  top of `calculateStampDuty`'s result, plus a UI checkbox somewhere in
+  "Purchase Details" or "Upfront Costs (NSW)". Not implemented yet -
+  needs its own pass to confirm the exact current surcharge rate and any
+  exemptions (e.g. some countries have double-tax-agreement exemptions)
+  before coding it up.
   

@@ -75,6 +75,12 @@ const PropertyInvestmentCalculator = () => {
   const maintenanceField = useSteppedValue(config.maintenance, config.maintenanceChanges);
   const waterRatesField = useSteppedValue(config.waterRates, config.waterRatesChanges);
   const [showPropertyExpenses, setShowPropertyExpenses] = useState(false);
+  // Results panel: collapses the Property Balance card's "Monthly Expenses"
+  // property-expense line items (Strata/Council/Utilities/Insurance/
+  // Maintenance/Water/Land Tax/Property Management) behind their own
+  // subtotal, same "breakdown" pattern as the input side - keeps the card
+  // to 4 rows by default instead of 9+.
+  const [showMonthlyExpensesBreakdown, setShowMonthlyExpensesBreakdown] = useState(false);
 
   // Investment-property-only expenses. Deliberately NOT wired to
   // isFirstHomeBuyer/calculateStampDuty (NSW's FHB concession really
@@ -1795,49 +1801,59 @@ const PropertyInvestmentCalculator = () => {
                     <span className="font-semibold text-red-600">-${Math.round(monthlyPayment).toLocaleString()}</span>
                   </div>
 
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Strata (monthly):</span>
-                    <span className="font-semibold text-red-600">-${Math.round(monthlyStrata).toLocaleString()}</span>
-                  </div>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setShowMonthlyExpensesBreakdown(!showMonthlyExpensesBreakdown)}
+                      className="w-full flex justify-between items-center text-left"
+                    >
+                      <span className="text-gray-600">
+                        {showMonthlyExpensesBreakdown ? '▾' : '▸'} Property Expenses:
+                      </span>
+                      <span className="font-semibold text-red-600">-${Math.round(monthlyPropertyExpenses).toLocaleString()}</span>
+                    </button>
 
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Council (monthly):</span>
-                    <span className="font-semibold text-red-600">-${Math.round(monthlyCouncil).toLocaleString()}</span>
-                  </div>
-
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Utilities (monthly):</span>
-                    <span className="font-semibold text-red-600">-${utilities.toLocaleString()}</span>
-                  </div>
-
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Insurance (monthly):</span>
-                    <span className="font-semibold text-red-600">-${insurance.toLocaleString()}</span>
-                  </div>
-
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Maintenance & Repairs (monthly):</span>
-                    <span className="font-semibold text-red-600">-${maintenance.toLocaleString()}</span>
-                  </div>
-
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Water Rates (monthly):</span>
-                    <span className="font-semibold text-red-600">-${Math.round(monthlyWaterRates).toLocaleString()}</span>
-                  </div>
-
-                  {isInvestmentProperty && (
-                    <>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Land Tax (monthly):</span>
-                        <span className="font-semibold text-red-600">-${Math.round(monthlyLandTax).toLocaleString()}</span>
+                    {showMonthlyExpensesBreakdown && (
+                      <div className="pl-4 mt-1 space-y-1 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Strata:</span>
+                          <span className="text-red-500">-${Math.round(monthlyStrata).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Council:</span>
+                          <span className="text-red-500">-${Math.round(monthlyCouncil).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Utilities:</span>
+                          <span className="text-red-500">-${utilities.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Insurance:</span>
+                          <span className="text-red-500">-${insurance.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Maintenance & Repairs:</span>
+                          <span className="text-red-500">-${maintenance.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Water Rates:</span>
+                          <span className="text-red-500">-${Math.round(monthlyWaterRates).toLocaleString()}</span>
+                        </div>
+                        {isInvestmentProperty && (
+                          <>
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">Land Tax:</span>
+                              <span className="text-red-500">-${Math.round(monthlyLandTax).toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">Property Management:</span>
+                              <span className="text-red-500">-${propertyManagement.toLocaleString()}</span>
+                            </div>
+                          </>
+                        )}
                       </div>
-
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Property Management (monthly):</span>
-                        <span className="font-semibold text-red-600">-${propertyManagement.toLocaleString()}</span>
-                      </div>
-                    </>
-                  )}
+                    )}
+                  </div>
 
                   <div className="flex justify-between">
                     <span className="text-gray-600">Personal Expenses:</span>
