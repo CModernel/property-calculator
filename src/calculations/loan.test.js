@@ -12,8 +12,6 @@ import {
   calculateInitialPrincipal,
   calculateInitialMonthlyInterest,
   calculateNoOffsetTotalInterest,
-  calculateWeeklyRentalIncome,
-  calculateMonthlyRentalIncome,
   calculateMonthlyPropertyBalance,
   calculateWeeklyPropertyBalance,
   calculateWeeklyPersonalExpenses,
@@ -139,17 +137,6 @@ describe('calculateNoOffsetTotalInterest', () => {
       calculateMonthlyPayment(loanAmount, calculateMonthlyRate(8)), loanAmount
     );
     expect(pricey).toBeGreaterThan(cheap);
-  });
-});
-
-describe('rental income', () => {
-  it('sums weekly rent across tenants', () => {
-    expect(calculateWeeklyRentalIncome([{ amount: 250 }, { amount: 200 }])).toBe(450);
-    expect(calculateWeeklyRentalIncome([])).toBe(0);
-  });
-
-  it('converts weekly rental income to a monthly figure', () => {
-    expect(calculateMonthlyRentalIncome(450)).toBeCloseTo(1950, 5);
   });
 });
 

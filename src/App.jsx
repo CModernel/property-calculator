@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DollarSign, Home, Users, TrendingDown, Calendar, ShoppingCart, Car, RotateCcw, Wallet } from 'lucide-react';
+import { DollarSign, Home, TrendingDown, Calendar, ShoppingCart, Car, RotateCcw, Wallet } from 'lucide-react';
 import { formatMonthsDetailed, formatCompactMoney } from './calculations/formatting';
 import NumberSliderField from './components/NumberSliderField';
 import LvrBadge from './components/LvrBadge';
@@ -15,8 +15,6 @@ import {
   calculateTotalPropertyCost,
   calculateInitialMonthlyInterest,
   calculateNoOffsetTotalInterest,
-  calculateWeeklyRentalIncome,
-  calculateMonthlyRentalIncome,
   calculateWeeklyPersonalExpenses,
   calculateMonthlyPersonalExpenses,
   calculateMonthlyFromWeekly,
@@ -35,9 +33,8 @@ import { calculateStampDuty } from './calculations/stampDuty';
 import { estimateLmi } from './calculations/lmi';
 import { sumClosingCosts } from './calculations/closingCosts';
 import { calculateTotalCashRequired, calculateCashRemaining } from './calculations/totalCashRequired';
-import { isMonthInRange } from './calculations/dateRange';
 import { getSteppedValue } from './calculations/steppedValue';
-import { getActiveAmount, formatScheduleLabel, MAX_MONTH } from './calculations/recurringAmount';
+import { getActiveAmount, isScheduleActive, formatScheduleLabel, MAX_MONTH } from './calculations/recurringAmount';
 import { useSteppedValue } from './hooks/useSteppedValue';
 import SteppedExpenseField from './components/SteppedExpenseField';
 import { loadScenario, saveScenario, clearScenario } from './persistence/scenarioStorage';
@@ -81,28 +78,21 @@ const PropertyInvestmentCalculator = () => {
   const [homeInsurance, setHomeInsurance] = useState(config.homeInsurance);
   const [rateAdjustments, setRateAdjustments] = useState(config.rateAdjustments);
 
-  // Rental options
-  const [tenants, setTenants] = useState(config.tenants ?? []);
-  const [showRentalIncome, setShowRentalIncome] = useState(false);
-  const [showAddTenant, setShowAddTenant] = useState(false);
-  const [newTenantIsShared, setNewTenantIsShared] = useState(false);
-  const [newTenantNumPeople, setNewTenantNumPeople] = useState(2);
-  const [newTenantAmountPerPerson, setNewTenantAmountPerPerson] = useState(config.newTenantAmountPerPerson);
-  const [newTenantHasDateRange, setNewTenantHasDateRange] = useState(true);
-  const [newTenantStartMonth, setNewTenantStartMonth] = useState(config.newTenantStartMonth);
-  const [newTenantHasEndMonth, setNewTenantHasEndMonth] = useState(false);
-  const [newTenantEndMonth, setNewTenantEndMonth] = useState(24);
-
-  // Income sources (salary, other income, one-time payments) - a single
-  // "Schedule" shape { startMonth, recurrence: 'none'|'monthly'|'quarterly'|
-  // 'yearly', endMonth }, shared with Exceptional Expenses and resolved per
-  // month via getActiveAmount (src/calculations/recurringAmount.js).
+  // Income sources (salary, other income, tenants, one-time payments) - a
+  // single "Schedule" shape { startMonth, recurrence: 'none'|'monthly'|
+  // 'quarterly'|'yearly', endMonth }, shared with Exceptional Expenses and
+  // resolved per month via getActiveAmount (src/calculations/recurringAmount.js).
+  // A 'Tenants' entry additionally carries isShared/numPeople/amountPerPerson
+  // (see addIncomeSource) - isShared !== undefined is how a Tenants entry is
+  // told apart from any other income category elsewhere in the file.
   const [incomeSources, setIncomeSources] = useState(config.incomeSources ?? []);
   const [showIncome, setShowIncome] = useState(false);
   const [showAddIncome, setShowAddIncome] = useState(false);
-  const [newIncomeCategory, setNewIncomeCategory] = useState('Salary'); // Salary | Freelance | Bonus | Other
+  const [newIncomeCategory, setNewIncomeCategory] = useState('Salary'); // Salary | Freelance | Bonus | Tenants | Other
   const [newIncomeCustomName, setNewIncomeCustomName] = useState(''); // only used when category is 'Other'
   const [newIncomeAmount, setNewIncomeAmount] = useState(config.newIncomeAmount);
+  const [newIncomeIsShared, setNewIncomeIsShared] = useState(false); // only used when category is 'Tenants'
+  const [newIncomeNumPeople, setNewIncomeNumPeople] = useState(2); // only used when category is 'Tenants' and shared
   const [newIncomeOneTime, setNewIncomeOneTime] = useState(false);
   const [newIncomeStartMonth, setNewIncomeStartMonth] = useState(1);
   const [newIncomeRecurrence, setNewIncomeRecurrence] = useState('monthly'); // monthly | quarterly | yearly
@@ -201,22 +191,20 @@ const PropertyInvestmentCalculator = () => {
   // so it must stay consistent with that snapshot's offset: 0 / effectiveBalance: loanAmount.
   const monthZeroInterest = calculateInitialMonthlyInterest(loanAmount, monthlyRate);
 
-  // Rental income. These static cards describe the recurring situation "right
-  // now" (month 1), same as exceptional expenses never touch them either -
-  // a tenant who hasn't moved in yet, or already moved out, shouldn't count.
-  const activeTenantsNow = tenants.filter(t => isMonthInRange(1, t.startMonth, t.endMonth));
-  const weeklyRentalIncome = calculateWeeklyRentalIncome(activeTenantsNow);
-  const monthlyRentalIncome = calculateMonthlyRentalIncome(weeklyRentalIncome);
-
   // Your personal expenses
   const weeklyPersonalExpenses = calculateWeeklyPersonalExpenses(foodExpenses, transportExpenses, otherExpenses);
   const monthlyPersonalExpenses = calculateMonthlyPersonalExpenses(weeklyPersonalExpenses);
 
-  // Total cash flow. Same "right now" (month 1) convention as tenants/
-  // exceptional expenses - an income source that hasn't started yet, or
-  // already ended, shouldn't count here.
-  const weeklyIncome = getActiveAmount(incomeSources, 1);
+  // Total cash flow. Same "right now" (month 1) convention as exceptional
+  // expenses - an income source that hasn't started yet, or already ended,
+  // shouldn't count here. Tenants (isShared !== undefined) live inside
+  // incomeSources like any other entry - this just partitions the same
+  // array into the two subtotals the rest of the app already expects,
+  // instead of drawing from two separate arrays.
+  const weeklyIncome = getActiveAmount(incomeSources.filter(i => i.isShared === undefined), 1);
+  const weeklyRentalIncome = getActiveAmount(incomeSources.filter(i => i.isShared !== undefined), 1);
   const monthlyIncome = calculateMonthlyFromWeekly(weeklyIncome);
+  const monthlyRentalIncome = calculateMonthlyFromWeekly(weeklyRentalIncome);
 
   // NET WEEKLY/MONTHLY BALANCE
   // Logic: (Personal Income + Rental Income) - (Personal Expenses + Property Expenses)
@@ -257,7 +245,6 @@ const PropertyInvestmentCalculator = () => {
   const loanSimulation = calculateLoanWithOffset({
     contributions: offsetContributions,
     exceptExpenses,
-    tenants,
     incomeSources,
     expenseFields,
     monthlyToOffset: baseMonthlySurplus,
@@ -269,7 +256,6 @@ const PropertyInvestmentCalculator = () => {
   const baselineSimulation = calculateLoanWithOffset({
     contributions: [], // No offsets
     exceptExpenses,
-    tenants,
     incomeSources,
     expenseFields,
     monthlyToOffset: baseMonthlySurplus,
@@ -348,7 +334,6 @@ const PropertyInvestmentCalculator = () => {
       isFirstHomeBuyer, totalSavings, payLmiUpfront,
       conveyancing, buildingInspection, pestInspection, registrationFees, searches,
       loanEstablishmentFee, propertyValuation, homeInsurance, rateAdjustments,
-      tenants,
       incomeSources,
       foodExpenses: foodExpensesField.base, foodExpensesChanges: foodExpensesField.changes,
       transportExpenses: transportExpensesField.base, transportExpensesChanges: transportExpensesField.changes,
@@ -404,42 +389,9 @@ const PropertyInvestmentCalculator = () => {
     setNewContribMonth(getNextSuggestion(updatedContributions));
   };
 
-  const addTenant = () => {
-    if (newTenantAmountPerPerson <= 0) return;
-    if (newTenantHasDateRange && newTenantHasEndMonth && newTenantStartMonth > newTenantEndMonth) {
-      alert('Start month must be before end month.');
-      return;
-    }
-    const numPeople = newTenantIsShared ? newTenantNumPeople : 1;
-    const newTenant = {
-      id: Date.now(),
-      isShared: newTenantIsShared,
-      numPeople,
-      amountPerPerson: newTenantAmountPerPerson,
-      // Computed total - calculateWeeklyRentalIncome just sums `amount`
-      // across tenants, so it doesn't need to know about per-person split.
-      amount: newTenantAmountPerPerson * numPeople,
-      startMonth: newTenantHasDateRange ? newTenantStartMonth : null,
-      // No end date ticked means "ongoing" - open-ended, not "always active
-      // regardless of start" (see isMonthInRange).
-      endMonth: newTenantHasDateRange && newTenantHasEndMonth ? newTenantEndMonth : null,
-    };
-    setTenants([...tenants, newTenant]);
-    setShowAddTenant(false);
-    setNewTenantIsShared(false);
-    setNewTenantNumPeople(2);
-    setNewTenantAmountPerPerson(config.newTenantAmountPerPerson);
-    setNewTenantHasDateRange(true);
-    setNewTenantStartMonth(config.newTenantStartMonth);
-    setNewTenantHasEndMonth(false);
-  };
-
-  const removeTenant = (id) => {
-    setTenants(tenants.filter(t => t.id !== id));
-  };
-
   // Income Sources Functions
   const addIncomeSource = () => {
+    const isTenants = newIncomeCategory === 'Tenants';
     const name = newIncomeCategory === 'Other' ? newIncomeCustomName : newIncomeCategory;
     if (!name) {
       alert('Please enter a name for the income source.');
@@ -454,13 +406,18 @@ const PropertyInvestmentCalculator = () => {
       return;
     }
 
+    const numPeople = isTenants && newIncomeIsShared ? newIncomeNumPeople : 1;
     const newIncome = {
       id: Date.now(),
       name,
-      amount: newIncomeAmount,
+      // For Tenants, amount is the computed total (amountPerPerson * numPeople) -
+      // getActiveAmount/calculateMonthlyFromWeekly only ever read `amount`, so
+      // they don't need to know about the per-person split.
+      amount: isTenants ? newIncomeAmount * numPeople : newIncomeAmount,
       startMonth: newIncomeStartMonth,
       recurrence: newIncomeOneTime ? 'none' : newIncomeRecurrence,
       ...(newIncomeOneTime ? {} : { endMonth: newIncomeEndMonth }),
+      ...(isTenants ? { isShared: newIncomeIsShared, numPeople, amountPerPerson: newIncomeAmount } : {}),
     };
 
     setIncomeSources([...incomeSources, newIncome]);
@@ -468,6 +425,8 @@ const PropertyInvestmentCalculator = () => {
     setNewIncomeCategory('Salary');
     setNewIncomeCustomName('');
     setNewIncomeAmount(config.newIncomeAmount);
+    setNewIncomeIsShared(false);
+    setNewIncomeNumPeople(2);
     setNewIncomeOneTime(false);
     setNewIncomeStartMonth(1);
     setNewIncomeRecurrence('monthly');
@@ -979,6 +938,7 @@ const PropertyInvestmentCalculator = () => {
                         <option>Salary</option>
                         <option>Freelance</option>
                         <option>Bonus</option>
+                        <option>Tenants</option>
                         <option>Other</option>
                       </select>
                       {newIncomeCategory === 'Other' && (
@@ -992,18 +952,59 @@ const PropertyInvestmentCalculator = () => {
                       )}
                     </div>
 
-                    <NumberSliderField
-                      label="Weekly Amount ($)"
-                      value={newIncomeAmount}
-                      onChange={setNewIncomeAmount}
-                      min={0}
-                      max={50000}
-                      sliderMin={0}
-                      sliderMax={5000}
-                      step={10}
-                      color="green"
-                      prefix="$"
-                    />
+                    {newIncomeCategory === 'Tenants' ? (
+                      <>
+                        <label className="flex items-center gap-2 text-xs font-medium text-gray-700">
+                          <input
+                            type="checkbox"
+                            checked={newIncomeIsShared}
+                            onChange={(e) => setNewIncomeIsShared(e.target.checked)}
+                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          Shared room? (multiple people splitting this room)
+                        </label>
+
+                        {newIncomeIsShared && (
+                          <div>
+                            <label className="block text-xs font-medium mb-1">Number of People: {newIncomeNumPeople}</label>
+                            <input
+                              type="range" min="2" max="6"
+                              value={newIncomeNumPeople}
+                              onChange={(e) => setNewIncomeNumPeople(Number(e.target.value))}
+                              className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer"
+                            />
+                          </div>
+                        )}
+
+                        <NumberSliderField
+                          label={newIncomeIsShared ? 'Weekly Rent per Person' : 'Weekly Rent'}
+                          value={newIncomeAmount}
+                          onChange={setNewIncomeAmount}
+                          min={0}
+                          max={5000}
+                          sliderMin={50}
+                          sliderMax={1200}
+                          step={10}
+                          color={newIncomeIsShared ? 'blue' : 'green'}
+                          prefix="$"
+                        >
+                          {newIncomeIsShared && `Total: $${(newIncomeAmount * newIncomeNumPeople).toLocaleString()}/week`}
+                        </NumberSliderField>
+                      </>
+                    ) : (
+                      <NumberSliderField
+                        label="Weekly Amount ($)"
+                        value={newIncomeAmount}
+                        onChange={setNewIncomeAmount}
+                        min={0}
+                        max={50000}
+                        sliderMin={0}
+                        sliderMax={5000}
+                        step={10}
+                        color="green"
+                        prefix="$"
+                      />
+                    )}
 
                     <label className="flex items-center gap-2 text-xs font-medium text-gray-700">
                       <input
@@ -1069,184 +1070,18 @@ const PropertyInvestmentCalculator = () => {
                   <p className="text-sm text-gray-500 italic text-center">No income sources added.</p>
                 )}
                 {incomeSources.map(income => (
-                  <div key={income.id} className="flex justify-between items-center p-2 bg-green-50 border border-green-200 rounded text-sm">
+                  <div key={income.id} className={`flex justify-between items-center p-2 rounded text-sm border ${income.isShared ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'}`}>
                     <div>
-                      <p className="font-bold text-gray-800">{income.name}</p>
+                      <p className="font-bold text-gray-800">
+                        {income.isShared !== undefined ? (income.isShared ? 'Shared Room' : 'Individual Room') : income.name}
+                      </p>
                       <p className="text-xs text-gray-600">
-                        ${income.amount}/week • {formatScheduleLabel(income)}
+                        ${income.amount}/week {income.isShared && <span className="text-blue-600 font-medium">({income.numPeople} × ${income.amountPerPerson} each) </span>}• {formatScheduleLabel(income)}
                       </p>
                     </div>
                     <button onClick={() => removeIncomeSource(income.id)} className="text-red-500 font-bold px-2">✕</button>
                   </div>
                 ))}
-              </div>
-            </div>
-            )}
-          </div>
-
-          {/* Rental */}
-          <div className="bg-white rounded-lg shadow-md p-5">
-            <h2 className="text-xl font-bold text-gray-700 mb-4 flex items-center gap-2">
-              <Users size={24} className="text-green-600" />
-              Rental Income
-            </h2>
-
-            <button
-              type="button"
-              onClick={() => setShowRentalIncome(!showRentalIncome)}
-              className="text-sm font-medium text-blue-600 hover:text-blue-700"
-            >
-              {showRentalIncome ? '▾' : '▸'} Rental income breakdown (subtotal: ${weeklyRentalIncome.toLocaleString()}/week)
-            </button>
-
-            {showRentalIncome && (
-            <div className="space-y-4 mt-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-md font-bold text-gray-700">👥 Tenants</h3>
-                <button
-                  onClick={() => setShowAddTenant(!showAddTenant)}
-                  className="px-3 py-1 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600 transition-colors"
-                >
-                  {showAddTenant ? '✕ Cancel' : '+ Add'}
-                </button>
-              </div>
-
-              {/* Add tenant form */}
-              {showAddTenant && (
-                <div className="mb-3 p-3 bg-green-50 rounded-lg border border-green-200">
-                  <div className="grid grid-cols-2 gap-3 mb-3">
-                    <div className="col-span-2">
-                      <label className="flex items-center gap-2 text-xs font-medium text-gray-700">
-                        <input
-                          type="checkbox"
-                          checked={newTenantIsShared}
-                          onChange={(e) => setNewTenantIsShared(e.target.checked)}
-                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        Shared room? (multiple people splitting this room)
-                      </label>
-                    </div>
-
-                    {newTenantIsShared && (
-                      <div className="col-span-2">
-                        <label className="block text-xs font-medium mb-1">Number of People: {newTenantNumPeople}</label>
-                        <input
-                          type="range" min="2" max="6"
-                          value={newTenantNumPeople}
-                          onChange={(e) => setNewTenantNumPeople(Number(e.target.value))}
-                          className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer"
-                        />
-                      </div>
-                    )}
-
-                    <div className="col-span-2">
-                      <NumberSliderField
-                        label={newTenantIsShared ? 'Weekly Rent per Person' : 'Weekly Rent'}
-                        value={newTenantAmountPerPerson}
-                        onChange={setNewTenantAmountPerPerson}
-                        min={0}
-                        max={5000}
-                        sliderMin={50}
-                        sliderMax={1200}
-                        step={10}
-                        color={newTenantIsShared ? 'blue' : 'green'}
-                        prefix="$"
-                      >
-                        {newTenantIsShared && `Total: $${(newTenantAmountPerPerson * newTenantNumPeople).toLocaleString()}/week`}
-                      </NumberSliderField>
-                    </div>
-                    <div className="col-span-2">
-                      <label className="flex items-center gap-2 text-xs font-medium text-gray-700">
-                        <input
-                          type="checkbox"
-                          checked={newTenantHasDateRange}
-                          onChange={(e) => setNewTenantHasDateRange(e.target.checked)}
-                          className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
-                        />
-                        Limited period? (e.g. moves out, or moves in later)
-                      </label>
-                    </div>
-                    {newTenantHasDateRange && (
-                      <div className="col-span-2 space-y-2">
-                        <div>
-                          <label className="block text-xs font-medium mb-1">Start Month: {newTenantStartMonth}</label>
-                          <input
-                            type="range" min="1" max="360"
-                            value={newTenantStartMonth}
-                            onChange={(e) => setNewTenantStartMonth(Number(e.target.value))}
-                            className="w-full h-2 bg-green-200 rounded-lg appearance-none cursor-pointer"
-                          />
-                        </div>
-                        <label className="flex items-center gap-2 text-xs font-medium text-gray-700">
-                          <input
-                            type="checkbox"
-                            checked={newTenantHasEndMonth}
-                            onChange={(e) => setNewTenantHasEndMonth(e.target.checked)}
-                            className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
-                          />
-                          Has an end date? (leave unchecked for ongoing)
-                        </label>
-                        {newTenantHasEndMonth && (
-                          <div>
-                            <label className="block text-xs font-medium mb-1">End Month: {newTenantEndMonth}</label>
-                            <input
-                              type="range" min={newTenantStartMonth} max="360"
-                              value={newTenantEndMonth}
-                              onChange={(e) => setNewTenantEndMonth(Number(e.target.value))}
-                              className="w-full h-2 bg-green-200 rounded-lg appearance-none cursor-pointer"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    onClick={addTenant}
-                    className={`w-full py-2 text-white rounded-lg font-medium transition-colors ${newTenantIsShared ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-600 hover:bg-green-700'}`}
-                  >
-                    Add Tenant
-                  </button>
-                </div>
-              )}
-
-              {/* List of tenants */}
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {tenants.map((tenant) => (
-                  <div
-                    key={tenant.id}
-                    className={`flex items-center justify-between p-3 rounded-lg border ${tenant.isShared ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'}`}
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        {tenant.isShared ? '👥' : '👤'}
-                        <div>
-                          <p className="font-semibold text-gray-800">
-                            {tenant.isShared ? 'Shared Room' : 'Individual Room'}
-                          </p>
-                          <p className="text-xs text-gray-600">
-                            ${tenant.amount}/week {tenant.isShared && <span className="text-blue-600 font-medium">({tenant.numPeople} × ${tenant.amountPerPerson} each)</span>}
-                            {tenant.startMonth != null && (
-                              <span className="text-gray-500">
-                                {tenant.endMonth != null
-                                  ? ` (Months ${tenant.startMonth}-${tenant.endMonth})`
-                                  : ` (From month ${tenant.startMonth})`}
-                              </span>
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => removeTenant(tenant.id)}
-                      className="ml-3 px-2 py-1 bg-red-400 text-white rounded hover:bg-red-500 transition-colors text-xs"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-                {tenants.length === 0 && !showAddTenant && (
-                  <p className="text-sm text-gray-500 text-center italic py-2">No tenants added yet.</p>
-                )}
               </div>
             </div>
             )}
@@ -2018,9 +1853,9 @@ const PropertyInvestmentCalculator = () => {
                         <p className="font-bold text-green-800 border-b border-green-200 pb-1 mb-2">Income Context</p>
                         <div className="space-y-1 text-xs">
                           {(() => {
-                            const tenantsActiveHere = tenants.filter(t => isMonthInRange(timelineMonth, t.startMonth, t.endMonth));
-                            const rentalIncomeHere = calculateMonthlyRentalIncome(calculateWeeklyRentalIncome(tenantsActiveHere));
-                            const personalIncomeHere = calculateMonthlyFromWeekly(getActiveAmount(incomeSources, timelineMonth));
+                            const tenantsActiveHere = incomeSources.filter(i => i.isShared !== undefined && isScheduleActive(i, timelineMonth));
+                            const rentalIncomeHere = calculateMonthlyFromWeekly(getActiveAmount(incomeSources.filter(i => i.isShared !== undefined), timelineMonth));
+                            const personalIncomeHere = calculateMonthlyFromWeekly(getActiveAmount(incomeSources.filter(i => i.isShared === undefined), timelineMonth));
                             return (
                               <>
                                 <p className="flex justify-between">
@@ -2048,30 +1883,12 @@ const PropertyInvestmentCalculator = () => {
                               if (status === 'future') return null;
                               return (
                                 <p key={`income-${inc.id}`} className={`truncate ${status === 'past' ? 'text-gray-400' : 'text-green-700'}`}>
-                                  • {inc.name}{status === 'past' && ' (Done)'}
-                                </p>
-                              );
-                            })}
-                            {tenants.map(t => {
-                              // No bound at all = always active. An unset endMonth
-                              // means "ongoing" - never past, not "compare against null".
-                              let status = 'active';
-                              if (t.startMonth != null && timelineMonth < t.startMonth) status = 'future';
-                              else if (t.endMonth != null && timelineMonth > t.endMonth) status = 'past';
-                              if (status === 'future') return null;
-                              return (
-                                <p key={t.id} className={`truncate ${status === 'past' ? 'text-gray-400' : 'text-green-700'}`}>
-                                  • {t.isShared ? `Shared (${t.numPeople} × $${t.amountPerPerson})` : 'Individual'}
+                                  • {inc.isShared !== undefined ? `${inc.isShared ? `Shared (${inc.numPeople} × $${inc.amountPerPerson})` : 'Individual'}` : inc.name}
                                   {status === 'past' && ' (Done)'}
-                                  {t.startMonth != null && (
-                                    <span className="text-gray-400">
-                                      {t.endMonth != null ? ` (M${t.startMonth}-${t.endMonth})` : ` (from M${t.startMonth})`}
-                                    </span>
-                                  )}
                                 </p>
                               );
                             })}
-                            {tenants.length === 0 && incomeSources.length === 0 && (
+                            {incomeSources.length === 0 && (
                               <span className="italic text-gray-400">No tenants or income sources</span>
                             )}
                           </div>

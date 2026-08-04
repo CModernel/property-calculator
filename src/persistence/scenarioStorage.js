@@ -9,7 +9,11 @@ const STORAGE_KEY = 'propertyCalculator.scenario';
 // Bumped to 4 in TODO-33: tenants dropped {type: 'single'|'shared'} in favor
 // of {isShared, numPeople, amountPerPerson} - amount is now computed
 // (amountPerPerson * numPeople) instead of a flat entered total.
-const SCHEMA_VERSION = 4;
+// Bumped to 5 in TODO-29: the separate `tenants` array was merged into
+// incomeSources (each tenant is now an incomeSources entry carrying
+// isShared/numPeople/amountPerPerson) - a saved scenario's top-level
+// `tenants` field no longer exists.
+const SCHEMA_VERSION = 5;
 
 // A version mismatch means the saved shape no longer matches what this
 // version of the app expects - discard rather than attempt a migration,

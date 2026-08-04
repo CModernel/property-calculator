@@ -47,14 +47,6 @@ export function calculateNoOffsetTotalInterest(monthlyPayment, loanAmount, total
   return monthlyPayment * totalMonths - loanAmount;
 }
 
-export function calculateWeeklyRentalIncome(tenants) {
-  return tenants.reduce((sum, t) => sum + t.amount, 0);
-}
-
-export function calculateMonthlyRentalIncome(weeklyRentalIncome) {
-  return weeklyRentalIncome * 52 / 12;
-}
-
 export function calculateMonthlyPropertyBalance(monthlyRentalIncome, totalPropertyCost) {
   return monthlyRentalIncome - totalPropertyCost;
 }

@@ -581,28 +581,55 @@ optionally reuse in the commit message when you implement it.
   (6.2 years, down from 10.8), and the Timeline Explorer's Financial Events
   Log showed "Shared (3 × $300)" once past the tenant's start month.
 
+- [x] **TODO-29 (Phase 2): Merge tenants/"Rental Income" into the unified Income model**
+  Deferred from TODO-26, whose Phase 1 only generalized personal income.
+  The user also asked to reconsider the "Tenants" name ("suena raro") -
+  offered Lodgers/Boarders/Room Rentals as alternatives, but the user's
+  explicit call was **"Dejalo como Tenants"** - name unchanged, only the
+  data model merged. The separate `tenants` array/state, the "Rental
+  Income" card, and `addTenant`/`removeTenant` were all removed entirely;
+  a tenant is now just an `incomeSources` entry with a `'Tenants'` category
+  plus extra `isShared`/`numPeople`/`amountPerPerson` fields (`amount =
+  amountPerPerson * numPeople`, computed at add-time, unchanged from
+  TODO-33) - `isShared !== undefined` is the criterion used everywhere to
+  tell a Tenants entry apart from any other income category. Per the
+  user's choice, the "Rental Income" subtotal stays **separate** in the
+  results panel and Timeline Explorer, now derived by filtering the single
+  `incomeSources` array (`isShared !== undefined`) instead of reading a
+  second array - `weeklyIncome`/`weeklyRentalIncome` are simply two
+  partitions of the same list.
+  `src/calculations/offsetSimulation.js` lost the `tenants` parameter and
+  its `isMonthInRange`-based resolution block entirely - `getActiveAmount`
+  over the unified `incomeSources` already includes former-tenant entries,
+  so the loop's income handling collapsed to one line instead of two. The
+  sentinel condition dropped `tenants.length === 0` (redundant with
+  `incomeSources.length === 0`). `calculateWeeklyRentalIncome`/
+  `calculateMonthlyRentalIncome` (`src/calculations/loan.js`) became fully
+  unused and were deleted along with their tests, since
+  `calculateMonthlyFromWeekly` already does the same job generically; with
+  `tenants` gone, `isMonthInRange` had no callers left anywhere in `src/`,
+  so `src/calculations/dateRange.js` + its test were deleted too rather
+  than left as dead code. The Timeline Explorer's "Financial Events Log"
+  merged its separate `tenants.map`/`incomeSources.map` loops into one,
+  using the same active/future/past classification for every entry.
+  `SCHEMA_VERSION` bumped 4→5 (`scenarioStorage.js`), discarding old-shape
+  saved scenarios (which had a top-level `tenants` field) cleanly.
+  Verified in the browser: confirmed the "Rental Income" card no longer
+  exists; added a 3-person shared Tenants entry ($300/person) through the
+  "Income" card's "+ Add" form and confirmed it appears in the same list
+  as "Salary" with the "Shared Room ... (3 × $300 each)" label; confirmed
+  "Monthly Rental Income: +$3,900" still shows as its own line, separate
+  from "Total Personal Income"; confirmed the Loan Simulation reacted
+  (5.6 years, down from 10.8 with just Salary); the Timeline Explorer's
+  merged Financial Events Log showed "Tenants Active: 1" and "• Shared (3
+  × $300)" alongside "• Salary" once past month 0; saved a scenario and
+  confirmed `version: 5` in `localStorage` with no `tenants` field, and
+  the Tenants entry living inside `incomeSources`; reloaded the page and
+  confirmed the restored scenario matched exactly.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
-
-- [ ] **TODO-29 (Phase 2): Merge tenants/"Rental Income" into the unified Income model**
-  Deferred from TODO-26, whose Phase 1 only generalized personal income
-  (see that entry in Completed) - tenants/"Rental Income" still exist as
-  their own separate card/state (`tenants`, `src/App.jsx`), not yet folded
-  into `incomeSources`. Now that TODO-31 has shipped the unified `Schedule`
-  shape (`{startMonth, recurrence: 'none'|'monthly'|'quarterly'|'yearly',
-  endMonth}`) for `incomeSources`/`exceptExpenses`, merging tenants in is
-  mostly a data-shape exercise: map tenant `startMonth`/`endMonth` into a
-  `Schedule` (tenants are always "monthly, no end" or "monthly, period" in
-  today's terms - never one-time/quarterly/yearly), and add "Rental Income"
-  as a preset in the Income Name dropdown (`src/App.jsx`, currently
-  Salary/Freelance/Bonus/Other). TODO-33 (done) already redesigned tenants
-  to store `isShared`/`numPeople`/`amountPerPerson` instead of a `type`
-  string, which should make folding a tenant into a generic Income entry
-  more straightforward (the per-person breakdown can live as extra fields
-  or a formatted note on the entry) - still needs its own pass to decide
-  exactly how that maps onto whatever the unified entry ends up looking
-  like.
 
 - [ ] **TODO-32: Apply the Schedule model to Offset Contributions**
   Requested by the user, following up on TODO-31 - asked whether the new
@@ -632,6 +659,126 @@ optionally reuse in the commit message when you implement it.
   this month" - a fundamentally different concept from Schedule, correctly
   left as-is.
 
+- [ ] **TODO-34: Expand Income Name to a full 15-type picklist, with a smart default Schedule per type**
+  Requested by the user. TODO-29 (done) has already merged tenants into
+  `incomeSources` as a `'Tenants'` category - not `'Rental Income'`, per
+  the user's explicit choice to keep that name. **Naming overlap to
+  resolve when picking this up**: this 15-type list still includes a
+  separate "Rental Income" entry below - worth double-checking with the
+  user whether that's meant to coexist alongside `'Tenants'` (e.g. for a
+  wholly-rented investment property vs. a room let out in a home the
+  owner also lives in) or whether it should be dropped/renamed now that
+  `'Tenants'` already covers the room-rental case. Replaces the current
+  minimal Salary/Freelance/Bonus/Tenants/Other list (`src/App.jsx`,
+  `newIncomeCategory`)
+  with a comprehensive 15-type list: Salary/Wages, Self-Employment,
+  Freelance/Contracting, Business Income, Rental Income, Dividends,
+  Interest, Government Benefits, Pension, Child Support, Bonus,
+  Commission, Tax Refund, Gift, Other Income.
+  Each type should set a **default Schedule** (recurrence + one-time flag)
+  when selected, analyzed against the actual model (`recurrence: 'none' |
+  'monthly' | 'quarterly' | 'yearly'` - no weekly/fortnightly, since the
+  amount is always entered as a $/week figure regardless of how often the
+  real-world source actually pays; recurrence only controls how often that
+  weekly figure gets added to the simulation):
+  - **Monthly, Forever** (the "ongoing" default): Salary/Wages,
+    Self-Employment, Business Income, Rental Income, Interest, Government
+    Benefits, Pension, Commission.
+  - **One-Time**: Freelance/Contracting (ambiguous/"Variable" duration -
+    one-time is the safer default, user can switch to Monthly for a
+    recurring client), Bonus, Tax Refund, Gift.
+  - **Quarterly**: Dividends (closest available match to
+    Quarterly/Half-Yearly/Yearly - see open question below).
+  - **Monthly, but NOT defaulted to "Forever"**: Child Support - unlike
+    every other recurring type, its natural duration is "until an end
+    date," not open-ended, so the form should NOT auto-set End Month to
+    the max/"Forever" for this one type. No universal sensible end-month
+    default exists, so this likely just means leaving End Month at
+    whatever the user drags it to, without the usual auto-Forever nudge.
+  - **Other Income**: no override, keeps whatever the form's baseline
+    default is.
+  **Two open decisions, not resolved yet:**
+  1. "Half-Yearly" isn't a supported recurrence today (only monthly/
+     quarterly/yearly) - add it as a 5th option (`INTERVAL_MONTHS.halfYearly
+     = 6` in `src/calculations/recurringAmount.js`), or is Quarterly close
+     enough for Dividends without expanding the model?
+  2. Exactly how should the UI avoid auto-defaulting Child Support's End
+     Month to "Forever" without adding a special-cased, confusing
+     exception to the form's otherwise-uniform behavior?
+  Implementation-wise this is mostly a lookup table (`{category: {oneTime,
+  recurrence}}`) consulted in the Income Name `<select>`'s `onChange`
+  handler to also set `newIncomeOneTime`/`newIncomeRecurrence` - small
+  once TODO-29's merge and the two open questions above are settled.
+
+- [ ] **TODO-35: Add Maintenance & Repairs + Water Rates to Property Expenses; gate Land Tax/Property Management behind an investment-property toggle**
+  Requested by the user. Two new fixed fields alongside today's 4
+  (Strata/Utilities/Council Rates/Insurance, `src/App.jsx`, all
+  `SteppedExpenseField`s): **Maintenance & Repairs** (monthly estimate,
+  same model as Utilities/Insurance) and **Water Rates** (quarterly, same
+  model as Strata/Council Rates - the user notes it's genuinely optional,
+  since depending on the state either the tenant or the owner pays it).
+  Also requested as **optional/toggleable** rather than always-shown:
+  **Land Tax** (normally investment-only) and **Property Management**
+  (investment-only) - the user explicitly flagged this needs its own
+  discussion on how to turn them on/off.
+  **Open design gap found while reviewing this:** the app has no explicit
+  "is this an investment property?" concept today - `propertyType`
+  (`house`/`unit`) only distinguishes the building type (it's what
+  currently gates Strata on/off, `src/App.jsx` `propertyType !== 'house'`),
+  and the app already conflates "you live here and rent out a room"
+  (tenants) with "you rent the whole place out" without a clear
+  owner-occupied-vs-investment distinction anywhere else. Introducing Land
+  Tax/Property Management toggles probably means introducing that concept
+  for the first time (a new top-level flag), which has implications beyond
+  just these two fields (e.g. should First Home Buyer concession even be
+  offered if the property is marked investment-only?) - needs a proper
+  discussion before implementing, not just two new checkboxes.
+
+- [ ] **TODO-36: Add a Schedule-based expense list for Health/Subscriptions/Entertainment/Debt Repayments; replace "Other" with custom expenses**
+  Requested by the user, referencing a bank-style Housing/Living/Debt
+  categorization. Analysis of what fits where:
+  - **Housing** maps to today's "Property Expenses" already (see TODO-35
+    for its additions) - "Mortgage/Rent" deliberately excluded from any
+    editable expense list, since the mortgage is already the core loan
+    repayment calculation elsewhere, not a discretionary line item, and
+    "Rent" doesn't apply (this app assumes the user is buying, not renting
+    their own place).
+  - **Living + Debt** are where the new work is. **Recommendation: don't
+    fold Food/Transport into a new list** - they're `SteppedExpenseField`s
+    today (`foodExpensesField`/`transportExpensesField`,
+    `useSteppedValue`/`getSteppedValue`) and already support "current rate
+    that changes at a scheduled month" (TODO-19's "Schedule a change").
+    Moving them to the Schedule/list model (TODO-31's
+    `getActiveAmount`/`recurrence`) would lose that specific capability
+    unless rebuilt there too - not worth it since they already work well
+    for "an ongoing rate that occasionally changes."
+  - Health, Subscriptions, Entertainment, and Debt Repayments are
+    different in kind - each is more naturally "a distinct expense with
+    its own lifecycle" (a subscription starts and gets cancelled, a loan
+    ends when paid off) - exactly what TODO-31's Schedule model
+    (`{startMonth, recurrence: 'none'|'monthly'|'quarterly'|'yearly',
+    endMonth}`) already fits, reused directly rather than inventing
+    another shape. **Don't split Debt into Personal Loan/Car Loan/Credit
+    Card presets** - a single generic "Debt Repayment" category plus a
+    free-text/custom name (e.g. typing "Car Loan") covers the same ground
+    without three near-identical presets.
+  - **Replace the "Other" field entirely** with an "Add Custom Expense"
+    entry in this same new list (not a dropdown category, just a free
+    name) - covers Pet Expenses/Childcare/Gym/Parking/Coffee/Streaming/
+    whatever else, per the user's own examples, without needing a preset
+    for each.
+  Net shape: Property Expenses card keeps Strata/Utilities/Council
+  Rates/Insurance/Maintenance/Water Rates as `SteppedExpenseField`s (per
+  TODO-35); Personal Expenses card keeps Food/Transport as
+  `SteppedExpenseField`s, loses the standalone "Other" field, and gains a
+  new list (mirroring Income Sources' UI/state pattern exactly: add-form
+  with name/amount/one-time-checkbox/recurrence/end-month, a list with
+  remove buttons) seeded with Health/Subscriptions/Entertainment/Debt
+  Repayment presets plus free-text custom entries. Needs the same
+  `offsetSimulation.js` wiring TODO-31 already did for `incomeSources`/
+  `exceptExpenses` (pass the list in, resolve per month via
+  `getActiveAmount`), and another `SCHEMA_VERSION` bump.
+
 ---
 
 ## 🟢 LOW PRIORITY (Polish, refactoring, cleanup)
@@ -654,3 +801,4 @@ optionally reuse in the commit message when you implement it.
   longer have callers after TODO-2. They're tested and correct, so they were
   left in place rather than widening a bug-fix diff — decide whether the module
   should be a general formula library or contain only what the app uses.
+  

@@ -193,11 +193,11 @@ describe('calculateLoanWithOffset', () => {
     expect(result.monthlyData[0].offset).toBe(4084);
   });
 
-  it('adds a tenant\'s rent only within its [startMonth, endMonth] range', () => {
+  it('adds a tenant\'s rent (as an incomeSources entry) only within its [startMonth, endMonth] range', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
       exceptExpenses: [],
-      tenants: [{ id: 1, amount: 300, startMonth: 3, endMonth: 5 }],
+      incomeSources: [{ id: 1, name: 'Tenants', amount: 300, isShared: false, startMonth: 3, recurrence: 'monthly', endMonth: 5 }],
       monthlyToOffset: 0,
       loanAmount: 10_000_000, // large enough that effectiveOffset is never capped by balance
       monthlyRate: 0,
@@ -213,7 +213,7 @@ describe('calculateLoanWithOffset', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
       exceptExpenses: [],
-      tenants: [{ id: 1, amount: 300, startMonth: 3, endMonth: null }],
+      incomeSources: [{ id: 1, name: 'Tenants', amount: 300, isShared: false, startMonth: 3, recurrence: 'monthly', endMonth: MAX_MONTH }],
       monthlyToOffset: 0,
       loanAmount: 10_000_000,
       monthlyRate: 0,
@@ -229,7 +229,7 @@ describe('calculateLoanWithOffset', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
       exceptExpenses: [],
-      tenants: [{ id: 1, amount: 300, startMonth: null, endMonth: null }],
+      incomeSources: [{ id: 1, name: 'Tenants', amount: 300, isShared: false, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
       monthlyToOffset: 0,
       loanAmount: 10_000_000,
       monthlyRate: 0,
@@ -244,9 +244,9 @@ describe('calculateLoanWithOffset', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
       exceptExpenses: [],
-      tenants: [
-        { id: 1, amount: 300, startMonth: null, endMonth: null }, // always active
-        { id: 2, amount: 300, startMonth: 2, endMonth: 3 },
+      incomeSources: [
+        { id: 1, name: 'Tenants', amount: 300, isShared: false, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }, // always active
+        { id: 2, name: 'Tenants', amount: 300, isShared: false, startMonth: 2, recurrence: 'monthly', endMonth: 3 },
       ],
       monthlyToOffset: 0,
       loanAmount: 10_000_000,
@@ -329,8 +329,10 @@ describe('calculateLoanWithOffset', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
       exceptExpenses: [],
-      tenants: [{ id: 1, amount: 300, startMonth: null, endMonth: null }],
-      incomeSources: [{ id: 1, name: 'Salary', amount: 300, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
+      incomeSources: [
+        { id: 1, name: 'Tenants', amount: 300, isShared: false, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH },
+        { id: 2, name: 'Salary', amount: 300, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH },
+      ],
       monthlyToOffset: 0,
       loanAmount: 10_000_000,
       monthlyRate: 0,
@@ -417,23 +419,5 @@ describe('calculateLoanWithOffset', () => {
     });
     const offsets = result.monthlyData.map(d => d.offset);
     expect(offsets).toEqual([900, 1800, 2600, 3400]);
-  });
-
-  it('does not take the sentinel shortcut when a tenant is present, even if the base surplus is <= 0', () => {
-    // Before this fix, a tenant whose rent alone could produce a real surplus
-    // would be masked by the sentinel, which only looked at the base surplus.
-    const result = calculateLoanWithOffset({
-      contributions: [],
-      exceptExpenses: [],
-      tenants: [{ id: 1, amount: 0, startMonth: null, endMonth: null }],
-      monthlyToOffset: 0,
-      loanAmount: 1000,
-      monthlyRate: 0,
-      monthlyPayment: 100,
-      maxMonths: 5,
-    });
-    expect(result.monthlyData).toHaveLength(5);
-    expect(result.totalInterest).toBe(0);
-    expect(result.years).not.toBe(999);
   });
 });
