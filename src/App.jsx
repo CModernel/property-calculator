@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { DollarSign, Home, Users, TrendingDown, Calendar, ShoppingCart, Car, RotateCcw } from 'lucide-react';
 import { formatMonthsDetailed, formatCompactMoney } from './calculations/formatting';
 import NumberSliderField from './components/NumberSliderField';
+import LvrBadge from './components/LvrBadge';
 import { getNextSuggestion } from './calculations/suggestions';
 import { getBalanceColor, getBalanceBgColor } from './calculations/ui';
 import {
@@ -1426,7 +1427,10 @@ const PropertyInvestmentCalculator = () => {
                     <span className="font-semibold text-red-600">-${Math.round(stampDuty).toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">LMI (estimate, {lvr.toFixed(1)}% LVR):</span>
+                    <span className="text-gray-600">
+                      LMI (estimate, {lvr.toFixed(1)}% LVR):
+                      <LvrBadge lvr={lvr} />
+                    </span>
                     <span className="font-semibold text-red-600">
                       {lmi > 0 ? `-$${Math.round(lmi).toLocaleString()}` : '$0'}
                       {lmi > 0 && !payLmiUpfront && (

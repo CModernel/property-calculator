@@ -310,9 +310,78 @@ optionally reuse in the commit message when you implement it.
   browser: saved and confirmed the timestamp appeared and read correctly,
   reloaded and confirmed it persisted unchanged.
 
+- [x] **TODO-23: LVR risk indicator - colored symbol + hover tooltip table**
+  Requested by the user, with the exact 6-band classification table
+  (95-100% 🔴 Muy riesgoso through <60% 🔵 Excelente) given verbatim.
+  `src/calculations/classifyLvr.js` holds `LVR_BANDS` (ordered highest-LVR
+  first, each with an inclusive lower `min`) as the single source of truth
+  for both the classification logic and the tooltip's row data - `classifyLvr`
+  is just `LVR_BANDS.find(band => lvr >= band.min)`, so the tooltip can
+  highlight the current row via reference equality without re-deriving
+  thresholds. New `LvrBadge` component (`src/components/LvrBadge.jsx`) is
+  fully hand-rolled with Tailwind `group`/`group-focus-within` (no
+  `useState`, no new dependency - the project has no tooltip/popover
+  library) - `group-focus-within` gets keyboard accessibility for free.
+  Placed next to "LMI (estimate, X% LVR)" in the results panel (per the
+  user's choice, keeping the diff to one call site rather than also
+  touching the Property & Loan card's Down Payment caption). One fix during
+  manual verification: the tooltip's initial `left-0` anchor clipped off
+  the right edge of the viewport since the badge sits in the narrow results
+  column - switched to `right-0` so it grows leftward instead. Verified in
+  the browser at every band boundary (100%, 95%, 94%, down to 0%), each
+  showing the correct badge color and highlighting the correct table row -
+  confirmed the 80% exact boundary shows "Aceptable" (orange) even though
+  the pre-existing "Pay LMI upfront" checkbox stays hidden until `lvr > 80`
+  (a documented, expected divergence, not a bug).
+  - **Update:** the user replaced the 6-band Spanish table with a 5-band
+    English one (the two top red bands, 90-95% and 95-100%, collapsed into
+    a single `>90%`), and added an intro line above the table: "The lower
+    the LVR, the lower the risk and the greater the borrowing flexibility."
+    `LVR_BANDS` now carries one `summary` string per band (e.g. "High risk,
+    low equity") instead of separate `label`/`note` fields; column headers
+    simplified to "LVR" / "Summary". Boundaries unchanged other than
+    merging 90 and 95 into one `min: 90` band. Tests and the tooltip were
+    updated to match; re-verified in the browser.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
+
+- [ ] **TODO-25: Title change + financial-advice disclaimer**
+  Requested by the user, for legal-safety reasons. Two changes to
+  `src/App.jsx`'s header (currently `<h1>Property Investment Cash Flow
+  Calculator</h1>` at line ~458, subtitle "How much is left after
+  EVERYTHING? That goes to offset automatically." at line ~460):
+  1. Clarify the title is NSW-specific - the app already hardcodes NSW
+     stamp duty/LMI/closing-cost rules (`src/calculations/stampDuty.js`,
+     `lmi.js`, the "Upfront Costs (NSW)" card), so the title/subtitle should
+     say so explicitly rather than reading as a general-Australia or
+     general-purpose calculator.
+  2. Add a visible disclaimer that this is a personal project, not
+     financial advice, and is only meant to give a hypothetical/rough idea
+     of loan payoff timelines etc. - not a recommendation to act on. Needs
+     wording that's clearly visible (near the header, not buried in a
+     footer) without overwhelming the page - a small dismissible or
+     always-visible note under the title, similar in weight to the
+     Save-bar's status line, is probably the right size. English only (see
+     TODO-23's Spanish-sweep confirmation that everything else in the app
+     is already English).
+
+- [ ] **TODO-24: Make "Your Personal Expenses (Weekly)" fully collapsible, like Property Expenses/Rental Income**
+  Requested by the user. Note there's already a *partial* collapse here from
+  TODO-20 (`showPersonalExpenses` in `src/App.jsx`, toggling just the Food/
+  Transport/Other `SteppedExpenseField`s) - but unlike the "Property
+  Expenses" and "Rental Income" cards, where the toggle hides the card's
+  *entire* content, this card also always shows Fortnightly Income, the
+  "Offset Contributions Schedule" sub-section, and the "Exceptional
+  Expenses" sub-card outside that toggle. Needs a decision on scope before
+  implementing: collapse the whole card's content behind one toggle
+  (matching Property Expenses/Rental Income exactly, at the cost of hiding
+  Fortnightly Income - arguably the single most important input on the
+  page - behind a click), or keep Fortnightly Income always visible and
+  only fold Offset Contributions + the expense fields + Exceptional
+  Expenses under the toggle. Clarify with the user which before writing
+  code.
 
 ---
 
