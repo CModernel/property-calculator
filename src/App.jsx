@@ -708,24 +708,14 @@ const PropertyInvestmentCalculator = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Property Type</label>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handlePropertyTypeChange('house')}
-                    className={`flex-1 py-1.5 px-2 rounded text-sm ${propertyType === 'house' ? 'bg-blue-600 text-white' : 'bg-blue-200 text-blue-800'
-                      }`}
-                  >
-                    House
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handlePropertyTypeChange('unit')}
-                    className={`flex-1 py-1.5 px-2 rounded text-sm ${propertyType === 'unit' ? 'bg-blue-600 text-white' : 'bg-blue-200 text-blue-800'
-                      }`}
-                  >
-                    Unit / Apartment
-                  </button>
-                </div>
+                <select
+                  value={propertyType}
+                  onChange={(e) => handlePropertyTypeChange(e.target.value)}
+                  className="w-full p-2 border rounded"
+                >
+                  <option value="house">House</option>
+                  <option value="unit">Unit / Apartment</option>
+                </select>
                 {propertyType === 'house' && (
                   <p className="text-xs text-gray-500 mt-1">No strata - houses aren't on a shared title.</p>
                 )}

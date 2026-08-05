@@ -959,6 +959,22 @@ optionally reuse in the commit message when you implement it.
   Closing Costs, Total Cash Required, Available Savings, Remaining
   Savings) still showed its correct value unchanged.
 
+- [x] **TODO-37: Replace the Property Type button pair with a dropdown**
+  Requested by the user, re-raised twice (once suggesting radio buttons
+  as an acceptable alternative). Went with the dropdown, matching the
+  session's own recommendation and the same pattern already used
+  elsewhere (e.g. the Income Name picklist) - replaced the two House/Unit
+  `<button>`s (`src/App.jsx`) with a single `<select value={propertyType}
+  onChange={(e) => handlePropertyTypeChange(e.target.value)}>`.
+  `handlePropertyTypeChange` itself needed no changes - the strata-seed-
+  on-switch-to-unit logic is untouched, since it already only depended on
+  the value passed in, not on how it was triggered.
+  Verified in the browser: switched to "Unit / Apartment" via the new
+  dropdown and confirmed the "No strata" message disappeared and the
+  Property Expenses subtotal jumped from $543 to $793/month (the $1,000
+  quarterly Strata seed applied correctly, same as with the old buttons);
+  switched back to "House" and confirmed the message reappeared.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -1204,18 +1220,6 @@ optionally reuse in the commit message when you implement it.
 ---
 
 ## 🟢 LOW PRIORITY (Polish, refactoring, cleanup)
-
-- [ ] **TODO-37: Replace the Property Type button pair with a dropdown**
-  Requested by the user - the two big House/Unit buttons
-  (`src/App.jsx:538-556`, `handlePropertyTypeChange`) feel oversized for a
-  simple two-option choice; a combo box/dropdown (`<select>`) reads
-  better - re-raised again later in the session, this time also
-  mentioning radio buttons as an acceptable alternative to a dropdown.
-  Same pattern already used elsewhere in the app (e.g. the Income Name
-  picklist) - swap the two `<button>`s for a single `<select value=
-  {propertyType} onChange={(e) => handlePropertyTypeChange(e.target.value)}>`
-  with House/Unit ⁄ Apartment options; `handlePropertyTypeChange` itself
-  (the strata-default-on-switch-to-unit logic) needs no changes.
 
 - [ ] **TODO-43: Add NSW Foreign Purchaser Additional Duty Surcharge (8% extra)**
   Requested by the user, explicitly flagged as **not urgent**. NSW charges
