@@ -1792,6 +1792,65 @@ const PropertyInvestmentCalculator = () => {
                 </div>
               </div>
 
+              {/* Upfront Costs section */}
+              <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
+                <h3 className="font-semibold text-gray-700 mb-2">🏛️ Upfront Costs (NSW)</h3>
+                <div className="space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">
+                      Stamp Duty{isFirstHomeBuyer && ' (FHB concession)'}:
+                    </span>
+                    <span className="font-semibold text-red-600">-${Math.round(stampDuty).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">
+                      LMI (estimate, {lvr.toFixed(1)}% LVR):
+                      <LvrBadge lvr={lvr} />
+                    </span>
+                    <span className="font-semibold text-red-600">
+                      {lmi > 0 ? `-$${Math.round(lmi).toLocaleString()}` : '$0'}
+                      {lmi > 0 && !payLmiUpfront && (
+                        <span className="text-xs text-gray-500 font-normal ml-1">(financed into loan)</span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Closing Costs:</span>
+                    <span className="font-semibold text-red-600">-${closingCostsSubtotal.toLocaleString()}</span>
+                  </div>
+                  <div className="border-t border-purple-200 pt-1 mt-1 font-bold">
+                    <div className="flex justify-between">
+                      <span className="text-gray-700">Total Cash Required:</span>
+                      <span className="text-red-700">${Math.round(totalCashRequired).toLocaleString()}</span>
+                    </div>
+                  </div>
+                  {totalScheduledOffset > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">One-Time Offset Contributions:</span>
+                      <span className="font-semibold text-red-600">-${totalScheduledOffset.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Available Savings:</span>
+                    <span className="font-semibold text-gray-700">${totalSavings.toLocaleString()}</span>
+                  </div>
+                  <div className={`border-t pt-1 mt-1 font-bold ${getBalanceBgColor(cashRemaining)}`}>
+                    <div className="flex justify-between">
+                      <span className="text-gray-700">Remaining Savings:</span>
+                      <span className={getBalanceColor(cashRemaining)}>
+                        {cashRemaining >= 0 ? '+' : '-'}${Math.abs(Math.round(cashRemaining)).toLocaleString()}
+                      </span>
+                    </div>
+                    {cashRemaining < 0 && (
+                      <p className="mt-2 p-2 bg-red-50 border border-red-300 rounded text-xs text-red-700 font-normal">
+                        ⚠️ You've committed ${Math.abs(Math.round(cashRemaining)).toLocaleString()} more than your
+                        savings cover (deposit + upfront costs + scheduled contributions).
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {/* Monthly expenses section */}
               <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
                 <h3 className="font-semibold text-gray-700 mb-2">💳 Monthly Expenses</h3>
@@ -1886,65 +1945,6 @@ const PropertyInvestmentCalculator = () => {
                       <span className="text-gray-700">Total Monthly Income:</span>
                       <span className="text-green-700">+${Math.round(monthlyRentalIncome + monthlyIncome).toLocaleString()}/month</span>
                     </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Upfront Costs section */}
-              <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
-                <h3 className="font-semibold text-gray-700 mb-2">🏛️ Upfront Costs (NSW)</h3>
-                <div className="space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">
-                      Stamp Duty{isFirstHomeBuyer && ' (FHB concession)'}:
-                    </span>
-                    <span className="font-semibold text-red-600">-${Math.round(stampDuty).toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">
-                      LMI (estimate, {lvr.toFixed(1)}% LVR):
-                      <LvrBadge lvr={lvr} />
-                    </span>
-                    <span className="font-semibold text-red-600">
-                      {lmi > 0 ? `-$${Math.round(lmi).toLocaleString()}` : '$0'}
-                      {lmi > 0 && !payLmiUpfront && (
-                        <span className="text-xs text-gray-500 font-normal ml-1">(financed into loan)</span>
-                      )}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Closing Costs:</span>
-                    <span className="font-semibold text-red-600">-${closingCostsSubtotal.toLocaleString()}</span>
-                  </div>
-                  <div className="border-t border-purple-200 pt-1 mt-1 font-bold">
-                    <div className="flex justify-between">
-                      <span className="text-gray-700">Total Cash Required:</span>
-                      <span className="text-red-700">${Math.round(totalCashRequired).toLocaleString()}</span>
-                    </div>
-                  </div>
-                  {totalScheduledOffset > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">One-Time Offset Contributions:</span>
-                      <span className="font-semibold text-red-600">-${totalScheduledOffset.toLocaleString()}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Available Savings:</span>
-                    <span className="font-semibold text-gray-700">${totalSavings.toLocaleString()}</span>
-                  </div>
-                  <div className={`border-t pt-1 mt-1 font-bold ${getBalanceBgColor(cashRemaining)}`}>
-                    <div className="flex justify-between">
-                      <span className="text-gray-700">Remaining Savings:</span>
-                      <span className={getBalanceColor(cashRemaining)}>
-                        {cashRemaining >= 0 ? '+' : '-'}${Math.abs(Math.round(cashRemaining)).toLocaleString()}
-                      </span>
-                    </div>
-                    {cashRemaining < 0 && (
-                      <p className="mt-2 p-2 bg-red-50 border border-red-300 rounded text-xs text-red-700 font-normal">
-                        ⚠️ You've committed ${Math.abs(Math.round(cashRemaining)).toLocaleString()} more than your
-                        savings cover (deposit + upfront costs + scheduled contributions).
-                      </p>
-                    )}
                   </div>
                 </div>
               </div>

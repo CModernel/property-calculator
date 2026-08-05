@@ -937,6 +937,28 @@ optionally reuse in the commit message when you implement it.
   ($167) and Property Management ($150) appeared in the expanded
   breakdown too, with the subtotal updating to $859.
 
+- [x] **TODO-41: Consider moving "Upfront Costs (NSW)" higher on the page**
+  Requested by the user, resolved via two quick decisions: (1) the input
+  side already reads Purchase Details → Financial Position → Upfront
+  Costs (NSW) → Property Expenses/Income - Upfront Costs was already
+  before Property Expenses/Income, and moving it before Financial
+  Position too was rejected, since "Remaining Savings" (inside Upfront
+  Costs) depends on "Available Savings" (defined in Financial Position) -
+  showing that derived figure before its input would read oddly, so the
+  input-side order is unchanged; (2) the **results panel** did need the
+  move - "Upfront Costs (NSW)" was the 4th sub-section inside "Property
+  Balance" (`src/App.jsx`, after Loan Information, Monthly Expenses,
+  Monthly Income), moved up to be the 2nd sub-section, right after Loan
+  Information - groups the one-time purchase-time cost right alongside
+  the other loan-level figure, ahead of the recurring monthly ones.
+  Purely a JSX reorder (cut the "Upfront Costs section" block, pasted it
+  right after "Loan Information"'s closing tag) - no logic changed.
+  Verified in the browser: confirmed the new order (Loan Information →
+  Upfront Costs (NSW) → Monthly Expenses → Monthly Income → Property
+  Summary) and that every figure inside Upfront Costs (Stamp Duty, LMI,
+  Closing Costs, Total Cash Required, Available Savings, Remaining
+  Savings) still showed its correct value unchanged.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -953,16 +975,6 @@ optionally reuse in the commit message when you implement it.
   fix - also not explained in the UI). Needs a proper redesign pass (more
   inline explanation text, tooltips, or a restructured layout), not just a
   quick label tweak.
-
-- [ ] **TODO-41: Consider moving "Upfront Costs (NSW)" higher on the page**
-  Requested by the user - today it's the 3rd input card (after Purchase
-  Details, Financial Position) and appears roughly in the same position
-  in the results panel. Worth discussing whether upfront/purchase-time
-  costs deserve more prominence (e.g. right after Purchase Details, before
-  Property Expenses/Income) since they're a one-time decision-point figure
-  rather than an ongoing monthly one - needs to weigh this against how the
-  page currently reads top-to-bottom as "purchase details → ongoing
-  income/expenses → results."
 
 - [ ] **TODO-42: Rethink "Property Summary" when there's no rental income**
   Requested by the user - "Property Summary" (Total Property Monthly
@@ -1174,7 +1186,20 @@ optionally reuse in the commit message when you implement it.
   TODO-54) explaining how to use the feature, including concrete guidance
   on which kinds of expenses should stay on debit instead of credit card
   (e.g. anything where the account charges an extra fee for not using
-  debit, which would erase the benefit).
+  debit, which would erase the benefit). **Follow-up analysis from the
+  user, favoring the flat %-benefit fallback over full cycle
+  simulation**: with typical eligible spending (~$1,000-1,500/month), a
+  dedicated "big savings" section promising large gains from credit-card-
+  plus-offset would be misleading - the realistic benefit is modest
+  ("Estimated annual benefit: $50-200/year", depending on eligible
+  spending, mortgage rate, cashback, and card fees). Proposed formula:
+  **Annual Benefit ≈ Average Extra Offset Balance × Mortgage Rate** - e.g.
+  $1,000 extra balance × 5.5% ≈ $55/year, $2,000 × 5.5% ≈ $110/year,
+  $3,000 × 5.5% ≈ $165/year. Worth noting in the UI copy itself (not just
+  internally) that the offset-timing benefit alone is small - the card's
+  own cashback/rewards often matter as much or more than the extra
+  interest saved, so the feature shouldn't overstate the offset side in
+  isolation.
 
 ---
 
