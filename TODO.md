@@ -1464,6 +1464,88 @@ optionally reuse in the commit message when you implement it.
   bundle size unaffected (test files aren't part of the production
   entry point).
 
+- [x] **TODO-51: Add more charts to visualize progress**
+  Requested by the user, who asked for concrete suggestions on which
+  charts matter most. Asked the user to pick from the proposed list and
+  where to place them: chose **#1 (Loan Balance vs. Offset vs. Effective
+  Balance)** and **#3 (Principal vs. Interest per month, stacked)**, in
+  their own new full-width card below "⏱️ Loan Simulation" (not inside
+  the already-dense Timeline Explorer). Flagged one clarification before
+  building: chart #2 ("with-offset vs. without-offset") as originally
+  scoped would have compared `loanSimulation.monthlyData` against
+  `baselineSimulation.monthlyData` - but `baselineSimulation`
+  (`src/App.jsx`) only removes the user's *explicit* Offset Contributions
+  while still applying the automatic monthly surplus, so it isn't the
+  same "no offset at all" comparison as the existing static "Savings vs
+  no offset" figure (`calculateNoOffsetTotalInterest`) - not built this
+  round given the other two were prioritized instead.
+  This is the app's **first real `recharts` usage** - the dependency
+  existed unused since the Total Summary's income/expense ring is a plain
+  CSS `conic-gradient`, not a chart component. New
+  `src/components/LoanBalanceChart.jsx` (a `LineChart` with 3 lines -
+  Loan Balance/Offset/Effective Balance, reusing `loanSimulation
+  .monthlyData` directly, no new calculation needed) and
+  `src/components/PrincipalInterestChart.jsx` (a stacked `AreaChart` -
+  Principal/Interest per month).
+  **One genuinely new calculation was needed despite the "no new
+  calculation logic" framing**: `offsetSimulation.js`'s `monthlyData` only
+  tracks `totalPrincipalPaid` as a running *cumulative* total (which is
+  what the Timeline Explorer needs), not the per-month split the
+  Principal/Interest chart needs - added `withMonthlyPrincipal`
+  (`src/calculations/chartData.js`) to derive it by diffing consecutive
+  cumulative totals, plus `getYearTickMonths` for both charts' X-axis
+  year labels.
+  **Two real bugs caught before shipping**: (1) X-axis labels initially
+  showed nothing at all - `interval="preserveStartEnd"` only guarantees
+  recharts' own *auto-sampled* ticks include the first/last one, it does
+  **not** guarantee those sampled ticks land on year boundaries, so a
+  `month % 12 === 0` formatter silently labelled nothing; fixed by passing
+  an explicit `ticks={getYearTickMonths(...)}` array instead of relying on
+  recharts' sampling at all. (2) A transient full-renderer freeze during
+  browser verification turned out to be an unrelated Chrome-extension/CDP
+  hiccup (reconnecting via `tabs_context_mcp` resolved it immediately,
+  and DOM/SVG node counts were entirely normal - not a real app bug).
+  Verified in the browser on the $850k default scenario: both charts
+  render correctly with legible "1y"-"11y" x-axis labels: Loan Balance
+  (red) declining gently, Offset (blue) rising, Effective Balance
+  (purple) dropping fastest and crossing under Offset around year 7,
+  reaching $0 at the ~11-year payoff point; hovering shows a tooltip with
+  the exact month and all three formatted dollar figures; the Principal
+  vs. Interest area chart shows the classic amortization crossover.
+  `npm test -- --run` (270/270), `npm run lint`, and `npm run build` all
+  clean - `recharts`' own dependencies did meaningfully grow the bundle
+  (271KB → 627KB minified, 79KB → 184KB gzipped, triggering Vite's
+  >500KB chunk-size advisory warning) - not addressed here (code-splitting
+  would be its own separate task) but worth knowing about.
+
+- [x] **TODO-65: Move the Charts card below Timeline Explorer, shrink it, and make it collapsible + lazy-rendered**
+  Requested by the user right after seeing TODO-51's charts in the
+  browser. Three changes to the "📈 Progress Over Time" card
+  (`src/App.jsx`): **repositioned** from right after the main grid
+  (before both "How This Calculator Works" and "Timeline Explorer") to
+  the very bottom of the page, after Timeline Explorer's own closing
+  `</div>` - confirmed via DOM order in the browser, not just visually.
+  **Shrunk** both `LoanBalanceChart`/`PrincipalInterestChart`
+  (`src/components/`) from a fixed `height={300}` to `height={200}`.
+  **Made collapsible and genuinely lazy**: new `showProgressCharts`
+  toggle (`config.showProgressCharts ?? false`, collapsed by default),
+  wired into `handleSaveScenario`'s save/restore list alongside the other
+  breakdown toggles from TODO-45. The chart components sit behind
+  `{showProgressCharts && (...)}` - conditional JSX, not conditional CSS
+  visibility - so recharts genuinely doesn't mount/render anything while
+  collapsed, matching the explicit "standby" requirement rather than just
+  hiding already-rendered charts.
+  Verified in the browser: confirmed zero `.recharts-wrapper` elements
+  exist in the DOM while collapsed (not merely hidden), and that
+  "Timeline Explorer" precedes "Progress Over Time" in document order;
+  expanded the card and confirmed both `.recharts-responsive-container`
+  elements measure 200px tall (down from 300px) and mount correctly only
+  at that point; saved the scenario with the card expanded, reloaded the
+  page, and confirmed it came back expanded (▾) exactly as left. `npm
+  test -- --run` (270/270), `npm run lint`, and `npm run build` all clean
+  - purely additive to the scenario shape, no `SCHEMA_VERSION` bump
+  needed (same precedent as TODO-45/59's other breakdown toggles).
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -1498,35 +1580,6 @@ optionally reuse in the commit message when you implement it.
   yet where this should surface (a new figure in "Financial Position"? in
   the Timeline Explorer?) - needs its own design pass.
 
-- [ ] **TODO-51: Add more charts to visualize progress**
-  Requested by the user, who asked for concrete suggestions on which
-  charts matter most - proposed here, in priority order, all backed by
-  data the simulation already computes (`loanSimulation.monthlyData`/
-  `baselineSimulation.monthlyData`, `src/App.jsx`), so none need new
-  calculation logic, only visualization:
-  1. **Loan Balance vs. Offset vs. Effective Balance over time** (line/
-     area) - the user's own suggestion ("Load balance over time...shows
-     how the debt decreases"); the most fundamental chart, a full-timeline
-     version of what the Timeline Explorer already shows one month at a
-     time.
-  2. **With-offset vs. without-offset comparison** (two lines - total
-     interest accrued, or balance, over time) - today "Savings vs no
-     offset" is a single "~$X saved" number; charting
-     `loanSimulation.monthlyData` against `baselineSimulation.monthlyData`
-     directly would make that gap visually obvious instead of a static
-     figure.
-  3. **Principal vs. Interest split per month** (stacked area) - the
-     user's other suggestion; the classic amortization chart, showing the
-     crossover point and how offset shifts it earlier.
-  4. Optionally, **Effective Ownership % over time** - a full-timeline
-     version of the Timeline Explorer's single-point progress bar.
-  `recharts` (`package.json`) is already a dependency but **currently
-  unused anywhere in `src/`** - the only "chart" today is the Total
-  Summary's income/expense ring, which is a plain CSS `conic-gradient`
-  (`src/App.jsx:1981`), not a recharts component - so building any of
-  these means the first real recharts usage in the app. Still needs a
-  decision on which 1-2 to build first, and where they'd live on the page
-  (their own new card? inside the Timeline Explorer?).
 
 - [ ] **TODO-52 (Analysis only, no code): When does it make sense to invest in ETFs instead of paying down the offset?**
   Requested by the user - explicitly an analysis task. The question:
@@ -1675,5 +1728,32 @@ optionally reuse in the commit message when you implement it.
   passing unchanged plus a browser check that every figure (stamp duty,
   FHB concession, foreign purchaser surcharge, closing costs defaults, all
   "NSW" UI text) is bit-for-bit identical before and after.
+
+- [ ] **TODO-64: Turn Food/Transport into an addable list of Personal Expense items, with Phone/Internet as a default**
+  Requested by the user. Today "Your Personal Expenses (Weekly)" only has
+  two fixed `SteppedExpenseField`s - Food and Transport
+  (`foodExpensesField`/`transportExpensesField`, `src/App.jsx`) - there's
+  no way to add another recurring personal cost (like a phone/internet
+  bill) without it being shoehorned into Food or Transport, or added as
+  an "Other Expense" (a different, less-recurring-oriented model, see
+  `otherExpenseItems`/`OTHER_EXPENSE_CATEGORIES`,
+  TODO-36). Proposed direction: replace the two fixed
+  SteppedExpenseFields with an addable/removable itemized list (same
+  general shape as Other Expenses' picklist-plus-list pattern), and seed
+  a default "Phone/Internet" item at $30/month for new scenarios.
+  Needs a design pass: Food/Transport are currently a `$/week` rate via
+  `useSteppedValue` (supports scheduled rate *changes* over time, e.g.
+  "council rates go up in month 13") - Other Expenses' list model instead
+  uses one-time-dollar-amount-per-occurrence Schedule entries
+  (start/recurrence/end), a different shape entirely. Worth deciding
+  whether personal expense items keep the "steppable weekly rate" concept
+  (a new list-of-SteppedExpenseFields model, not existing anywhere yet)
+  or move to the Schedule-based one-time/recurring-occurrence model Other
+  Expenses already uses (simpler to reuse, but loses the "smooth rate
+  that occasionally steps up" semantics Food/Transport currently have).
+  Also needs deciding whether Phone/Internet is the *only* new default
+  category or one of several common presets (e.g. Insurance, Gym,
+  Streaming) offered alongside it.
+
 
 

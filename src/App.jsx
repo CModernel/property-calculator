@@ -4,6 +4,8 @@ import { formatMonthsDetailed, formatCompactMoney } from './calculations/formatt
 import NumberSliderField from './components/NumberSliderField';
 import LvrBadge from './components/LvrBadge';
 import InfoTooltip from './components/InfoTooltip';
+import LoanBalanceChart from './components/LoanBalanceChart';
+import PrincipalInterestChart from './components/PrincipalInterestChart';
 import { getNextSuggestion } from './calculations/suggestions';
 import { getBalanceColor, getBalanceBgColor } from './calculations/ui';
 import {
@@ -148,6 +150,11 @@ const PropertyInvestmentCalculator = () => {
   // Property Expenses (TODO-39) - distinct from showPersonalExpenses above,
   // which controls the separate "Your Personal Expenses (Weekly)" input card.
   const [showPersonalExpensesBreakdown, setShowPersonalExpensesBreakdown] = useState(config.showPersonalExpensesBreakdown ?? false);
+
+  // Collapsed by default (TODO-65) - the chart components only mount while
+  // this is true (conditional JSX, not just conditional CSS visibility), so
+  // recharts' actual render work only happens while the card is open.
+  const [showProgressCharts, setShowProgressCharts] = useState(config.showProgressCharts ?? false);
 
   // Other Expenses - a distinct-lifecycle expense (a subscription starts and
   // gets cancelled, a loan ends when paid off), unlike Food/Transport which
@@ -476,7 +483,7 @@ const PropertyInvestmentCalculator = () => {
       exceptExpenses,
       otherExpenseItems,
       showPropertyExpenses, showMonthlyExpensesBreakdown, showClosingCostsBreakdown,
-      showIncome, showPersonalExpenses, showPersonalExpensesBreakdown,
+      showIncome, showPersonalExpenses, showPersonalExpensesBreakdown, showProgressCharts,
       savedAt,
     };
     if (saveScenario(scenario)) {
@@ -2483,6 +2490,34 @@ const PropertyInvestmentCalculator = () => {
 
         </div>
       </div>
+
+      {/* Charts (TODO-51/65) - collapsed by default; the chart components
+          only mount while expanded (conditional JSX below, not just
+          conditional CSS visibility), so recharts' render work only
+          happens while the card is actually open. */}
+      {loanSimulation.monthlyData.length > 0 && (
+        <div className="mt-6 bg-white rounded-lg shadow-md p-5">
+          <button
+            type="button"
+            onClick={() => setShowProgressCharts(!showProgressCharts)}
+            className="font-bold text-gray-700 text-lg flex items-center gap-2"
+          >
+            {showProgressCharts ? '▾' : '▸'} 📈 Progress Over Time
+          </button>
+          {showProgressCharts && (
+            <div className="space-y-6 mt-4">
+              <div>
+                <p className="text-sm font-semibold text-gray-600 mb-2">Loan Balance vs. Offset vs. Effective Balance</p>
+                <LoanBalanceChart monthlyData={loanSimulation.monthlyData} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-600 mb-2">Principal vs. Interest (per month)</p>
+                <PrincipalInterestChart monthlyData={loanSimulation.monthlyData} />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
