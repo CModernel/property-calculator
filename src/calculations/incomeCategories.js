@@ -1,9 +1,12 @@
 import { MAX_MONTH } from './recurringAmount';
 
 // The categories offered by the Income Name picklist, in display order.
-// "Tenants" keeps its own dedicated Shared Room sub-form (see App.jsx) and
-// "Other" reveals a free-text name field - neither needs a schedule default
-// below beyond the form's own baseline ("Monthly, Forever").
+// "House Rent" keeps its own dedicated Shared Room sub-form (see App.jsx) -
+// named this way rather than "Tenants" since it covers both a shared room
+// and the whole property let to one tenant, and "Tenants" read as
+// room-renters only (TODO-46). "Other" reveals a free-text name field -
+// neither needs a schedule default below beyond the form's own baseline
+// ("Monthly, Forever").
 export const INCOME_CATEGORIES = [
   'Salary/Wages',
   'Self-Employment',
@@ -18,14 +21,14 @@ export const INCOME_CATEGORIES = [
   'Commission',
   'Tax Refund',
   'Gift',
-  'Tenants',
+  'House Rent',
   'Other',
 ];
 
 // Default Schedule applied when a category is picked in the Income Name
 // dropdown, so the form reflects how that income naturally recurs instead of
-// always defaulting the same way. Categories omitted here (Tenants, Other)
-// keep whatever the form's current Schedule fields already are.
+// always defaulting the same way. Categories omitted here (House Rent,
+// Other) keep whatever the form's current Schedule fields already are.
 // Dividends defaults to "quarterly" as the closest supported recurrence -
 // the model only has monthly/quarterly/yearly, no half-yearly.
 // Child Support deliberately has no `endMonth` - unlike every other

@@ -998,6 +998,34 @@ optionally reuse in the commit message when you implement it.
   First Home Buyer disabled with its existing message, exactly mirroring
   the already-verified TODO-38 behavior from the other direction.
 
+- [x] **TODO-46: Reconsider the "Tenants" name - maybe "House Rent"?**
+  Requested by the user, reopening a naming question already discussed
+  once during TODO-29 (back then, the explicit call was "Dejalo como
+  Tenants" - keep it). Confirmed with the user this time: renamed to
+  **"House Rent"** (`src/calculations/incomeCategories.js`'s
+  `INCOME_CATEGORIES`, and every `'Tenants'` string/comment/variable name
+  in `src/App.jsx`, e.g. `isTenants` → `isHouseRent`) - resolves the
+  ambiguity of "tenants" reading as "lodgers/room-renters only" when the
+  category already covers renting out the whole property too
+  (`isShared: false, numPeople: 1`). The non-shared entry's list label
+  also changed from **"Individual Room"** to **"Whole House"**
+  (confirmed with the user), including its second appearance in the
+  Timeline Explorer's Income Context status list (was "Individual").
+  "Shared Room" was left unchanged, per the user's choice. Also renamed
+  "Tenants Active" → "House Rent Active" and "No tenants or income
+  sources" → "No house rent or income sources" in the Timeline Explorer
+  for consistency. Purely a display-string/identifier-naming change -
+  `isShared !== undefined` (not the category name) is still what
+  identifies a House-Rent-category entry everywhere in the code, so no
+  `SCHEMA_VERSION` bump was needed; an old saved scenario with a
+  `name: 'Tenants'` entry keeps working exactly the same (the stored name
+  is just a label, unrelated to the picklist's current option text).
+  Verified in the browser: confirmed "House Rent" replaced "Tenants" in
+  the Income Name dropdown; added an unshared House Rent entry and
+  confirmed the list showed "Whole House" (not "Individual Room");
+  advanced the Timeline Explorer and confirmed "House Rent Active: 1" and
+  "• Whole House" appeared correctly in the Income Context column.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -1049,24 +1077,6 @@ optionally reuse in the commit message when you implement it.
   toggles? Needs confirming with the user before implementing, since the
   answer changes what `handleSaveScenario`/`handleClearSavedScenario`
   need to read and reset.
-
-- [ ] **TODO-46: Reconsider the "Tenants" name - maybe "House Rent"?**
-  Requested by the user, reopening a naming question that was already
-  discussed once during TODO-29: back then, offered Lodgers/Boarders/Room
-  Rentals as alternatives, and the user's explicit call at the time was
-  **"Dejalo como Tenants"** (keep it as-is). Now re-raising it, proposing
-  **"House Rent"** specifically because "tenants" reads as "lodgers/room-
-  renters" in English and it's unclear whether it also covers renting out
-  the *entire* house (not just a room) - which is exactly the case
-  `isShared: false, numPeople: 1` already models today
-  (`src/App.jsx`, Income Sources' `'Tenants'` category). Needs a fresh
-  decision with the user on the exact label (and whether "Individual
-  Room" - the label shown for a non-shared entry, `src/App.jsx` list
-  rendering - also needs rewording if the category itself gets renamed,
-  since "Individual Room" reads oddly for "the whole house is rented
-  out"). Low-risk to implement once decided - it's a display-string-only
-  change, since `isShared !== undefined` (not the name) is what
-  identifies a Tenants-category entry everywhere in the code.
 
 - [ ] **TODO-47: Add dark mode (mobile + web)**
   Requested by the user. The entire app today is hardcoded to a light

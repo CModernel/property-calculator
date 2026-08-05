@@ -105,21 +105,21 @@ const PropertyInvestmentCalculator = () => {
   const [homeInsurance, setHomeInsurance] = useState(config.homeInsurance);
   const [rateAdjustments, setRateAdjustments] = useState(config.rateAdjustments);
 
-  // Income sources (salary, other income, tenants, one-time payments) - a
+  // Income sources (salary, other income, house rent, one-time payments) - a
   // single "Schedule" shape { startMonth, recurrence: 'none'|'monthly'|
   // 'quarterly'|'yearly', endMonth }, shared with Exceptional Expenses and
   // resolved per month via getActiveAmount (src/calculations/recurringAmount.js).
-  // A 'Tenants' entry additionally carries isShared/numPeople/amountPerPerson
-  // (see addIncomeSource) - isShared !== undefined is how a Tenants entry is
-  // told apart from any other income category elsewhere in the file.
+  // A 'House Rent' entry additionally carries isShared/numPeople/amountPerPerson
+  // (see addIncomeSource) - isShared !== undefined is how a House Rent entry
+  // is told apart from any other income category elsewhere in the file.
   const [incomeSources, setIncomeSources] = useState(config.incomeSources ?? []);
   const [showIncome, setShowIncome] = useState(false);
   const [showAddIncome, setShowAddIncome] = useState(false);
   const [newIncomeCategory, setNewIncomeCategory] = useState('Salary/Wages'); // see INCOME_CATEGORIES (src/calculations/incomeCategories.js)
   const [newIncomeCustomName, setNewIncomeCustomName] = useState(''); // only used when category is 'Other'
   const [newIncomeAmount, setNewIncomeAmount] = useState(config.newIncomeAmount);
-  const [newIncomeIsShared, setNewIncomeIsShared] = useState(false); // only used when category is 'Tenants'
-  const [newIncomeNumPeople, setNewIncomeNumPeople] = useState(2); // only used when category is 'Tenants' and shared
+  const [newIncomeIsShared, setNewIncomeIsShared] = useState(false); // only used when category is 'House Rent'
+  const [newIncomeNumPeople, setNewIncomeNumPeople] = useState(2); // only used when category is 'House Rent' and shared
   const [newIncomeOneTime, setNewIncomeOneTime] = useState(false);
   const [newIncomeStartMonth, setNewIncomeStartMonth] = useState(1);
   const [newIncomeRecurrence, setNewIncomeRecurrence] = useState('monthly'); // monthly | quarterly | yearly
@@ -268,7 +268,7 @@ const PropertyInvestmentCalculator = () => {
 
   // Total cash flow. Same "right now" (month 1) convention as exceptional
   // expenses - an income source that hasn't started yet, or already ended,
-  // shouldn't count here. Tenants (isShared !== undefined) live inside
+  // shouldn't count here. House Rent (isShared !== undefined) lives inside
   // incomeSources like any other entry - this just partitions the same
   // array into the two subtotals the rest of the app already expects,
   // instead of drawing from two separate arrays.
@@ -519,9 +519,9 @@ const PropertyInvestmentCalculator = () => {
   // the user picks a new Income Name, so e.g. a Bonus starts as one-time and
   // a Salary starts as Monthly/Forever, instead of the form always defaulting
   // the same way regardless of category. Only touches the Schedule fields -
-  // Tenants' own Shared Room fields (isShared/numPeople) are untouched, and
-  // categories without a listed default (Tenants, Other) keep whatever the
-  // form's current Schedule fields already are.
+  // House Rent's own Shared Room fields (isShared/numPeople) are untouched,
+  // and categories without a listed default (House Rent, Other) keep
+  // whatever the form's current Schedule fields already are.
   const handleIncomeCategoryChange = (category) => {
     setNewIncomeCategory(category);
     const defaults = INCOME_CATEGORY_DEFAULTS[category];
@@ -534,7 +534,7 @@ const PropertyInvestmentCalculator = () => {
   };
 
   const addIncomeSource = () => {
-    const isTenants = newIncomeCategory === 'Tenants';
+    const isHouseRent = newIncomeCategory === 'House Rent';
     const name = newIncomeCategory === 'Other' ? newIncomeCustomName : newIncomeCategory;
     if (!name) {
       alert('Please enter a name for the income source.');
@@ -549,18 +549,18 @@ const PropertyInvestmentCalculator = () => {
       return;
     }
 
-    const numPeople = isTenants && newIncomeIsShared ? newIncomeNumPeople : 1;
+    const numPeople = isHouseRent && newIncomeIsShared ? newIncomeNumPeople : 1;
     const newIncome = {
       id: Date.now(),
       name,
-      // For Tenants, amount is the computed total (amountPerPerson * numPeople) -
-      // getActiveAmount/calculateMonthlyFromWeekly only ever read `amount`, so
-      // they don't need to know about the per-person split.
-      amount: isTenants ? newIncomeAmount * numPeople : newIncomeAmount,
+      // For House Rent, amount is the computed total (amountPerPerson *
+      // numPeople) - getActiveAmount/calculateMonthlyFromWeekly only ever
+      // read `amount`, so they don't need to know about the per-person split.
+      amount: isHouseRent ? newIncomeAmount * numPeople : newIncomeAmount,
       startMonth: newIncomeStartMonth,
       recurrence: newIncomeOneTime ? 'none' : newIncomeRecurrence,
       ...(newIncomeOneTime ? {} : { endMonth: newIncomeEndMonth }),
-      ...(isTenants ? { isShared: newIncomeIsShared, numPeople, amountPerPerson: newIncomeAmount } : {}),
+      ...(isHouseRent ? { isShared: newIncomeIsShared, numPeople, amountPerPerson: newIncomeAmount } : {}),
     };
 
     setIncomeSources([...incomeSources, newIncome]);
@@ -1205,7 +1205,7 @@ const PropertyInvestmentCalculator = () => {
                       )}
                     </div>
 
-                    {newIncomeCategory === 'Tenants' ? (
+                    {newIncomeCategory === 'House Rent' ? (
                       <>
                         <label className="flex items-center gap-2 text-xs font-medium text-gray-700">
                           <input
@@ -1326,7 +1326,7 @@ const PropertyInvestmentCalculator = () => {
                   <div key={income.id} className={`flex justify-between items-center p-2 rounded text-sm border ${income.isShared ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'}`}>
                     <div>
                       <p className="font-bold text-gray-800">
-                        {income.isShared !== undefined ? (income.isShared ? 'Shared Room' : 'Individual Room') : income.name}
+                        {income.isShared !== undefined ? (income.isShared ? 'Shared Room' : 'Whole House') : income.name}
                       </p>
                       <p className="text-xs text-gray-600">
                         ${income.amount}/week {income.isShared && <span className="text-blue-600 font-medium">({income.numPeople} × ${income.amountPerPerson} each) </span>}• {formatScheduleLabel(income)}
@@ -2282,7 +2282,7 @@ const PropertyInvestmentCalculator = () => {
                         <p className="font-bold text-green-800 border-b border-green-200 pb-1 mb-2">Income Context</p>
                         <div className="space-y-1 text-xs">
                           {(() => {
-                            const tenantsActiveHere = incomeSources.filter(i => i.isShared !== undefined && isScheduleActive(i, timelineMonth));
+                            const houseRentActiveHere = incomeSources.filter(i => i.isShared !== undefined && isScheduleActive(i, timelineMonth));
                             const rentalIncomeHere = calculateMonthlyFromWeekly(getActiveAmount(incomeSources.filter(i => i.isShared !== undefined), timelineMonth));
                             const personalIncomeHere = calculateMonthlyFromWeekly(getActiveAmount(incomeSources.filter(i => i.isShared === undefined), timelineMonth));
                             return (
@@ -2292,8 +2292,8 @@ const PropertyInvestmentCalculator = () => {
                                   <span className="font-medium">${Math.round(personalIncomeHere).toLocaleString()}/mo</span>
                                 </p>
                                 <p className="flex justify-between">
-                                  <span>Tenants Active:</span>
-                                  <span className="font-medium">{tenantsActiveHere.length}</span>
+                                  <span>House Rent Active:</span>
+                                  <span className="font-medium">{houseRentActiveHere.length}</span>
                                 </p>
                                 <p className="flex justify-between">
                                   <span>Rental Income:</span>
@@ -2308,13 +2308,13 @@ const PropertyInvestmentCalculator = () => {
                               if (status === 'future') return null;
                               return (
                                 <p key={`income-${inc.id}`} className={`truncate ${status === 'past' ? 'text-gray-400' : 'text-green-700'}`}>
-                                  • {inc.isShared !== undefined ? `${inc.isShared ? `Shared (${inc.numPeople} × $${inc.amountPerPerson})` : 'Individual'}` : inc.name}
+                                  • {inc.isShared !== undefined ? `${inc.isShared ? `Shared (${inc.numPeople} × $${inc.amountPerPerson})` : 'Whole House'}` : inc.name}
                                   {status === 'past' && ' (Done)'}
                                 </p>
                               );
                             })}
                             {incomeSources.length === 0 && (
-                              <span className="italic text-gray-400">No tenants or income sources</span>
+                              <span className="italic text-gray-400">No house rent or income sources</span>
                             )}
                           </div>
                         </div>

@@ -9,8 +9,8 @@ describe('INCOME_CATEGORY_DEFAULTS', () => {
     }
   });
 
-  it('never overrides Tenants or Other - they keep the form\'s own baseline', () => {
-    expect(INCOME_CATEGORY_DEFAULTS.Tenants).toBeUndefined();
+  it('never overrides House Rent or Other - they keep the form\'s own baseline', () => {
+    expect(INCOME_CATEGORY_DEFAULTS['House Rent']).toBeUndefined();
     expect(INCOME_CATEGORY_DEFAULTS.Other).toBeUndefined();
   });
 
