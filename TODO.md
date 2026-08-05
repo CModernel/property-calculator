@@ -1166,6 +1166,101 @@ optionally reuse in the commit message when you implement it.
   build` all stayed clean since this was a pure conditional-render change
   with no calculation logic touched.
 
+- [x] **TODO-45: Persist expanded/collapsed panel state on Save**
+  Requested by the user - `handleSaveScenario` (`src/App.jsx`) previously
+  treated all `show*` toggles as ephemeral, not part of the saved
+  scenario. Resolved the open question the TODO itself flagged (breakdown/
+  view toggles only, vs. literally every `show*` including the "Add" form
+  toggles) by asking the user directly: **only the breakdown/view
+  toggles** - `showPropertyExpenses`, `showMonthlyExpensesBreakdown`,
+  `showClosingCostsBreakdown`, `showIncome`, `showPersonalExpenses` - now
+  initialize from `config.show* ?? false` (same config-precedence chain
+  as every other saved field) and get written into `handleSaveScenario`'s
+  scenario object. The four "Add" form toggles (`showAddIncome`,
+  `showAddOtherExpense`, `showAddContribution`, `showAddExceptExp`) stay
+  ephemeral by design - reopening a half-filled "Add" form after a reload
+  wouldn't make sense anyway, since its in-progress field values were
+  never saved either. Purely additive to the scenario shape (old v7
+  scenarios simply lack these fields and fall back to `false` via the
+  `?? false` default), so no `SCHEMA_VERSION` bump needed, matching the
+  precedent set by TODO-35.
+  Verified in the browser: expanded "Income breakdown" and "Personal
+  expenses breakdown" (left both "Closing costs breakdown" and "Property
+  expenses breakdown" collapsed), also opened the "Add Income" form, then
+  clicked Save and reloaded the page - "Income breakdown" and "Personal
+  expenses breakdown" came back expanded (▾) exactly as left, "Closing
+  costs breakdown"/"Property expenses breakdown" stayed collapsed (▸) as
+  before, and the "Add Income" form correctly reset to collapsed
+  ("+ Add", not "✕ Cancel") since it isn't part of what's saved. `npm test
+  -- --run` (200/200), `npm run lint`, and `npm run build` all clean.
+
+- [x] **TODO-59: Make "Personal Expenses" collapsible/expandable in 💳 Monthly Expenses**
+  Requested by the user. "Property Expenses" in the Monthly Expenses card
+  (`src/App.jsx`) was already collapsible behind
+  `showMonthlyExpensesBreakdown` (TODO-39); "Personal Expenses" right
+  below it was still a single flat row. Added the identical
+  collapse/expand pattern: a new `showPersonalExpensesBreakdown` toggle
+  state (named distinctly from the pre-existing `showPersonalExpenses`,
+  which controls the separate "Your Personal Expenses (Weekly)" *input*
+  card, not this *results* row) reveals Food/Transport as indented
+  sub-rows - `calculateMonthlyFromWeekly(foodExpenses)`/
+  `calculateMonthlyFromWeekly(transportExpenses)` - mirroring Property
+  Expenses' markup exactly. Wired into the same save/restore list TODO-45
+  just added, so it persists on Save like the other four breakdown
+  toggles; purely additive to the scenario shape, no `SCHEMA_VERSION`
+  bump needed.
+  Verified in the browser: expanded "Personal Expenses" and confirmed
+  "Food: -$433" + "Transport: -$217" sum to the row's own "-$650" total;
+  saved and reloaded the page, and the row came back expanded (▾) as
+  left. `npm test -- --run` (200/200), `npm run lint`, and `npm run
+  build` all clean.
+
+- [x] **TODO-60: Clarify the weekly→monthly conversion factor (52÷12, not ×4) in the UI**
+  Requested by the user, who noticed Food $100/week + Transport $50/week =
+  $150/week, expected $150 × 4 = $600/month, but the app shows $650/month
+  (Food $433 + Transport $217) and asked why. Investigated first:
+  confirmed every weekly→monthly conversion in the app
+  (`calculateMonthlyFromWeekly`/`calculateMonthlyPersonalExpenses`,
+  `src/calculations/loan.js`) uses **52/12 ≈ 4.333** (actual weeks/year ÷
+  months/year) consistently everywhere, already locked in by existing
+  tests - not a bug, and nothing was changed by this TODO's own predecessor
+  (TODO-59) either; that just displayed a total that was already computed
+  this way. User explicitly confirmed the resolution: keep the realistic
+  52÷12 value as-is (preferred over a simpler-but-less-accurate ×4, since
+  it doesn't want a less-accurate figure just because it's easier to
+  explain) and add a floating `(?)` tooltip explaining it wherever it
+  could confuse a user.
+  Built a new generic `src/components/InfoTooltip.jsx` - a `label`+
+  `children` version of `LvrBadge.jsx`'s existing `group`/
+  `group-focus-within` Tailwind hover/focus pattern (no new dependency),
+  reusable anywhere a "(?) explain this figure" is needed - including the
+  help dialogs TODO-54/TODO-55 already plan to add. A shared
+  `WEEKLY_TO_MONTHLY_TOOLTIP` JSX constant (`src/App.jsx`) holds the
+  explanation copy once, used across all placements rather than
+  duplicating the text.
+  Placed the tooltip in the three distinct spots where a weekly-sourced
+  monthly figure appears (deliberately not on every single row, to avoid
+  cluttering rows like Property Expenses/Loan Payment that aren't
+  weekly-derived at all): the "Personal Expenses" row in 💳 Monthly
+  Expenses (covers its Food/Transport breakdown from TODO-59), the
+  "💰 Monthly Income" card header (covers Rental Income/Personal
+  Income/Total Monthly Income, all weekly-sourced), and the Timeline
+  Explorer's "Income Context" column header (covers its own Personal/
+  Rental Income figures). Restructured the Personal Expenses row's markup
+  in the process - it was previously one giant `<button>` spanning label
+  + amount for the collapse toggle, which would have made the tooltip's
+  own nested `<button>` invalid HTML; split it so only the label text is
+  the clickable toggle, with the tooltip and dollar amount as a separate
+  sibling group, preserving the exact same visual layout and click
+  behavior otherwise.
+  Verified in the browser: hovering each of the three `(?)` icons shows
+  the same explanation ("Monthly figures convert weekly amounts using the
+  actual number of weeks per year: 52 ÷ 12 ≈ 4.33, not a flat ×4...");
+  confirmed the Personal Expenses row's collapse/expand toggle still
+  works identically after the restructure. `npm test -- --run` (200/200),
+  `npm run lint`, and `npm run build` all clean - no calculation logic
+  was touched, this was UI-only.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -1182,28 +1277,6 @@ optionally reuse in the commit message when you implement it.
   fix - also not explained in the UI). Needs a proper redesign pass (more
   inline explanation text, tooltips, or a restructured layout), not just a
   quick label tweak.
-
-- [ ] **TODO-45: Persist expanded/collapsed panel state on Save**
-  Requested by the user - today `handleSaveScenario` (`src/App.jsx`)
-  deliberately treats all `show*` toggles as ephemeral UI state, not part
-  of the saved scenario ("Only the ~24 'data' inputs are saved - ephemeral
-  UI state (collapsed sections, in-progress 'Add' form drafts...) isn't
-  part of a scenario"). The user wants this changed: which
-  breakdown/section panels are expanded should itself be saved and
-  restored - explicitly including whatever new collapsible TODO-39
-  introduces for "Monthly Expenses".
-  Current `show*` toggles (`src/App.jsx`): `showPropertyExpenses`,
-  `showClosingCostsBreakdown`, `showIncome`, `showPersonalExpenses` (view/
-  breakdown toggles - the likely candidates for "expanded/collapsed page
-  state"), vs. `showAddIncome`, `showAddOtherExpense`,
-  `showAddContribution`, `showAddExceptExp` (in-progress "Add" form
-  visibility, arguably a different kind of state that shouldn't survive a
-  save/reload the same way). **Open question for whoever implements
-  this**: does "expanded/collapsed state" mean only the breakdown/view
-  toggles, or literally everything including the four "Add" form
-  toggles? Needs confirming with the user before implementing, since the
-  answer changes what `handleSaveScenario`/`handleClearSavedScenario`
-  need to read and reset.
 
 - [ ] **TODO-47: Add dark mode (mobile + web)**
   Requested by the user. The entire app today is hardcoded to a light
@@ -1435,3 +1508,4 @@ optionally reuse in the commit message when you implement it.
   passing unchanged plus a browser check that every figure (stamp duty,
   FHB concession, foreign purchaser surcharge, closing costs defaults, all
   "NSW" UI text) is bit-for-bit identical before and after.
+

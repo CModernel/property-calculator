@@ -3,6 +3,7 @@ import { DollarSign, Home, TrendingDown, Calendar, ShoppingCart, Car, RotateCcw,
 import { formatMonthsDetailed, formatCompactMoney } from './calculations/formatting';
 import NumberSliderField from './components/NumberSliderField';
 import LvrBadge from './components/LvrBadge';
+import InfoTooltip from './components/InfoTooltip';
 import { getNextSuggestion } from './calculations/suggestions';
 import { getBalanceColor, getBalanceBgColor } from './calculations/ui';
 import {
@@ -62,6 +63,16 @@ const config = { ...defaultConfig, ...localConfig, ...savedScenario };
 // form's own baseline (recurring monthly) applies uniformly.
 const OTHER_EXPENSE_CATEGORIES = ['Health', 'Subscriptions', 'Entertainment', 'Debt Repayment', 'Custom'];
 
+// Shared explanation for every monthly figure derived from a weekly amount
+// (calculateMonthlyFromWeekly/calculateMonthlyPersonalExpenses, src/calculations/loan.js) -
+// answers "why doesn't this match my ×4 mental math?" (TODO-60).
+const WEEKLY_TO_MONTHLY_TOOLTIP = (
+  <>
+    <p>Monthly figures convert weekly amounts using the actual number of weeks per year: <strong>52 ÷ 12 ≈ 4.33</strong>, not a flat ×4.</p>
+    <p className="mt-2">A flat ×4 would undercount - a year has about 52.14 weeks, not 48 - so 52÷12 is the more accurate conversion, even though it won't match quick "×4" mental math.</p>
+  </>
+);
+
 const PropertyInvestmentCalculator = () => {
   const [propertyPrice, setPropertyPrice] = useState(config.propertyPrice);
   const [propertyType, setPropertyType] = useState(config.propertyType); // 'house' | 'unit'
@@ -74,13 +85,13 @@ const PropertyInvestmentCalculator = () => {
   const insuranceField = useSteppedValue(config.insurance, config.insuranceChanges);
   const maintenanceField = useSteppedValue(config.maintenance, config.maintenanceChanges);
   const waterRatesField = useSteppedValue(config.waterRates, config.waterRatesChanges);
-  const [showPropertyExpenses, setShowPropertyExpenses] = useState(false);
+  const [showPropertyExpenses, setShowPropertyExpenses] = useState(config.showPropertyExpenses ?? false);
   // Results panel: collapses the Property Balance card's "Monthly Expenses"
   // property-expense line items (Strata/Council/Utilities/Insurance/
   // Maintenance/Water/Land Tax/Property Management) behind their own
   // subtotal, same "breakdown" pattern as the input side - keeps the card
   // to 4 rows by default instead of 9+.
-  const [showMonthlyExpensesBreakdown, setShowMonthlyExpensesBreakdown] = useState(false);
+  const [showMonthlyExpensesBreakdown, setShowMonthlyExpensesBreakdown] = useState(config.showMonthlyExpensesBreakdown ?? false);
 
   // Investment-property-only expenses. Deliberately NOT wired to
   // isFirstHomeBuyer/calculateStampDuty (NSW's FHB concession really
@@ -98,7 +109,7 @@ const PropertyInvestmentCalculator = () => {
   const [isForeignPurchaser, setIsForeignPurchaser] = useState(config.isForeignPurchaser ?? false);
   const [totalSavings, setTotalSavings] = useState(config.totalSavings);
   const [payLmiUpfront, setPayLmiUpfront] = useState(false);
-  const [showClosingCostsBreakdown, setShowClosingCostsBreakdown] = useState(false);
+  const [showClosingCostsBreakdown, setShowClosingCostsBreakdown] = useState(config.showClosingCostsBreakdown ?? false);
   const [conveyancing, setConveyancing] = useState(config.conveyancing);
   const [buildingInspection, setBuildingInspection] = useState(config.buildingInspection);
   const [pestInspection, setPestInspection] = useState(config.pestInspection);
@@ -117,7 +128,7 @@ const PropertyInvestmentCalculator = () => {
   // (see addIncomeSource) - isShared !== undefined is how a House Rent entry
   // is told apart from any other income category elsewhere in the file.
   const [incomeSources, setIncomeSources] = useState(config.incomeSources ?? []);
-  const [showIncome, setShowIncome] = useState(false);
+  const [showIncome, setShowIncome] = useState(config.showIncome ?? false);
   const [showAddIncome, setShowAddIncome] = useState(false);
   const [newIncomeCategory, setNewIncomeCategory] = useState('Salary/Wages'); // see INCOME_CATEGORIES (src/calculations/incomeCategories.js)
   const [newIncomeCustomName, setNewIncomeCustomName] = useState(''); // only used when category is 'Other'
@@ -132,7 +143,12 @@ const PropertyInvestmentCalculator = () => {
   // Your personal expenses
   const foodExpensesField = useSteppedValue(config.foodExpenses, config.foodExpensesChanges);
   const transportExpensesField = useSteppedValue(config.transportExpenses, config.transportExpensesChanges);
-  const [showPersonalExpenses, setShowPersonalExpenses] = useState(false);
+  const [showPersonalExpenses, setShowPersonalExpenses] = useState(config.showPersonalExpenses ?? false);
+  // Results panel: collapses the Monthly Expenses card's "Personal Expenses"
+  // row into its Food/Transport sub-items, same "breakdown" pattern as
+  // Property Expenses (TODO-39) - distinct from showPersonalExpenses above,
+  // which controls the separate "Your Personal Expenses (Weekly)" input card.
+  const [showPersonalExpensesBreakdown, setShowPersonalExpensesBreakdown] = useState(config.showPersonalExpensesBreakdown ?? false);
 
   // Other Expenses - a distinct-lifecycle expense (a subscription starts and
   // gets cancelled, a loan ends when paid off), unlike Food/Transport which
@@ -460,6 +476,8 @@ const PropertyInvestmentCalculator = () => {
       offsetContributions,
       exceptExpenses,
       otherExpenseItems,
+      showPropertyExpenses, showMonthlyExpensesBreakdown, showClosingCostsBreakdown,
+      showIncome, showPersonalExpenses, showPersonalExpensesBreakdown,
       savedAt,
     };
     if (saveScenario(scenario)) {
@@ -1946,9 +1964,33 @@ const PropertyInvestmentCalculator = () => {
                     )}
                   </div>
 
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Personal Expenses:</span>
-                    <span className="font-semibold text-red-600">-${Math.round(monthlyPersonalExpenses).toLocaleString()}</span>
+                  <div>
+                    <div className="w-full flex justify-between items-center">
+                      <button
+                        type="button"
+                        onClick={() => setShowPersonalExpensesBreakdown(!showPersonalExpensesBreakdown)}
+                        className="text-left text-gray-600"
+                      >
+                        {showPersonalExpensesBreakdown ? '▾' : '▸'} Personal Expenses:
+                      </button>
+                      <span className="flex items-center">
+                        <InfoTooltip label="How are these monthly expense figures calculated?">{WEEKLY_TO_MONTHLY_TOOLTIP}</InfoTooltip>
+                        <span className="font-semibold text-red-600 ml-1">-${Math.round(monthlyPersonalExpenses).toLocaleString()}</span>
+                      </span>
+                    </div>
+
+                    {showPersonalExpensesBreakdown && (
+                      <div className="pl-4 mt-1 space-y-1 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Food:</span>
+                          <span className="text-red-500">-${Math.round(calculateMonthlyFromWeekly(foodExpenses)).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Transport:</span>
+                          <span className="text-red-500">-${Math.round(calculateMonthlyFromWeekly(transportExpenses)).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="border-t border-orange-200 pt-1 mt-1 font-bold">
@@ -1962,7 +2004,10 @@ const PropertyInvestmentCalculator = () => {
 
               {/* Income section */}
               <div className="bg-green-50 rounded-lg p-3 border border-green-200">
-                <h3 className="font-semibold text-gray-700 mb-2">💰 Monthly Income</h3>
+                <h3 className="font-semibold text-gray-700 mb-2">
+                  💰 Monthly Income
+                  <InfoTooltip label="How are these monthly income figures calculated?">{WEEKLY_TO_MONTHLY_TOOLTIP}</InfoTooltip>
+                </h3>
                 <div className="space-y-1">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Monthly Rental Income:</span>
@@ -2310,7 +2355,10 @@ const PropertyInvestmentCalculator = () => {
 
                       {/* COLUMN 1: INCOME CONTEXT */}
                       <div className="bg-green-50 rounded-lg p-3 border border-green-100">
-                        <p className="font-bold text-green-800 border-b border-green-200 pb-1 mb-2">Income Context</p>
+                        <p className="font-bold text-green-800 border-b border-green-200 pb-1 mb-2">
+                          Income Context
+                          <InfoTooltip label="How are these monthly income figures calculated?">{WEEKLY_TO_MONTHLY_TOOLTIP}</InfoTooltip>
+                        </p>
                         <div className="space-y-1 text-xs">
                           {(() => {
                             const houseRentActiveHere = incomeSources.filter(i => i.isShared !== undefined && isScheduleActive(i, timelineMonth));
