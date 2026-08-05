@@ -17,9 +17,11 @@
   "incomeSources": [
     { "id": 1, "name": "Salary", "amount": 1614, "startMonth": 1, "recurrence": "monthly", "endMonth": 360 }
   ],
-  "foodExpenses": 100,
-  "transportExpenses": 50,
-  "phoneInternet": 7,
+  "personalExpenseItems": [
+    { "id": 1, "name": "Food", "amount": 433, "startMonth": 1, "recurrence": "monthly", "endMonth": 360 },
+    { "id": 2, "name": "Transport", "amount": 217, "startMonth": 1, "recurrence": "monthly", "endMonth": 360 },
+    { "id": 3, "name": "Phone/Internet", "amount": 30, "startMonth": 1, "recurrence": "monthly", "endMonth": 360 }
+  ],
   "newTenantAmountPerPerson": 300,
   "newTenantStartMonth": 13,
   "newContribAmount": 10000,

@@ -23,7 +23,13 @@ const STORAGE_KEY = 'propertyCalculator.scenario';
 // Custom) - unlike TODO-35's purely-additive change, this genuinely drops a
 // field that could hold real user data, so old scenarios are discarded
 // cleanly rather than silently losing that expense on load.
-const SCHEMA_VERSION = 7;
+// Bumped to 8 in TODO-66: the flat `foodExpenses`/`transportExpenses`/
+// `phoneInternet` SteppedExpenseFields (and the separately-labeled
+// `exceptExpenses` list) were retired in favor of a single
+// `personalExpenseItems` Schedule-shaped list, same shape as
+// `otherExpenseItems` - same "genuinely drops fields that could hold real
+// user data" reasoning as TODO-36's bump above.
+const SCHEMA_VERSION = 8;
 
 // A version mismatch means the saved shape no longer matches what this
 // version of the app expects - discard rather than attempt a migration,

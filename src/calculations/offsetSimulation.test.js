@@ -6,7 +6,7 @@ describe('calculateLoanWithOffset', () => {
   it('returns the sentinel result when there is no surplus and no contributions', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       monthlyToOffset: 0,
       loanAmount: 100000,
       monthlyRate: 0.005,
@@ -20,7 +20,7 @@ describe('calculateLoanWithOffset', () => {
     // omitted the key the UI rendered "Middle (NaN)" and "End (undefined)".
     const sentinel = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       monthlyToOffset: 0,
       loanAmount: 100000,
       monthlyRate: 0.005,
@@ -34,7 +34,7 @@ describe('calculateLoanWithOffset', () => {
   it('does not hit the sentinel when contributions are scheduled even with zero surplus', () => {
     const result = calculateLoanWithOffset({
       contributions: [{ startMonth: 1, recurrence: 'none', amount: 1000 }],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       monthlyToOffset: 0,
       loanAmount: 1000,
       monthlyRate: 0,
@@ -48,7 +48,7 @@ describe('calculateLoanWithOffset', () => {
   it('amortizes normally with no offset activity (basic loop mechanics)', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       monthlyToOffset: 1,
       loanAmount: 1200,
       monthlyRate: 0,
@@ -63,7 +63,7 @@ describe('calculateLoanWithOffset', () => {
   it('pays off the loan early via a large contribution (break path), pushing the pre-override balance', () => {
     const result = calculateLoanWithOffset({
       contributions: [{ startMonth: 1, recurrence: 'none', amount: 200000 }],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       monthlyToOffset: 0,
       loanAmount: 100000,
       monthlyRate: 0.005,
@@ -80,7 +80,7 @@ describe('calculateLoanWithOffset', () => {
   it('hits the maxMonths cap when the loan never pays off', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       monthlyToOffset: 1,
       loanAmount: 100000,
       monthlyRate: 0.05,
@@ -95,7 +95,7 @@ describe('calculateLoanWithOffset', () => {
   it('clamps the net monthly deposit to 0 when an exceptional expense exceeds the surplus', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [{ startMonth: 1, recurrence: 'none', amount: 1000 }],
+      personalExpenseItems: [{ startMonth: 1, recurrence: 'none', amount: 1000 }],
       monthlyToOffset: 500,
       loanAmount: 100000,
       monthlyRate: 0.005,
@@ -108,7 +108,7 @@ describe('calculateLoanWithOffset', () => {
   it('applies a "monthly" recurring expense only within the inclusive start/end month range', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [{ startMonth: 3, recurrence: 'monthly', endMonth: 5, amount: 400 }],
+      personalExpenseItems: [{ startMonth: 3, recurrence: 'monthly', endMonth: 5, amount: 400 }],
       monthlyToOffset: 1000,
       loanAmount: 10_000_000, // large enough that effectiveOffset is never capped by balance
       monthlyRate: 0,
@@ -124,7 +124,7 @@ describe('calculateLoanWithOffset', () => {
   it('applies an open-ended ("Forever") recurring expense in every month, including far into the future', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [{ startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH, amount: 300 }],
+      personalExpenseItems: [{ startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH, amount: 300 }],
       monthlyToOffset: 1000,
       loanAmount: 10_000_000,
       monthlyRate: 0,
@@ -138,7 +138,7 @@ describe('calculateLoanWithOffset', () => {
   it('subtracts an "Other Expenses" item (e.g. a subscription) as a direct per-occurrence amount, same as Exceptional Expenses', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       otherExpenseItems: [{ startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH, amount: 15 }],
       monthlyToOffset: 1000,
       loanAmount: 10_000_000,
@@ -153,7 +153,7 @@ describe('calculateLoanWithOffset', () => {
   it('subtracts a one-time "Other Expenses" item only on its exact month', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       otherExpenseItems: [{ startMonth: 2, recurrence: 'none', amount: 200 }],
       monthlyToOffset: 1000,
       loanAmount: 10_000_000,
@@ -171,7 +171,7 @@ describe('calculateLoanWithOffset', () => {
         { startMonth: 5, recurrence: 'none', amount: 2000 },
         { startMonth: 2, recurrence: 'none', amount: 1000 },
       ],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       monthlyToOffset: 0,
       loanAmount: 10_000_000,
       monthlyRate: 0,
@@ -185,7 +185,7 @@ describe('calculateLoanWithOffset', () => {
   it('applies a recurring "quarterly" contribution every 3rd month, not just once', () => {
     const result = calculateLoanWithOffset({
       contributions: [{ startMonth: 1, recurrence: 'quarterly', endMonth: MAX_MONTH, amount: 500 }],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       monthlyToOffset: 0,
       loanAmount: 10_000_000,
       monthlyRate: 0,
@@ -200,7 +200,7 @@ describe('calculateLoanWithOffset', () => {
   it('stops a bounded recurring contribution after its endMonth (inclusive)', () => {
     const result = calculateLoanWithOffset({
       contributions: [{ startMonth: 1, recurrence: 'monthly', endMonth: 3, amount: 200 }],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       monthlyToOffset: 0,
       loanAmount: 10_000_000,
       monthlyRate: 0,
@@ -217,7 +217,7 @@ describe('calculateLoanWithOffset', () => {
         { startMonth: 1, recurrence: 'none', amount: 5000 },
         { startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH, amount: 200 },
       ],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       monthlyToOffset: 0,
       loanAmount: 10_000_000,
       monthlyRate: 0,
@@ -240,7 +240,7 @@ describe('calculateLoanWithOffset', () => {
 
     const result = calculateLoanWithOffset({
       contributions,
-      exceptExpenses: [],
+      personalExpenseItems: [],
       monthlyToOffset,
       loanAmount,
       monthlyRate,
@@ -262,7 +262,7 @@ describe('calculateLoanWithOffset', () => {
     // key off this value, not off a month-1 lump sum.
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       monthlyToOffset: 4084,
       loanAmount: 250000,
       monthlyRate: 0.004483333333333333,
@@ -275,7 +275,7 @@ describe('calculateLoanWithOffset', () => {
   it('adds a tenant\'s rent (as an incomeSources entry) only within its [startMonth, endMonth] range', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       incomeSources: [{ id: 1, name: 'Tenants', amount: 300, isShared: false, startMonth: 3, recurrence: 'monthly', endMonth: 5 }],
       monthlyToOffset: 0,
       loanAmount: 10_000_000, // large enough that effectiveOffset is never capped by balance
@@ -291,7 +291,7 @@ describe('calculateLoanWithOffset', () => {
   it('adds an open-ended tenant\'s rent from startMonth onward, with no end', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       incomeSources: [{ id: 1, name: 'Tenants', amount: 300, isShared: false, startMonth: 3, recurrence: 'monthly', endMonth: MAX_MONTH }],
       monthlyToOffset: 0,
       loanAmount: 10_000_000,
@@ -307,7 +307,7 @@ describe('calculateLoanWithOffset', () => {
   it('adds a tenant with no date range every month, matching the previous always-on behavior', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       incomeSources: [{ id: 1, name: 'Tenants', amount: 300, isShared: false, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
       monthlyToOffset: 0,
       loanAmount: 10_000_000,
@@ -322,7 +322,7 @@ describe('calculateLoanWithOffset', () => {
   it('sums rent from multiple tenants, some ranged and some not, per month', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       incomeSources: [
         { id: 1, name: 'Tenants', amount: 300, isShared: false, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }, // always active
         { id: 2, name: 'Tenants', amount: 300, isShared: false, startMonth: 2, recurrence: 'monthly', endMonth: 3 },
@@ -341,7 +341,7 @@ describe('calculateLoanWithOffset', () => {
   it('adds a one-time income source only on its exact month', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       incomeSources: [{ id: 1, name: 'Bonus', amount: 300, startMonth: 3, recurrence: 'none' }],
       monthlyToOffset: 0,
       loanAmount: 10_000_000,
@@ -357,7 +357,7 @@ describe('calculateLoanWithOffset', () => {
   it('adds an open-ended ("Forever") monthly income source every month', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       incomeSources: [{ id: 1, name: 'Salary', amount: 300, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
       monthlyToOffset: 0,
       loanAmount: 10_000_000,
@@ -372,7 +372,7 @@ describe('calculateLoanWithOffset', () => {
   it('adds a bounded monthly income source only within its inclusive range', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       incomeSources: [
         { id: 1, name: 'Freelance', amount: 300, startMonth: 3, recurrence: 'monthly', endMonth: 5 },
       ],
@@ -389,7 +389,7 @@ describe('calculateLoanWithOffset', () => {
   it('adds a quarterly income source only every 3rd month', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       incomeSources: [
         { id: 1, name: 'Bonus', amount: 300, startMonth: 1, recurrence: 'quarterly', endMonth: MAX_MONTH },
       ],
@@ -407,7 +407,7 @@ describe('calculateLoanWithOffset', () => {
   it('sums income sources and tenant rent together per month', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       incomeSources: [
         { id: 1, name: 'Tenants', amount: 300, isShared: false, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH },
         { id: 2, name: 'Salary', amount: 300, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH },
@@ -426,7 +426,7 @@ describe('calculateLoanWithOffset', () => {
   it('does not take the sentinel shortcut when an income source is present, even if the base surplus is <= 0', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       incomeSources: [{ id: 1, name: 'Salary', amount: 0, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
       monthlyToOffset: 0,
       loanAmount: 10_000_000,
@@ -440,7 +440,7 @@ describe('calculateLoanWithOffset', () => {
   it('ignores expenseFields entirely when omitted, matching the pre-TODO-19 behavior', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       monthlyToOffset: 900,
       loanAmount: 10_000_000,
       monthlyRate: 0,
@@ -455,7 +455,7 @@ describe('calculateLoanWithOffset', () => {
     const emptyField = { base: 0, changes: [] };
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       monthlyToOffset: 1000,
       expenseFields: {
         strataFees: emptyField,
@@ -466,9 +466,6 @@ describe('calculateLoanWithOffset', () => {
         waterRates: emptyField,
         landTax: emptyField,
         propertyManagement: emptyField,
-        foodExpenses: emptyField,
-        transportExpenses: emptyField,
-        phoneInternet: emptyField,
       },
       loanAmount: 10_000_000,
       monthlyRate: 0,
@@ -483,7 +480,7 @@ describe('calculateLoanWithOffset', () => {
     const emptyField = { base: 0, changes: [] };
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       monthlyToOffset: 1000,
       expenseFields: {
         strataFees: emptyField,
@@ -495,9 +492,6 @@ describe('calculateLoanWithOffset', () => {
         waterRates: emptyField,
         landTax: emptyField,
         propertyManagement: emptyField,
-        foodExpenses: emptyField,
-        transportExpenses: emptyField,
-        phoneInternet: emptyField,
       },
       loanAmount: 10_000_000,
       monthlyRate: 0,
@@ -512,7 +506,7 @@ describe('calculateLoanWithOffset', () => {
     const emptyField = { base: 0, changes: [] };
     const result = calculateLoanWithOffset({
       contributions: [],
-      exceptExpenses: [],
+      personalExpenseItems: [],
       monthlyToOffset: 1000,
       expenseFields: {
         strataFees: emptyField,
@@ -523,9 +517,6 @@ describe('calculateLoanWithOffset', () => {
         waterRates: { base: 200, changes: [] }, // quarterly -> $50/month
         landTax: { base: 2400, changes: [] }, // yearly -> $200/month
         propertyManagement: { base: 150, changes: [] }, // $150/month
-        foodExpenses: emptyField,
-        transportExpenses: emptyField,
-        phoneInternet: emptyField,
       },
       loanAmount: 10_000_000,
       monthlyRate: 0,

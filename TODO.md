@@ -1639,6 +1639,80 @@ optionally reuse in the commit message when you implement it.
   plus a new phoneInternet-specific assertion), `npm run lint`, and `npm
   run build` all clean.
 
+- [x] **TODO-66: Rebuild Personal Expenses as an addable/removable list, same model as Income Sources - not steppable-rate sliders**
+  Requested by the user, who corrected TODO-64's implementation - they
+  did not want Food/Transport/Phone-Internet kept as fixed
+  `SteppedExpenseField`s. Confirmed two open design questions with the
+  user before building: **(1) merge with Exceptional Expenses into one
+  list** (chosen over keeping two separately-labeled lists sharing the
+  same mechanism) and **(2) seed the new list with Food/Transport/
+  Phone-Internet as starter items** (chosen over starting empty like
+  Income Sources).
+  Deleted `foodExpensesField`/`transportExpensesField`/
+  `phoneInternetField` (`useSteppedValue`) entirely. Renamed
+  `exceptExpenses` → **`personalExpenseItems`** throughout
+  (`src/App.jsx`, `src/calculations/offsetSimulation.js` and its tests) -
+  this single Schedule-shaped list (`{id, name, amount, startMonth,
+  recurrence, endMonth}`, same shape as `otherExpenseItems`) now covers
+  both routine costs (Food/Transport/Phone-Internet) and one-off/
+  exceptional ones (a wedding, car repair), merging what used to be two
+  separate sections into one "Personal Expenses" card - `addExceptionalExpense`/
+  `removeExceptionalExpense` renamed to `addPersonalExpense`/
+  `removePersonalExpense` to match. Seeded via
+  `config.default.json`'s new `personalExpenseItems` array (Food $433,
+  Transport $217, Phone/Internet $30 - the exact monthly-equivalent
+  figures TODO-64's weekly rates already produced via the 52÷12
+  conversion, so the default scenario's total is bit-for-bit unchanged:
+  still -$680/month).
+  **The static "Personal Expenses" figure needed a real fix, not just a
+  rename**: Exceptional Expenses previously only affected the simulation
+  (Loan Simulation/Timeline Explorer), never the static "Personal
+  Expenses"/"TO OFFSET" summary - merging Food/Transport/Phone-Internet
+  into that same list meant the static summary would have silently
+  dropped to $0 without a corresponding fix. `monthlyPersonalExpenses`
+  now resolves via `getActiveAmount(personalExpenseItems, 1)` (the same
+  month-1-snapshot convention Income Sources already uses), with
+  `weeklyPersonalExpenses` derived as its `× 12/52` inverse purely for
+  `calculateWeeklyNetBalance`'s own weekly-denominated math - both the
+  static summary and the simulation now correctly read from the one
+  merged list. Also removed `calculateWeeklyPersonalExpenses`/
+  `calculateMonthlyPersonalExpenses` from `src/calculations/loan.js`
+  entirely (dead code once nothing called them, same "delete rather than
+  keep an unused formula library" precedent as the earlier TODO-10).
+  The Monthly Expenses card's "Personal Expenses" breakdown
+  (`showPersonalExpensesBreakdown`, TODO-59) changed from 3 hardcoded
+  Food/Transport/Phone-Internet lines to a dynamic map over
+  `personalExpenseItems.filter(item => isScheduleActive(item, 1))` -
+  correctly reflects whatever items actually exist, not just the three
+  original ones.
+  **Bumped `SCHEMA_VERSION` 7 → 8** (`src/persistence/
+  scenarioStorage.js`): this genuinely drops the
+  `foodExpenses`/`transportExpenses`/`phoneInternet` (+ their
+  `*Changes` companions) and `exceptExpenses` fields in favor of the new
+  `personalExpenseItems` shape - old scenarios are discarded cleanly
+  (same "half-migrated is worse than defaults" reasoning as TODO-36's
+  bump) rather than silently losing this data.
+  Small correctness fix along the way: the "Expense Name" field's
+  default value was the leftover string `'Rent'` (an odd default given
+  the field's actual purpose) - changed to `''` so the field starts
+  genuinely empty.
+  Verified in the browser on the $850k default scenario: "Personal
+  expenses breakdown (subtotal: $680/month)" - identical total to
+  before; expanded to see "Personal Expenses" listing Food/Transport/
+  Phone-Internet with their exact dollar figures and "+ Schedule a
+  change" replaced by real add/remove controls; added a "Netflix"
+  item ($920/month) and watched the subtotal, Total Monthly Expenses,
+  Net Monthly Balance, and Loan Simulation all correctly recalculate
+  (10.8 → 13.9 years to pay off), then removed it and confirmed the
+  total returned to $680; saved with the merged list, reloaded, and
+  confirmed `localStorage`'s payload was `{version: 8, personalExpenseItems:
+  [...]}` with no trace of the old fields; seeded a fake old `version: 7`
+  scenario and confirmed it was discarded cleanly (fresh defaults loaded,
+  "not saved yet" banner) rather than crashing or partially applying.
+  `npm test -- --run` (272/272 - net -3 after removing the two dead
+  `loan.js` functions' tests), `npm run lint`, and `npm run build` all
+  clean.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -1673,18 +1747,6 @@ optionally reuse in the commit message when you implement it.
   yet where this should surface (a new figure in "Financial Position"? in
   the Timeline Explorer?) - needs its own design pass.
 
-
-- [ ] **TODO-52 (Analysis only, no code): When does it make sense to invest in ETFs instead of paying down the offset?**
-  Requested by the user - explicitly an analysis task. The question:
-  at what point (if any) does investing the surplus in ETFs (dividend-
-  paying or growth) out-earn the guaranteed, tax-free "return" of
-  reducing loan interest via the offset account? This is a genuine
-  personal-finance modeling question (comparing a risk-free guaranteed
-  rate - the loan's interest rate - against a variable, taxable
-  investment return) - needs research/modeling before any code, and
-  should be explicit that this app does not and should not give
-  personalized financial advice (see the existing disclaimer, TODO-25) -
-  any output here would need to stay clearly illustrative/educational.
 
 - [ ] **TODO-54: "Realistic Mode" - model income tax on salary**
   Requested by the user, who flagged this as a **hard task with priority
@@ -1794,44 +1856,24 @@ optionally reuse in the commit message when you implement it.
   (the saved shape changes from a flat `interestRate` number to a
   `{base, changes}` pair, same pattern as the other stepped-field bumps).
 
-- [ ] **TODO-66: Rebuild Personal Expenses as an addable/removable list, same model as Income Sources - not steppable-rate sliders**
-  Requested by the user, who corrected TODO-64's implementation: they did
-  **not** want Food/Transport/Phone-Internet kept as fixed
-  `SteppedExpenseField`s (`foodExpensesField`/`transportExpensesField`/
-  `phoneInternetField`, `src/App.jsx`) - that model represents "a
-  continuously-adjustable rate that occasionally steps to a new value"
-  via a slider + a separate "+ Schedule a change" sub-form
-  (`src/components/SteppedExpenseField.jsx`). What the user actually
-  wants: Personal Expenses should work **practically identically to
-  Income Sources** (`incomeSources`, its Add form, `INCOME_CATEGORIES`
-  picklist, `src/App.jsx`) - an addable/removable **list** of items,
-  where each item is entered with a name/category, an amount, and full
-  Schedule controls (one-time occurring once, or recurring
-  monthly/quarterly/yearly with a start and end month) - explicitly
-  **no slider/bar-based rate control** for the expense itself.
-  This means replacing `useSteppedValue`/`SteppedExpenseField` for
-  Food/Transport/Phone-Internet entirely with a `personalExpenseItems`
-  list (same general shape as `otherExpenseItems`/`exceptExpenses` -
-  `{id, name, amount, startMonth, recurrence, endMonth}`), with Food/
-  Transport/Phone-Internet becoming picklist categories (or free-text,
-  to decide) a user picks when adding an item, rather than three
-  permanently-visible fixed fields.
-  **Worth folding into the same design pass**: once Personal Expenses
-  uses this exact add/remove + Schedule model, it becomes functionally
-  identical to **"Exceptional Expenses"** (`exceptExpenses`) - TODO-64's
-  own conclusion was "Exceptional Expenses is already the mechanism for
-  arbitrary personal expenses," and this TODO's corrected model makes
-  that even more literally true (same data shape, same UI pattern). Decide
-  whether to merge the two into one list/section entirely, or keep them
-  as two separately-labeled lists sharing the same underlying mechanism.
-  Also needs deciding: does the new list still track a fixed default
-  "Food"/"Transport"/"Phone-Internet" via seeded starter items in
-  `config.default.json` (so a fresh scenario isn't empty), or does it
-  start empty like Income Sources currently does?
-  Note this reverses part of TODO-64's completed work (the
-  `SteppedExpenseField`-based Food/Transport/Phone-Internet fields) -
-  whoever implements this should expect to delete/replace that code, not
-  build on top of it.
+
+---
+
+## ⚪ LOW PRIORITY (Deprioritized - excluded from default TODO listings)
+
+- [ ] **TODO-52 (Analysis only, no code): When does it make sense to invest in ETFs instead of paying down the offset?**
+  Requested by the user - explicitly an analysis task. The question:
+  at what point (if any) does investing the surplus in ETFs (dividend-
+  paying or growth) out-earn the guaranteed, tax-free "return" of
+  reducing loan interest via the offset account? This is a genuine
+  personal-finance modeling question (comparing a risk-free guaranteed
+  rate - the loan's interest rate - against a variable, taxable
+  investment return) - needs research/modeling before any code, and
+  should be explicit that this app does not and should not give
+  personalized financial advice (see the existing disclaimer, TODO-25) -
+  any output here would need to stay clearly illustrative/educational.
+  Moved here at the user's request - deprioritized, and excluded by
+  default the next time TODOs are listed (ask before including it).
 
 
 

@@ -26,14 +26,14 @@ async function openAddForm(user, headingText) {
   await user.click(within(sectionContainer(headingText)).getByRole('button', { name: '+ Add' }));
 }
 
-describe('Exceptional Expenses', () => {
+describe('Personal Expenses', () => {
   it('blank name triggers the name alert', async () => {
     const user = userEvent.setup();
     render(<App />);
     await openPersonalExpenses(user);
-    await openAddForm(user, 'Exceptional Expenses');
+    await openAddForm(user, 'Personal Expenses');
 
-    fireEvent.change(screen.getByPlaceholderText(/Wedding, Car Repair/), { target: { value: '' } });
+    fireEvent.change(screen.getByPlaceholderText(/Food, Transport, Wedding/), { target: { value: '' } });
     await user.click(screen.getByRole('button', { name: 'Add Expense' }));
     expect(window.alert).toHaveBeenLastCalledWith('Please enter a name for the expense.');
   });
@@ -42,8 +42,9 @@ describe('Exceptional Expenses', () => {
     const user = userEvent.setup();
     render(<App />);
     await openPersonalExpenses(user);
-    await openAddForm(user, 'Exceptional Expenses');
+    await openAddForm(user, 'Personal Expenses');
 
+    fireEvent.change(screen.getByPlaceholderText(/Food, Transport, Wedding/), { target: { value: 'Gym' } });
     fireEvent.change(screen.getByLabelText('Amount ($)'), { target: { value: '0' } });
     fireEvent.blur(screen.getByLabelText('Amount ($)'));
     await user.click(screen.getByRole('button', { name: 'Add Expense' }));
@@ -54,8 +55,9 @@ describe('Exceptional Expenses', () => {
     const user = userEvent.setup();
     render(<App />);
     await openPersonalExpenses(user);
-    await openAddForm(user, 'Exceptional Expenses');
+    await openAddForm(user, 'Personal Expenses');
 
+    fireEvent.change(screen.getByPlaceholderText(/Food, Transport, Wedding/), { target: { value: 'Gym' } });
     const endSlider = within(screen.getByText(/End Month:/).parentElement).getByRole('slider');
     fireEvent.change(endSlider, { target: { value: '10' } });
     const startSlider = within(screen.getByText(/Start Month:/).parentElement).getByRole('slider');
@@ -69,9 +71,9 @@ describe('Exceptional Expenses', () => {
     const user = userEvent.setup();
     render(<App />);
     await openPersonalExpenses(user);
-    await openAddForm(user, 'Exceptional Expenses');
+    await openAddForm(user, 'Personal Expenses');
 
-    fireEvent.change(screen.getByPlaceholderText(/Wedding, Car Repair/), { target: { value: 'Wedding' } });
+    fireEvent.change(screen.getByPlaceholderText(/Food, Transport, Wedding/), { target: { value: 'Wedding' } });
     fireEvent.change(screen.getByLabelText('Amount ($)'), { target: { value: '5000' } });
     fireEvent.blur(screen.getByLabelText('Amount ($)'));
     await user.click(screen.getByRole('button', { name: 'Add Expense' }));
@@ -233,10 +235,13 @@ describe('Offset Contributions', () => {
 
     expect(screen.getByText(/Plus 1 recurring contribution - applied/)).toBeInTheDocument();
 
-    // Only the just-added contribution's own remove button exists on the
-    // page at this point (Income section was never expanded, and
-    // Exceptional/Other Expenses have no items yet).
-    await user.click(screen.getByRole('button', { name: '✕' }));
+    // Personal Expenses now ships with 3 seeded items (Food/Transport/
+    // Phone-Internet, TODO-66), each with their own "✕" - scope to the
+    // whole Offset Contributions section (two levels up from its own
+    // heading: past the header row, to the section's outer container that
+    // also holds the contribution list) rather than a bare "✕" query.
+    const offsetSection = screen.getByText('💰 Offset Contributions Schedule').parentElement.parentElement;
+    await user.click(within(offsetSection).getByRole('button', { name: '✕' }));
     expect(screen.queryByText(/Plus 1 recurring contribution/)).not.toBeInTheDocument();
   });
 });

@@ -82,10 +82,10 @@ describe('"Add" form toggles', () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole('button', { name: /Personal expenses breakdown/ }));
-    const section = screen.getByText('Exceptional Expenses').parentElement;
+    const section = screen.getByText('Personal Expenses').parentElement;
 
     await user.click(within(section).getByRole('button', { name: '+ Add' }));
-    expect(screen.getByPlaceholderText(/Wedding, Car Repair/)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Food, Transport, Wedding/)).toBeInTheDocument();
   });
 
   it('Other Expenses: "+ Add" reveals the Expense Name category select', async () => {
@@ -99,23 +99,25 @@ describe('"Add" form toggles', () => {
   });
 });
 
-describe('showPersonalExpenses gates all four sub-sections at once', () => {
-  it('collapsed hides Offset Contributions/Food&Transport/Exceptional/Other simultaneously; expanding reveals all four', () => {
+describe('showPersonalExpenses gates all three sub-sections at once', () => {
+  it('collapsed hides Offset Contributions/Personal Expenses/Other Expenses simultaneously; expanding reveals all three', () => {
     render(<App />);
-    for (const heading of ['💰 Offset Contributions Schedule', 'Exceptional Expenses', 'Other Expenses']) {
+    for (const heading of ['💰 Offset Contributions Schedule', 'Personal Expenses', 'Other Expenses']) {
       expect(screen.queryByText(heading)).not.toBeInTheDocument();
     }
-    expect(screen.queryByLabelText('Food')).not.toBeInTheDocument();
+    expect(screen.queryByText('Food')).not.toBeInTheDocument();
   });
 
-  it('expanding reveals all four sub-sections together', async () => {
+  it('expanding reveals all three sub-sections together', async () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole('button', { name: /Personal expenses breakdown/ }));
 
-    for (const heading of ['💰 Offset Contributions Schedule', 'Exceptional Expenses', 'Other Expenses']) {
+    for (const heading of ['💰 Offset Contributions Schedule', 'Personal Expenses', 'Other Expenses']) {
       expect(screen.getByText(heading)).toBeInTheDocument();
     }
-    expect(screen.getByLabelText('Food')).toBeInTheDocument();
+    // Food is a seeded personalExpenseItems list entry now (TODO-66), not a
+    // fixed labeled field.
+    expect(screen.getByText('Food')).toBeInTheDocument();
   });
 });

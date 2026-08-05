@@ -7,13 +7,14 @@ import {
   calculateMonthlyWaterRates,
   calculateMonthlyLandTax,
   calculateMonthlyPropertyExpenses,
-  calculateWeeklyPersonalExpenses,
-  calculateMonthlyPersonalExpenses,
 } from './loan';
 
 export function calculateLoanWithOffset({
   contributions,
-  exceptExpenses,
+  // Merged with what used to be Food/Transport/Phone-Internet
+  // (SteppedExpenseField/expenseFields) - TODO-66 rebuilt those as regular
+  // Schedule-shaped list entries here, same as any other personal expense.
+  personalExpenseItems,
   otherExpenseItems = [],
   incomeSources = [],
   expenseFields = null,
@@ -52,8 +53,10 @@ export function calculateLoanWithOffset({
     // within its range, same resolution as Income Sources/Exceptional Expenses.
     offsetBalance += getActiveAmount(contributions, months);
 
-    // Calculate Exceptional Expenses for this month
-    const monthlyExceptionalCost = getActiveAmount(exceptExpenses, months);
+    // Personal expenses for this month - Food/Transport/Phone-Internet and
+    // any exceptional/recurring cost the user has added, all resolved the
+    // same way (TODO-66).
+    const monthlyPersonalExpensesCost = getActiveAmount(personalExpenseItems, months);
 
     // Other Expenses (Health/Subscriptions/Entertainment/Debt Repayment/
     // Custom) - a direct per-occurrence dollar amount, same convention as
@@ -67,10 +70,10 @@ export function calculateLoanWithOffset({
     // scalar this replaced.
     const monthlyIncomeThisMonth = calculateMonthlyFromWeekly(getActiveAmount(incomeSources, months));
 
-    // Property/personal expenses for this month, each resolved to whichever
-    // scheduled change (if any) is in effect - same reasoning as tenant rent
-    // above: a value that can change mid-simulation can't be pre-collapsed
-    // into a single constant outside the loop.
+    // Property expenses for this month, each resolved to whichever scheduled
+    // change (if any) is in effect - same reasoning as tenant rent above: a
+    // value that can change mid-simulation can't be pre-collapsed into a
+    // single constant outside the loop.
     let monthlyExpensesForMonth = 0;
     if (expenseFields) {
       const strata = getSteppedValue(expenseFields.strataFees.base, expenseFields.strataFees.changes, months);
@@ -85,18 +88,7 @@ export function calculateLoanWithOffset({
         expenseFields.propertyManagement.changes,
         months
       );
-      const food = getSteppedValue(expenseFields.foodExpenses.base, expenseFields.foodExpenses.changes, months);
-      const transport = getSteppedValue(
-        expenseFields.transportExpenses.base,
-        expenseFields.transportExpenses.changes,
-        months
-      );
-      const phoneInternet = getSteppedValue(
-        expenseFields.phoneInternet.base,
-        expenseFields.phoneInternet.changes,
-        months
-      );
-      const propertyExpenses = calculateMonthlyPropertyExpenses({
+      monthlyExpensesForMonth = calculateMonthlyPropertyExpenses({
         monthlyStrata: calculateMonthlyStrata(strata),
         utilities,
         monthlyCouncil: calculateMonthlyCouncil(council),
@@ -106,8 +98,6 @@ export function calculateLoanWithOffset({
         monthlyLandTax: calculateMonthlyLandTax(landTax),
         propertyManagement,
       });
-      const personalExpenses = calculateMonthlyPersonalExpenses(calculateWeeklyPersonalExpenses(food, transport, phoneInternet));
-      monthlyExpensesForMonth = propertyExpenses + personalExpenses;
     }
 
     // Add regular monthly deposit to offset (this month's income, minus this
@@ -120,7 +110,7 @@ export function calculateLoanWithOffset({
     const netMonthlyDeposit = Math.max(
       0,
       monthlyToOffset + monthlyIncomeThisMonth - monthlyExpensesForMonth
-        - monthlyExceptionalCost - monthlyOtherExpenseItemsCost
+        - monthlyPersonalExpensesCost - monthlyOtherExpenseItemsCost
     );
     offsetBalance += netMonthlyDeposit;
 

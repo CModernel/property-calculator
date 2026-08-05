@@ -20,8 +20,6 @@ import {
   calculateTotalPropertyCost,
   calculateInitialMonthlyInterest,
   calculateNoOffsetTotalInterest,
-  calculateWeeklyPersonalExpenses,
-  calculateMonthlyPersonalExpenses,
   calculateMonthlyFromWeekly,
   calculateMonthlyNetBalance,
   calculateWeeklyNetBalance,
@@ -66,8 +64,8 @@ const config = { ...defaultConfig, ...localConfig, ...savedScenario };
 const OTHER_EXPENSE_CATEGORIES = ['Health', 'Subscriptions', 'Entertainment', 'Debt Repayment', 'Custom'];
 
 // Shared explanation for every monthly figure derived from a weekly amount
-// (calculateMonthlyFromWeekly/calculateMonthlyPersonalExpenses, src/calculations/loan.js) -
-// answers "why doesn't this match my ×4 mental math?" (TODO-60).
+// (calculateMonthlyFromWeekly, src/calculations/loan.js) - answers "why
+// doesn't this match my ×4 mental math?" (TODO-60).
 const WEEKLY_TO_MONTHLY_TOOLTIP = (
   <p>Monthly figures convert weekly amounts using the actual number of weeks per year: <strong>52 ÷ 12 ≈ 4.33</strong>, not a flat ×4.</p>
 );
@@ -148,14 +146,11 @@ const PropertyInvestmentCalculator = () => {
   const [newIncomeEndMonth, setNewIncomeEndMonth] = useState(MAX_MONTH);
 
   // Your personal expenses
-  const foodExpensesField = useSteppedValue(config.foodExpenses, config.foodExpensesChanges);
-  const transportExpensesField = useSteppedValue(config.transportExpenses, config.transportExpensesChanges);
-  const phoneInternetField = useSteppedValue(config.phoneInternet, config.phoneInternetChanges);
   const [showPersonalExpenses, setShowPersonalExpenses] = useState(config.showPersonalExpenses ?? false);
   // Results panel: collapses the Monthly Expenses card's "Personal Expenses"
-  // row into its Food/Transport sub-items, same "breakdown" pattern as
-  // Property Expenses (TODO-39) - distinct from showPersonalExpenses above,
-  // which controls the separate "Your Personal Expenses (Weekly)" input card.
+  // row into its per-item sub-rows, same "breakdown" pattern as Property
+  // Expenses (TODO-39) - distinct from showPersonalExpenses above, which
+  // controls the separate "Your Personal Expenses" input card.
   const [showPersonalExpensesBreakdown, setShowPersonalExpensesBreakdown] = useState(config.showPersonalExpensesBreakdown ?? false);
 
   // Collapsed by default (TODO-65) - the chart components only mount while
@@ -197,10 +192,15 @@ const PropertyInvestmentCalculator = () => {
   const [newContribEndMonth, setNewContribEndMonth] = useState(MAX_MONTH);
   const [newContribAmount, setNewContribAmount] = useState(config.newContribAmount);
 
-  // Exceptional Expenses State
-  const [exceptExpenses, setExceptExpenses] = useState(config.exceptExpenses ?? []);
+  // Personal Expenses State (TODO-66) - an addable/removable list, same
+  // Schedule-shaped model as Income Sources/Other Expenses, covering both
+  // routine recurring costs (Food, Transport, Phone/Internet - seeded as
+  // starter items in config.default.json) and one-off/exceptional costs
+  // (a wedding, car repair) that used to live in a separately-labeled
+  // "Exceptional Expenses" section before this TODO merged the two.
+  const [personalExpenseItems, setPersonalExpenseItems] = useState(config.personalExpenseItems ?? []);
   const [showAddExceptExp, setShowAddExceptExp] = useState(false);
-  const [newExpName, setNewExpName] = useState('Rent');
+  const [newExpName, setNewExpName] = useState('');
   const [newExpAmount, setNewExpAmount] = useState(config.newExpAmount);
   const [newExpOneTime, setNewExpOneTime] = useState(false);
   const [newExpStartMonth, setNewExpStartMonth] = useState(1);
@@ -279,9 +279,6 @@ const PropertyInvestmentCalculator = () => {
   const propertyManagement = isInvestmentProperty
     ? getSteppedValue(propertyManagementField.base, propertyManagementField.changes, 1)
     : 0;
-  const foodExpenses = getSteppedValue(foodExpensesField.base, foodExpensesField.changes, 1);
-  const transportExpenses = getSteppedValue(transportExpensesField.base, transportExpensesField.changes, 1);
-  const phoneInternet = getSteppedValue(phoneInternetField.base, phoneInternetField.changes, 1);
 
   // Monthly property expenses
   const monthlyStrata = calculateMonthlyStrata(strataFees);
@@ -299,9 +296,12 @@ const PropertyInvestmentCalculator = () => {
   // so it must stay consistent with that snapshot's offset: 0 / effectiveBalance: loanAmount.
   const monthZeroInterest = calculateInitialMonthlyInterest(loanAmount, monthlyRate);
 
-  // Your personal expenses
-  const weeklyPersonalExpenses = calculateWeeklyPersonalExpenses(foodExpenses, transportExpenses, phoneInternet);
-  const monthlyPersonalExpenses = calculateMonthlyPersonalExpenses(weeklyPersonalExpenses);
+  // Your personal expenses (TODO-66) - same "right now" (month 1)
+  // convention as Income Sources/Other Expenses; weeklyPersonalExpenses is
+  // only kept around for calculateWeeklyNetBalance's own weekly-denominated
+  // math below, via the 12/52 inverse of the usual weekly->monthly factor.
+  const monthlyPersonalExpenses = getActiveAmount(personalExpenseItems, 1);
+  const weeklyPersonalExpenses = monthlyPersonalExpenses * 12 / 52;
 
   // Total cash flow. Same "right now" (month 1) convention as exceptional
   // expenses - an income source that hasn't started yet, or already ended,
@@ -348,9 +348,6 @@ const PropertyInvestmentCalculator = () => {
     // propertyManagement values above.
     landTax: isInvestmentProperty ? landTaxField : { base: 0, changes: [] },
     propertyManagement: isInvestmentProperty ? propertyManagementField : { base: 0, changes: [] },
-    foodExpenses: foodExpensesField,
-    transportExpenses: transportExpensesField,
-    phoneInternet: phoneInternetField,
   };
 
   // Complete loan simulation with offset. maxMonths must match the chosen
@@ -359,7 +356,7 @@ const PropertyInvestmentCalculator = () => {
   // term's monthlyPayment.
   const loanSimulation = calculateLoanWithOffset({
     contributions: offsetContributions,
-    exceptExpenses,
+    personalExpenseItems,
     otherExpenseItems,
     incomeSources,
     expenseFields,
@@ -371,7 +368,7 @@ const PropertyInvestmentCalculator = () => {
   });
   const baselineSimulation = calculateLoanWithOffset({
     contributions: [], // No offsets
-    exceptExpenses,
+    personalExpenseItems,
     otherExpenseItems,
     incomeSources,
     expenseFields,
@@ -487,11 +484,8 @@ const PropertyInvestmentCalculator = () => {
       conveyancing, buildingInspection, pestInspection, registrationFees, searches,
       loanEstablishmentFee, propertyValuation, homeInsurance, rateAdjustments,
       incomeSources,
-      foodExpenses: foodExpensesField.base, foodExpensesChanges: foodExpensesField.changes,
-      transportExpenses: transportExpensesField.base, transportExpensesChanges: transportExpensesField.changes,
-      phoneInternet: phoneInternetField.base, phoneInternetChanges: phoneInternetField.changes,
       offsetContributions,
-      exceptExpenses,
+      personalExpenseItems,
       otherExpenseItems,
       showPropertyExpenses, showMonthlyExpensesBreakdown, showClosingCostsBreakdown,
       showIncome, showPersonalExpenses, showPersonalExpensesBreakdown, showProgressCharts,
@@ -623,8 +617,8 @@ const PropertyInvestmentCalculator = () => {
     setIncomeSources(incomeSources.filter(i => i.id !== id));
   };
 
-  // Exceptional Expenses Functions
-  const addExceptionalExpense = () => {
+  // Personal Expenses Functions (TODO-66)
+  const addPersonalExpense = () => {
     if (!newExpName) {
       alert('Please enter a name for the expense.');
       return;
@@ -647,9 +641,9 @@ const PropertyInvestmentCalculator = () => {
       ...(newExpOneTime ? {} : { endMonth: newExpEndMonth }),
     };
 
-    setExceptExpenses([...exceptExpenses, newExp]);
+    setPersonalExpenseItems([...personalExpenseItems, newExp]);
     setShowAddExceptExp(false);
-    setNewExpName('Rent');
+    setNewExpName('');
     setNewExpAmount(920);
     setNewExpOneTime(false);
     setNewExpStartMonth(1);
@@ -657,8 +651,8 @@ const PropertyInvestmentCalculator = () => {
     setNewExpEndMonth(MAX_MONTH);
   };
 
-  const removeExceptionalExpense = (id) => {
-    setExceptExpenses(exceptExpenses.filter(e => e.id !== id));
+  const removePersonalExpense = (id) => {
+    setPersonalExpenseItems(personalExpenseItems.filter(e => e.id !== id));
   };
 
   // Other Expenses Functions
@@ -1421,7 +1415,7 @@ const PropertyInvestmentCalculator = () => {
           <div className="bg-white rounded-lg shadow-md p-5">
             <h2 className="text-xl font-bold text-gray-700 mb-4 flex items-center gap-2">
               <ShoppingCart size={24} className="text-purple-600" />
-              Your Personal Expenses (Weekly)
+              Your Personal Expenses
             </h2>
 
             <button
@@ -1430,7 +1424,7 @@ const PropertyInvestmentCalculator = () => {
               className="text-sm font-medium text-blue-600 hover:text-blue-700"
             >
               {showPersonalExpenses ? '▾' : '▸'} Personal expenses breakdown (subtotal: $
-              {Math.round(weeklyPersonalExpenses).toLocaleString()}/week)
+              {Math.round(monthlyPersonalExpenses).toLocaleString()}/month)
             </button>
 
             {showPersonalExpenses && (
@@ -1579,47 +1573,17 @@ const PropertyInvestmentCalculator = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <SteppedExpenseField
-                    field={foodExpensesField}
-                    label="Food"
-                    min={0}
-                    max={5000}
-                    sliderMax={600}
-                    step={10}
-                    color="purple"
-                    prefix="$"
-                  />
-
-                  <SteppedExpenseField
-                    field={transportExpensesField}
-                    label="Transport"
-                    min={0}
-                    max={5000}
-                    sliderMax={400}
-                    step={10}
-                    color="purple"
-                    prefix="$"
-                  />
-
-                  <SteppedExpenseField
-                    field={phoneInternetField}
-                    label="Phone/Internet"
-                    min={0}
-                    max={1000}
-                    sliderMax={100}
-                    step={1}
-                    color="purple"
-                    prefix="$"
-                  />
-              </div>
-
-              {/* EXCEPTIONAL EXPENSES */}
+              {/* PERSONAL EXPENSES (TODO-66) - an addable/removable list,
+                  same Schedule model as Income Sources/Other Expenses.
+                  Food/Transport/Phone-Internet are just starter items here
+                  (seeded in config.default.json), not fixed fields - this
+                  section absorbs what used to be the separately-labeled
+                  "Exceptional Expenses" card. */}
               <div className="bg-white rounded-lg shadow-md p-5 border-t-4 border-yellow-400">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-bold text-gray-700 flex items-center gap-2">
                     <TrendingDown size={24} className="text-yellow-600" />
-                    Exceptional Expenses
+                    Personal Expenses
                   </h2>
                   <button
                     onClick={() => setShowAddExceptExp(!showAddExceptExp)}
@@ -1629,10 +1593,9 @@ const PropertyInvestmentCalculator = () => {
                   </button>
                 </div>
                 <p className="text-xs text-gray-500 -mt-2 mb-3">
-                  For one-off costs (a wedding, car repair) or a recurring
-                  personal expense you'd like to track separately (a
-                  subscription, gym membership) - pick "One-Time" or a
-                  repeat interval below.
+                  Routine costs (Food, Transport, a phone/internet bill) or
+                  one-off/exceptional costs (a wedding, car repair) - pick
+                  "One-Time" or a repeat interval below for each.
                 </p>
 
                 {showAddExceptExp && (
@@ -1645,7 +1608,7 @@ const PropertyInvestmentCalculator = () => {
                           value={newExpName}
                           onChange={(e) => setNewExpName(e.target.value)}
                           className="w-full p-2 border rounded"
-                          placeholder="e.g. Wedding, Car Repair, Netflix, Gym Membership"
+                          placeholder="e.g. Food, Transport, Wedding, Netflix"
                         />
                       </div>
 
@@ -1708,7 +1671,7 @@ const PropertyInvestmentCalculator = () => {
                       )}
 
                       <button
-                        onClick={addExceptionalExpense}
+                        onClick={addPersonalExpense}
                         className="w-full py-2 bg-yellow-600 text-white rounded font-bold hover:bg-yellow-700"
                       >
                         Add Expense
@@ -1718,10 +1681,10 @@ const PropertyInvestmentCalculator = () => {
                 )}
 
                 <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {exceptExpenses.length === 0 && !showAddExceptExp && (
-                    <p className="text-sm text-gray-500 italic text-center">No exceptional expenses added.</p>
+                  {personalExpenseItems.length === 0 && !showAddExceptExp && (
+                    <p className="text-sm text-gray-500 italic text-center">No personal expenses added.</p>
                   )}
-                  {exceptExpenses.map(exp => (
+                  {personalExpenseItems.map(exp => (
                     <div key={exp.id} className="flex justify-between items-center p-2 bg-yellow-50 border border-yellow-200 rounded text-sm">
                       <div>
                         <p className="font-bold text-gray-800">{exp.name}</p>
@@ -1729,7 +1692,7 @@ const PropertyInvestmentCalculator = () => {
                           ${exp.amount} • {formatScheduleLabel(exp)}
                         </p>
                       </div>
-                      <button onClick={() => removeExceptionalExpense(exp.id)} className="text-red-500 font-bold px-2">✕</button>
+                      <button onClick={() => removePersonalExpense(exp.id)} className="text-red-500 font-bold px-2">✕</button>
                     </div>
                   ))}
                 </div>
@@ -2045,25 +2008,21 @@ const PropertyInvestmentCalculator = () => {
                         {showPersonalExpensesBreakdown ? '▾' : '▸'} Personal Expenses:
                       </button>
                       <span className="flex items-center">
-                        <InfoTooltip label="How are these monthly expense figures calculated?">{WEEKLY_TO_MONTHLY_TOOLTIP}</InfoTooltip>
                         <span className="font-semibold text-red-600 ml-1">-${Math.round(monthlyPersonalExpenses).toLocaleString()}</span>
                       </span>
                     </div>
 
                     {showPersonalExpensesBreakdown && (
                       <div className="pl-4 mt-1 space-y-1 text-xs">
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Food:</span>
-                          <span className="text-red-500">-${Math.round(calculateMonthlyFromWeekly(foodExpenses)).toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Transport:</span>
-                          <span className="text-red-500">-${Math.round(calculateMonthlyFromWeekly(transportExpenses)).toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Phone/Internet:</span>
-                          <span className="text-red-500">-${Math.round(calculateMonthlyFromWeekly(phoneInternet)).toLocaleString()}</span>
-                        </div>
+                        {personalExpenseItems.filter(item => isScheduleActive(item, 1)).map(item => (
+                          <div key={item.id} className="flex justify-between">
+                            <span className="text-gray-500">{item.name}:</span>
+                            <span className="text-red-500">-${Math.round(item.amount).toLocaleString()}</span>
+                          </div>
+                        ))}
+                        {personalExpenseItems.filter(item => isScheduleActive(item, 1)).length === 0 && (
+                          <span className="italic text-gray-400">No personal expenses active this month</span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2500,7 +2459,7 @@ const PropertyInvestmentCalculator = () => {
                       <div className="bg-yellow-50 rounded-lg p-3 border border-yellow-100">
                         <p className="font-bold text-yellow-800 border-b border-yellow-200 pb-1 mb-2">Expenses Status</p>
                         <div className="space-y-1 text-xs max-h-32 overflow-y-auto">
-                          {[...exceptExpenses, ...otherExpenseItems].map(exp => {
+                          {[...personalExpenseItems, ...otherExpenseItems].map(exp => {
                             const status = classifyScheduleStatus(exp, timelineMonth);
                             if (status === 'future') return null;
 
@@ -2511,7 +2470,7 @@ const PropertyInvestmentCalculator = () => {
                               </div>
                             );
                           })}
-                          {[...exceptExpenses, ...otherExpenseItems].filter(e => e.startMonth <= timelineMonth).length === 0 && (
+                          {[...personalExpenseItems, ...otherExpenseItems].filter(e => e.startMonth <= timelineMonth).length === 0 && (
                             <span className="italic text-gray-400">No expenses recorded</span>
                           )}
                         </div>

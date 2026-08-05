@@ -55,14 +55,6 @@ export function calculateNoOffsetTotalInterest(monthlyPayment, loanAmount, total
   return monthlyPayment * totalMonths - loanAmount;
 }
 
-export function calculateWeeklyPersonalExpenses(foodExpenses, transportExpenses, phoneInternet = 0) {
-  return foodExpenses + transportExpenses + phoneInternet;
-}
-
-export function calculateMonthlyPersonalExpenses(weeklyPersonalExpenses) {
-  return weeklyPersonalExpenses * 52 / 12;
-}
-
 export function calculateMonthlyFromWeekly(weeklyAmount) {
   return weeklyAmount * 52 / 12;
 }

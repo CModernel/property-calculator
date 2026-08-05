@@ -12,8 +12,6 @@ import {
   calculateTotalPropertyCost,
   calculateInitialMonthlyInterest,
   calculateNoOffsetTotalInterest,
-  calculateWeeklyPersonalExpenses,
-  calculateMonthlyPersonalExpenses,
   calculateMonthlyFromWeekly,
   calculateMonthlyNetBalance,
   calculateWeeklyNetBalance,
@@ -34,9 +32,6 @@ const DEFAULTS = {
   utilities: 200,
   councilRates: 450,
   insurance: 80,
-  foodExpenses: 100,
-  transportExpenses: 50,
-  phoneInternet: 7,
 };
 
 describe('calculateLoanAmount', () => {
@@ -159,23 +154,7 @@ describe('calculateNoOffsetTotalInterest', () => {
   });
 });
 
-describe('personal expenses and income', () => {
-  it('sums weekly personal expenses (food + transport only, phoneInternet defaulting to 0)', () => {
-    expect(
-      calculateWeeklyPersonalExpenses(DEFAULTS.foodExpenses, DEFAULTS.transportExpenses)
-    ).toBe(150);
-  });
-
-  it('includes phoneInternet in the sum when provided (TODO-64)', () => {
-    expect(
-      calculateWeeklyPersonalExpenses(DEFAULTS.foodExpenses, DEFAULTS.transportExpenses, DEFAULTS.phoneInternet)
-    ).toBe(157);
-  });
-
-  it('converts weekly personal expenses to a monthly figure', () => {
-    expect(calculateMonthlyPersonalExpenses(200)).toBeCloseTo(866.67, 1);
-  });
-
+describe('income', () => {
   it('converts a weekly amount to a monthly figure', () => {
     expect(calculateMonthlyFromWeekly(1614)).toBeCloseTo(6994, 0);
   });
