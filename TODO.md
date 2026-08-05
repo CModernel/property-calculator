@@ -1347,6 +1347,79 @@ optionally reuse in the commit message when you implement it.
   "• Shared (2 × $500)" exactly as expected. `npm test -- --run`
   (201/201), `npm run lint`, and `npm run build` all clean.
 
+- [x] **TODO-62 (Analysis only, no code): Evaluate testing `App.jsx`'s wiring - is it feasible, worth it, and how hard?**
+  Requested by the user - explicitly an evaluation task. Confirmed current
+  state: `vite.config.js`'s `test` block sets `environment: 'node'`
+  globally, and `package.json` has no `jsdom`, no `@testing-library/*` -
+  zero DOM-rendering test capability today. All 201 existing tests cover
+  only `src/calculations/*.js` (pure functions); `App.jsx`'s ~2500 lines
+  of state wiring and JSX have never been touched by an automated test,
+  only manual browser verification.
+  **Feasibility**: technically straightforward - vitest supports jsdom
+  per-file via a `// @vitest-environment jsdom` docblock (no need to
+  switch the whole suite, keeping the existing pure-function tests fast),
+  plus installing `jsdom` + `@testing-library/react` +
+  `@testing-library/jest-dom` + `@testing-library/user-event`. The real
+  obstacle isn't the tooling, it's the shape of `App.jsx` itself: a single
+  monolithic component (aside from a few shared pieces - `NumberSliderField`,
+  `LvrBadge`, `SteppedExpenseField`, `InfoTooltip`) with no subcomponent
+  decomposition, so any wiring test has to mount the entire page and query
+  a very dense DOM by role/text - the same kind of ambiguity that caused
+  the wrong-`<select>`-targeted mistake during TODO-46's manual browser
+  verification could recur in RTL tests too, though `getByRole`/
+  `getByLabelText` are more precise than a raw `querySelector`.
+  **Worth it?** In favor: this session's own bug history is direct
+  evidence - TODO-38's one-directional FHB/Investment mutual-exclusion
+  bug and TODO-46's wrong-select mishap both happened exactly in this
+  untested layer. Against: `App.jsx` gets rewritten in nearly every single
+  TODO this session (60+ items touched it) - tests coupled to its exact
+  DOM structure would need constant upkeep, adding real friction against
+  the project's fast, conversational, one-TODO-at-a-time pace. Also,
+  manual browser verification is *already* a mandatory step for every
+  UI-touching TODO in this workflow, so wiring tests would mostly be
+  redundant with what's already done by hand each time - their real value
+  would be catching regressions on *future*, unrelated changes (which
+  one-time manual verification does not), not replacing today's
+  verification step.
+  **Difficulty ladder**: this evaluation itself - trivial (done here).
+  Installing jsdom/RTL and wiring up the per-file environment - easy,
+  mechanical, no design decisions. A *small*, targeted set of regression
+  tests (3-5) for the two wiring patterns already proven to cause real
+  bugs (checkbox mutual-exclusion, category-conditional form rendering) -
+  medium, achievable in one focused task. Comprehensive wiring coverage
+  of all of `App.jsx` - high/very high, and likely not worth it at this
+  project's current size/pace given the churn. A prerequisite refactor to
+  decompose `App.jsx` into independently-testable subcomponents (so tests
+  target smaller, more stable units instead of the whole page) - high
+  effort, comparable to or larger than TODO-47 (dark mode) in scope, with
+  its own regression risk.
+  **Recommendation**: don't chase full coverage. Pilot a small, targeted
+  jsdom+RTL setup covering just the two already-proven-risky wiring
+  patterns - captured as a concrete follow-up, TODO-63. If it holds up
+  without adding friction across a few more sessions, expand; if it
+  becomes a maintenance drag, stop there.
+
+- [ ] **TODO-63: Pilot a small jsdom + React Testing Library test suite for `App.jsx`'s riskiest wiring**
+  Follow-up from TODO-62's evaluation (done) - the scoped-down version of
+  "test App.jsx" that's actually worth doing now, per that analysis's
+  recommendation. Add `jsdom`, `@testing-library/react`,
+  `@testing-library/jest-dom`, `@testing-library/user-event` as
+  devDependencies; new `src/App.test.jsx` (or similar) opting into jsdom
+  via a `// @vitest-environment jsdom` docblock, leaving every existing
+  `src/calculations/*.test.js` file on the fast `node` environment
+  unchanged. Write 3-5 tests targeting only the two wiring patterns this
+  session already proved buggy once each: (1) the First Home
+  Buyer/Investment Property mutual-exclusion checkboxes (`src/App.jsx`,
+  TODO-38/44) - checking one disables and unchecks the other, in both
+  directions; (2) a category-conditional form render (e.g. picking
+  "Room Rent" in the Income Name dropdown shows the Shared Room
+  checkbox, picking "House Rent" or anything else does not, TODO-56).
+  Explicitly **not** in scope: broad coverage of the rest of `App.jsx`,
+  any subcomponent-extraction refactor, or replacing the existing
+  mandatory manual browser verification step for future TODOs - this is
+  a small, deliberately-scoped pilot to see whether wiring tests hold up
+  against this project's pace before investing further.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
