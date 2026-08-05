@@ -975,6 +975,29 @@ optionally reuse in the commit message when you implement it.
   quarterly Strata seed applied correctly, same as with the old buttons);
   switched back to "House" and confirmed the message reappeared.
 
+- [x] **TODO-44: Make the First Home Buyer / Investment Property mutual exclusion symmetric**
+  Requested by the user, correcting a mistake in an earlier read of the
+  TODO-38 code: the two checkboxes (`src/App.jsx`, "Purchase Details")
+  were only disabled in one direction - checking Investment Property
+  disabled/auto-unchecked First Home Buyer, but checking First Home Buyer
+  didn't disable Investment Property at all (it would just silently get
+  unchecked later, with no upfront warning, if the user then clicked
+  Investment Property). Added a symmetric `handleFirstHomeBuyerChange`
+  handler (mirroring `handleInvestmentPropertyChange`) that forces
+  Investment Property off when First Home Buyer is checked, plus
+  `disabled={isFirstHomeBuyer}` on the Investment Property checkbox and a
+  matching explanatory note ("Not available for a first home buyer -
+  occupying the property and investing in it are mutually exclusive.").
+  Resulting UX (as anticipated in the original TODO): whichever checkbox
+  is checked first now blocks the other entirely until unchecked, in
+  both directions.
+  Verified in the browser: with the default First Home Buyer checked,
+  confirmed Investment Property showed disabled/greyed out from page
+  load; unchecked First Home Buyer and confirmed Investment Property
+  became clickable again; checked Investment Property and confirmed
+  First Home Buyer disabled with its existing message, exactly mirroring
+  the already-verified TODO-38 behavior from the other direction.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -1004,32 +1027,6 @@ optionally reuse in the commit message when you implement it.
   Tax/Property Management are already gated behind `isInvestmentProperty`
   from TODO-35), or does it need reframing to also make sense for an
   owner-occupier who isn't renting anything out at all?
-
-- [ ] **TODO-44: Make the First Home Buyer / Investment Property mutual exclusion symmetric**
-  Requested by the user, correcting a mistake in my own earlier read of
-  the TODO-38 code: the two checkboxes (`src/App.jsx`, "Purchase Details")
-  are only disabled in **one direction** today. Checking "Investment
-  Property" disables "First Home Buyer" (and auto-unchecks it) with an
-  explanatory note - but checking "First Home Buyer" does **not** disable
-  "Investment Property" at all; the Investment Property checkbox
-  (`src/App.jsx:746-751`) has no `disabled` attribute or dependency on
-  `isFirstHomeBuyer` whatsoever. In practice the two can still never both
-  end up `true` (checking Investment while FHB is on force-unchecks FHB
-  via `handleInvestmentPropertyChange`), but the UI doesn't communicate
-  that up front from the FHB side the way it does from the Investment
-  side - a user with FHB checked can freely click Investment Property
-  with no warning, only to see FHB silently disappear. Fix: add
-  `disabled={isFirstHomeBuyer}` (mirroring the existing
-  `disabled={isInvestmentProperty}` on the FHB checkbox) plus the same
-  style of explanatory note (e.g. "Not available for a first home buyer -
-  occupying the property and investing in it are mutually exclusive.")
-  when First Home Buyer is checked. Needs a decision on the resulting
-  UX: with both checkboxes able to disable each other, whichever is
-  checked first "wins" and blocks the other entirely - the user must
-  uncheck it first to switch. That's consistent with how the Investment
-  side already behaves today (once Investment is checked, FHB is fully
-  blocked until Investment is unchecked), just extended to work from the
-  other direction too.
 
 - [ ] **TODO-45: Persist expanded/collapsed panel state on Save**
   Requested by the user - today `handleSaveScenario` (`src/App.jsx`)

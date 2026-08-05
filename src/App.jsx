@@ -418,6 +418,17 @@ const PropertyInvestmentCalculator = () => {
     }
   };
 
+  // Symmetric to handleInvestmentPropertyChange above - checking First Home
+  // Buyer forces Investment Property off too, since the same real-world
+  // exclusivity applies from either direction (see that checkbox's
+  // `disabled={isFirstHomeBuyer}` in the JSX).
+  const handleFirstHomeBuyerChange = (checked) => {
+    setIsFirstHomeBuyer(checked);
+    if (checked) {
+      setIsInvestmentProperty(false);
+    }
+  };
+
   // Only the ~24 "data" inputs are saved - ephemeral UI state (collapsed
   // sections, in-progress "Add" form drafts, the Timeline Explorer's
   // selected month) isn't part of a scenario.
@@ -727,7 +738,7 @@ const PropertyInvestmentCalculator = () => {
                     type="checkbox"
                     checked={isFirstHomeBuyer}
                     disabled={isInvestmentProperty}
-                    onChange={(e) => setIsFirstHomeBuyer(e.target.checked)}
+                    onChange={(e) => handleFirstHomeBuyerChange(e.target.checked)}
                     className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
                   />
                   First Home Buyer (NSW stamp duty concession)
@@ -738,17 +749,21 @@ const PropertyInvestmentCalculator = () => {
               </div>
 
               <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <label className={`flex items-center gap-2 text-sm font-medium ${isFirstHomeBuyer ? 'text-gray-400' : 'text-gray-700'}`}>
                   <input
                     type="checkbox"
                     checked={isInvestmentProperty}
+                    disabled={isFirstHomeBuyer}
                     onChange={(e) => handleInvestmentPropertyChange(e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
                   />
                   Investment Property
                 </label>
                 {isInvestmentProperty && (
                   <p className="text-xs text-gray-500 mt-1">Adds Land Tax and Property Management to Property Expenses.</p>
+                )}
+                {isFirstHomeBuyer && (
+                  <p className="text-xs text-gray-500 mt-1">Not available for a first home buyer - occupying the property and investing in it are mutually exclusive.</p>
                 )}
               </div>
 
