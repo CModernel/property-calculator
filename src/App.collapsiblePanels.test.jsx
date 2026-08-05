@@ -85,7 +85,7 @@ describe('"Add" form toggles', () => {
     const section = screen.getByText('Exceptional Expenses').parentElement;
 
     await user.click(within(section).getByRole('button', { name: '+ Add' }));
-    expect(screen.getByPlaceholderText('e.g. Wedding, Car Repair')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Wedding, Car Repair/)).toBeInTheDocument();
   });
 
   it('Other Expenses: "+ Add" reveals the Expense Name category select', async () => {

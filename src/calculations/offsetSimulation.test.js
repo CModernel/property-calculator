@@ -468,6 +468,7 @@ describe('calculateLoanWithOffset', () => {
         propertyManagement: emptyField,
         foodExpenses: emptyField,
         transportExpenses: emptyField,
+        phoneInternet: emptyField,
       },
       loanAmount: 10_000_000,
       monthlyRate: 0,
@@ -496,6 +497,7 @@ describe('calculateLoanWithOffset', () => {
         propertyManagement: emptyField,
         foodExpenses: emptyField,
         transportExpenses: emptyField,
+        phoneInternet: emptyField,
       },
       loanAmount: 10_000_000,
       monthlyRate: 0,
@@ -523,6 +525,7 @@ describe('calculateLoanWithOffset', () => {
         propertyManagement: { base: 150, changes: [] }, // $150/month
         foodExpenses: emptyField,
         transportExpenses: emptyField,
+        phoneInternet: emptyField,
       },
       loanAmount: 10_000_000,
       monthlyRate: 0,

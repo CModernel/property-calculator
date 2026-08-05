@@ -150,6 +150,7 @@ const PropertyInvestmentCalculator = () => {
   // Your personal expenses
   const foodExpensesField = useSteppedValue(config.foodExpenses, config.foodExpensesChanges);
   const transportExpensesField = useSteppedValue(config.transportExpenses, config.transportExpensesChanges);
+  const phoneInternetField = useSteppedValue(config.phoneInternet, config.phoneInternetChanges);
   const [showPersonalExpenses, setShowPersonalExpenses] = useState(config.showPersonalExpenses ?? false);
   // Results panel: collapses the Monthly Expenses card's "Personal Expenses"
   // row into its Food/Transport sub-items, same "breakdown" pattern as
@@ -280,6 +281,7 @@ const PropertyInvestmentCalculator = () => {
     : 0;
   const foodExpenses = getSteppedValue(foodExpensesField.base, foodExpensesField.changes, 1);
   const transportExpenses = getSteppedValue(transportExpensesField.base, transportExpensesField.changes, 1);
+  const phoneInternet = getSteppedValue(phoneInternetField.base, phoneInternetField.changes, 1);
 
   // Monthly property expenses
   const monthlyStrata = calculateMonthlyStrata(strataFees);
@@ -298,7 +300,7 @@ const PropertyInvestmentCalculator = () => {
   const monthZeroInterest = calculateInitialMonthlyInterest(loanAmount, monthlyRate);
 
   // Your personal expenses
-  const weeklyPersonalExpenses = calculateWeeklyPersonalExpenses(foodExpenses, transportExpenses);
+  const weeklyPersonalExpenses = calculateWeeklyPersonalExpenses(foodExpenses, transportExpenses, phoneInternet);
   const monthlyPersonalExpenses = calculateMonthlyPersonalExpenses(weeklyPersonalExpenses);
 
   // Total cash flow. Same "right now" (month 1) convention as exceptional
@@ -348,6 +350,7 @@ const PropertyInvestmentCalculator = () => {
     propertyManagement: isInvestmentProperty ? propertyManagementField : { base: 0, changes: [] },
     foodExpenses: foodExpensesField,
     transportExpenses: transportExpensesField,
+    phoneInternet: phoneInternetField,
   };
 
   // Complete loan simulation with offset. maxMonths must match the chosen
@@ -486,6 +489,7 @@ const PropertyInvestmentCalculator = () => {
       incomeSources,
       foodExpenses: foodExpensesField.base, foodExpensesChanges: foodExpensesField.changes,
       transportExpenses: transportExpensesField.base, transportExpensesChanges: transportExpensesField.changes,
+      phoneInternet: phoneInternetField.base, phoneInternetChanges: phoneInternetField.changes,
       offsetContributions,
       exceptExpenses,
       otherExpenseItems,
@@ -1597,6 +1601,17 @@ const PropertyInvestmentCalculator = () => {
                     color="purple"
                     prefix="$"
                   />
+
+                  <SteppedExpenseField
+                    field={phoneInternetField}
+                    label="Phone/Internet"
+                    min={0}
+                    max={1000}
+                    sliderMax={100}
+                    step={1}
+                    color="purple"
+                    prefix="$"
+                  />
               </div>
 
               {/* EXCEPTIONAL EXPENSES */}
@@ -1613,6 +1628,12 @@ const PropertyInvestmentCalculator = () => {
                     {showAddExceptExp ? '✕ Cancel' : '+ Add'}
                   </button>
                 </div>
+                <p className="text-xs text-gray-500 -mt-2 mb-3">
+                  For one-off costs (a wedding, car repair) or a recurring
+                  personal expense you'd like to track separately (a
+                  subscription, gym membership) - pick "One-Time" or a
+                  repeat interval below.
+                </p>
 
                 {showAddExceptExp && (
                   <div className="mb-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200 text-sm">
@@ -1624,7 +1645,7 @@ const PropertyInvestmentCalculator = () => {
                           value={newExpName}
                           onChange={(e) => setNewExpName(e.target.value)}
                           className="w-full p-2 border rounded"
-                          placeholder="e.g. Wedding, Car Repair"
+                          placeholder="e.g. Wedding, Car Repair, Netflix, Gym Membership"
                         />
                       </div>
 
@@ -2038,6 +2059,10 @@ const PropertyInvestmentCalculator = () => {
                         <div className="flex justify-between">
                           <span className="text-gray-500">Transport:</span>
                           <span className="text-red-500">-${Math.round(calculateMonthlyFromWeekly(transportExpenses)).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Phone/Internet:</span>
+                          <span className="text-red-500">-${Math.round(calculateMonthlyFromWeekly(phoneInternet)).toLocaleString()}</span>
                         </div>
                       </div>
                     )}

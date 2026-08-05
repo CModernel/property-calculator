@@ -33,7 +33,7 @@ describe('Exceptional Expenses', () => {
     await openPersonalExpenses(user);
     await openAddForm(user, 'Exceptional Expenses');
 
-    fireEvent.change(screen.getByPlaceholderText('e.g. Wedding, Car Repair'), { target: { value: '' } });
+    fireEvent.change(screen.getByPlaceholderText(/Wedding, Car Repair/), { target: { value: '' } });
     await user.click(screen.getByRole('button', { name: 'Add Expense' }));
     expect(window.alert).toHaveBeenLastCalledWith('Please enter a name for the expense.');
   });
@@ -71,7 +71,7 @@ describe('Exceptional Expenses', () => {
     await openPersonalExpenses(user);
     await openAddForm(user, 'Exceptional Expenses');
 
-    fireEvent.change(screen.getByPlaceholderText('e.g. Wedding, Car Repair'), { target: { value: 'Wedding' } });
+    fireEvent.change(screen.getByPlaceholderText(/Wedding, Car Repair/), { target: { value: 'Wedding' } });
     fireEvent.change(screen.getByLabelText('Amount ($)'), { target: { value: '5000' } });
     fireEvent.blur(screen.getByLabelText('Amount ($)'));
     await user.click(screen.getByRole('button', { name: 'Add Expense' }));

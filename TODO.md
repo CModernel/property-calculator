@@ -1598,6 +1598,47 @@ optionally reuse in the commit message when you implement it.
   Savings -$39,547 - matching TODO-43's original verification numbers
   exactly), plus the new tooltip rendering correctly on hover.
 
+- [x] **TODO-64: Add Phone/Internet as a third default Personal Expense field; clarify Exceptional Expenses as the place for arbitrary personal expenses**
+  Requested by the user, who corrected the original framing: Food/Transport
+  were *not* replaced with an addable list. Added a third fixed
+  `SteppedExpenseField` - `phoneInternetField` (`src/App.jsx`), mirroring
+  `foodExpensesField`/`transportExpensesField` exactly (same `$/week`
+  steppable-rate model via `useSteppedValue`), seeded at $7/week
+  (≈$30.33/month via the existing 52÷12 conversion, matching the user's
+  "~$30/month" ask). `calculateWeeklyPersonalExpenses`
+  (`src/calculations/loan.js`) gained a third `phoneInternet = 0` param
+  (defaulted for backward compatibility); wired through
+  `offsetSimulation.js`'s `expenseFields.phoneInternet` the same way
+  food/transport already were; added to `handleSaveScenario` and
+  `config.default.json`'s `"phoneInternet": 7`. Also added the new field
+  to the Monthly Expenses card's "Personal Expenses" breakdown (TODO-59)
+  alongside Food/Transport.
+  For arbitrary personal expense types, rather than building a new
+  addable-list mechanism, clarified that **"Exceptional Expenses"**
+  already is that mechanism - it already has add/remove + the Schedule
+  model (one-time or repeating by date), exactly what the user asked
+  for. Left its underlying behavior unchanged (still simulation-only, per
+  its existing documented scope - deliberately did **not** decide whether
+  it should now also count toward the static "Personal Expenses"/"TO
+  OFFSET" summary, since that's a real behavior change the TODO itself
+  flagged as needing a decision, not something to guess at). Only updated
+  its copy to make the existing dual-purpose obvious: added a one-line
+  explanation under the heading ("For one-off costs... or a recurring
+  personal expense you'd like to track separately...") and broadened the
+  "Expense Name" placeholder from "e.g. Wedding, Car Repair" to also
+  suggest "Netflix, Gym Membership".
+  Verified in the browser on the $850k default scenario: "Personal
+  expenses breakdown" subtotal became $157/week (100+50+7); the three
+  SteppedExpenseFields (Food $100, Transport $50, Phone/Internet $7) all
+  render with their own "+ Schedule a change" option; the Monthly
+  Expenses breakdown correctly shows Food -$433/Transport -$217/
+  Phone/Internet -$30 summing to the row's own -$680 total (up from
+  -$650 pre-TODO-64); the Exceptional Expenses form shows the new
+  clarifying copy and broadened placeholder. `npm test -- --run`
+  (275/275 - updated `loan.test.js`/`offsetSimulation.test.js` fixtures
+  plus a new phoneInternet-specific assertion), `npm run lint`, and `npm
+  run build` all clean.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -1753,32 +1794,46 @@ optionally reuse in the commit message when you implement it.
   (the saved shape changes from a flat `interestRate` number to a
   `{base, changes}` pair, same pattern as the other stepped-field bumps).
 
+- [ ] **TODO-66: Rebuild Personal Expenses as an addable/removable list, same model as Income Sources - not steppable-rate sliders**
+  Requested by the user, who corrected TODO-64's implementation: they did
+  **not** want Food/Transport/Phone-Internet kept as fixed
+  `SteppedExpenseField`s (`foodExpensesField`/`transportExpensesField`/
+  `phoneInternetField`, `src/App.jsx`) - that model represents "a
+  continuously-adjustable rate that occasionally steps to a new value"
+  via a slider + a separate "+ Schedule a change" sub-form
+  (`src/components/SteppedExpenseField.jsx`). What the user actually
+  wants: Personal Expenses should work **practically identically to
+  Income Sources** (`incomeSources`, its Add form, `INCOME_CATEGORIES`
+  picklist, `src/App.jsx`) - an addable/removable **list** of items,
+  where each item is entered with a name/category, an amount, and full
+  Schedule controls (one-time occurring once, or recurring
+  monthly/quarterly/yearly with a start and end month) - explicitly
+  **no slider/bar-based rate control** for the expense itself.
+  This means replacing `useSteppedValue`/`SteppedExpenseField` for
+  Food/Transport/Phone-Internet entirely with a `personalExpenseItems`
+  list (same general shape as `otherExpenseItems`/`exceptExpenses` -
+  `{id, name, amount, startMonth, recurrence, endMonth}`), with Food/
+  Transport/Phone-Internet becoming picklist categories (or free-text,
+  to decide) a user picks when adding an item, rather than three
+  permanently-visible fixed fields.
+  **Worth folding into the same design pass**: once Personal Expenses
+  uses this exact add/remove + Schedule model, it becomes functionally
+  identical to **"Exceptional Expenses"** (`exceptExpenses`) - TODO-64's
+  own conclusion was "Exceptional Expenses is already the mechanism for
+  arbitrary personal expenses," and this TODO's corrected model makes
+  that even more literally true (same data shape, same UI pattern). Decide
+  whether to merge the two into one list/section entirely, or keep them
+  as two separately-labeled lists sharing the same underlying mechanism.
+  Also needs deciding: does the new list still track a fixed default
+  "Food"/"Transport"/"Phone-Internet" via seeded starter items in
+  `config.default.json` (so a fresh scenario isn't empty), or does it
+  start empty like Income Sources currently does?
+  Note this reverses part of TODO-64's completed work (the
+  `SteppedExpenseField`-based Food/Transport/Phone-Internet fields) -
+  whoever implements this should expect to delete/replace that code, not
+  build on top of it.
 
-- [ ] **TODO-64: Turn Food/Transport into an addable list of Personal Expense items, with Phone/Internet as a default**
-  Requested by the user. Today "Your Personal Expenses (Weekly)" only has
-  two fixed `SteppedExpenseField`s - Food and Transport
-  (`foodExpensesField`/`transportExpensesField`, `src/App.jsx`) - there's
-  no way to add another recurring personal cost (like a phone/internet
-  bill) without it being shoehorned into Food or Transport, or added as
-  an "Other Expense" (a different, less-recurring-oriented model, see
-  `otherExpenseItems`/`OTHER_EXPENSE_CATEGORIES`,
-  TODO-36). Proposed direction: replace the two fixed
-  SteppedExpenseFields with an addable/removable itemized list (same
-  general shape as Other Expenses' picklist-plus-list pattern), and seed
-  a default "Phone/Internet" item at $30/month for new scenarios.
-  Needs a design pass: Food/Transport are currently a `$/week` rate via
-  `useSteppedValue` (supports scheduled rate *changes* over time, e.g.
-  "council rates go up in month 13") - Other Expenses' list model instead
-  uses one-time-dollar-amount-per-occurrence Schedule entries
-  (start/recurrence/end), a different shape entirely. Worth deciding
-  whether personal expense items keep the "steppable weekly rate" concept
-  (a new list-of-SteppedExpenseFields model, not existing anywhere yet)
-  or move to the Schedule-based one-time/recurring-occurrence model Other
-  Expenses already uses (simpler to reuse, but loses the "smooth rate
-  that occasionally steps up" semantics Food/Transport currently have).
-  Also needs deciding whether Phone/Internet is the *only* new default
-  category or one of several common presets (e.g. Insurance, Gym,
-  Streaming) offered alongside it.
+
 
 
 

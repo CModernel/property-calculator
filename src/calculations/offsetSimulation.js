@@ -91,6 +91,11 @@ export function calculateLoanWithOffset({
         expenseFields.transportExpenses.changes,
         months
       );
+      const phoneInternet = getSteppedValue(
+        expenseFields.phoneInternet.base,
+        expenseFields.phoneInternet.changes,
+        months
+      );
       const propertyExpenses = calculateMonthlyPropertyExpenses({
         monthlyStrata: calculateMonthlyStrata(strata),
         utilities,
@@ -101,7 +106,7 @@ export function calculateLoanWithOffset({
         monthlyLandTax: calculateMonthlyLandTax(landTax),
         propertyManagement,
       });
-      const personalExpenses = calculateMonthlyPersonalExpenses(calculateWeeklyPersonalExpenses(food, transport));
+      const personalExpenses = calculateMonthlyPersonalExpenses(calculateWeeklyPersonalExpenses(food, transport, phoneInternet));
       monthlyExpensesForMonth = propertyExpenses + personalExpenses;
     }
 

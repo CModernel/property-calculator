@@ -36,6 +36,7 @@ const DEFAULTS = {
   insurance: 80,
   foodExpenses: 100,
   transportExpenses: 50,
+  phoneInternet: 7,
 };
 
 describe('calculateLoanAmount', () => {
@@ -159,10 +160,16 @@ describe('calculateNoOffsetTotalInterest', () => {
 });
 
 describe('personal expenses and income', () => {
-  it('sums weekly personal expenses', () => {
+  it('sums weekly personal expenses (food + transport only, phoneInternet defaulting to 0)', () => {
     expect(
       calculateWeeklyPersonalExpenses(DEFAULTS.foodExpenses, DEFAULTS.transportExpenses)
     ).toBe(150);
+  });
+
+  it('includes phoneInternet in the sum when provided (TODO-64)', () => {
+    expect(
+      calculateWeeklyPersonalExpenses(DEFAULTS.foodExpenses, DEFAULTS.transportExpenses, DEFAULTS.phoneInternet)
+    ).toBe(157);
   });
 
   it('converts weekly personal expenses to a monthly figure', () => {
