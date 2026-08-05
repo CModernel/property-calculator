@@ -1399,26 +1399,70 @@ optionally reuse in the commit message when you implement it.
   without adding friction across a few more sessions, expand; if it
   becomes a maintenance drag, stop there.
 
-- [ ] **TODO-63: Pilot a small jsdom + React Testing Library test suite for `App.jsx`'s riskiest wiring**
-  Follow-up from TODO-62's evaluation (done) - the scoped-down version of
-  "test App.jsx" that's actually worth doing now, per that analysis's
-  recommendation. Add `jsdom`, `@testing-library/react`,
-  `@testing-library/jest-dom`, `@testing-library/user-event` as
-  devDependencies; new `src/App.test.jsx` (or similar) opting into jsdom
-  via a `// @vitest-environment jsdom` docblock, leaving every existing
-  `src/calculations/*.test.js` file on the fast `node` environment
-  unchanged. Write 3-5 tests targeting only the two wiring patterns this
-  session already proved buggy once each: (1) the First Home
-  Buyer/Investment Property mutual-exclusion checkboxes (`src/App.jsx`,
-  TODO-38/44) - checking one disables and unchecks the other, in both
-  directions; (2) a category-conditional form render (e.g. picking
-  "Room Rent" in the Income Name dropdown shows the Shared Room
-  checkbox, picking "House Rent" or anything else does not, TODO-56).
-  Explicitly **not** in scope: broad coverage of the rest of `App.jsx`,
-  any subcomponent-extraction refactor, or replacing the existing
-  mandatory manual browser verification step for future TODOs - this is
-  a small, deliberately-scoped pilot to see whether wiring tests hold up
-  against this project's pace before investing further.
+- [x] **TODO-63: jsdom + React Testing Library wiring test suite for `App.jsx`**
+  Follow-up from TODO-62's evaluation (done). Originally scoped as a small
+  3-5 test pilot, but the user explicitly asked to add as many tests as
+  reasonably possible, so this landed much broader: **61 new tests across
+  6 feature-scoped files**, on top of the existing 201 pure-function
+  tests (263 total).
+  Added `jsdom`, `@testing-library/react`, `@testing-library/jest-dom`,
+  `@testing-library/user-event` as devDependencies. Each new `.test.jsx`
+  opts into jsdom per-file via a `// @vitest-environment jsdom` docblock -
+  `vite.config.js`'s global `test.environment: 'node'` stays untouched,
+  so every existing `calculations/*.test.js` file keeps running on the
+  fast node environment unaffected. Shared `src/test/reactTestSetup.js`
+  (imported explicitly per file, not wired into global `setupFiles`, to
+  avoid running React's `cleanup()` after node-environment tests where
+  `document` doesn't exist) handles `@testing-library/jest-dom` matchers
+  and post-test cleanup.
+  **A real environment bug found and fixed along the way**: Node 20+'s
+  own experimental global `localStorage` (a no-op without a
+  `--localstorage-file` CLI flag) shadows jsdom's working implementation,
+  because vitest's jsdom environment setup only overrides global keys not
+  already present on Node's own global, and `localStorage` isn't in its
+  fixed override list. `reactTestSetup.js` force-assigns jsdom's real
+  instance (exposed as `globalThis.jsdom.window.localStorage` by vitest's
+  environment setup) onto `globalThis.localStorage` so
+  `src/persistence/scenarioStorage.js`'s calls work correctly in tests -
+  otherwise every persistence test would have silently failed.
+  Test files: `App.mutualExclusionAndUpfront.test.jsx` (9 - FHB/Investment
+  Property/Foreign Purchaser exclusion history from TODO-38/44, LMI
+  checkbox LVR gating, Property Price/Deposit/Loan Amount invariants),
+  `App.propertyTypeAndGating.test.jsx` (6 - house/unit Strata seeding,
+  Investment Property gating Land Tax/Property Management, Property
+  Summary visibility from TODO-42, independent show* toggles),
+  `App.incomeSources.test.jsx` (11 - the House Rent/Room Rent category
+  split from TODO-56, schedule defaults, validation, add/remove),
+  `App.expensesAndContributions.test.jsx` (16 - Exceptional/Other
+  Expenses validation and add/remove, Offset Contributions' duplicate-
+  one-time-month guard, a representative `SteppedExpenseField` "Schedule
+  a change" test), `App.collapsiblePanels.test.jsx` (12 - every `show*`
+  toggle plus the `showPersonalExpenses` all-four-at-once gate),
+  `App.persistence.test.jsx` (7 - save/load/clear round-trips, save
+  failure, schema-version discard, saved-scenario-wins precedence).
+  **Corrected two wrong assumptions found only by actually reading the
+  code** (not just guessing from memory): `addOffsetContribution`'s
+  invalid-amount path has no `alert()` at all (silently no-ops, unlike
+  every other "Add" form) - adjusted that test accordingly instead of
+  asserting a non-existent alert; and `SteppedExpenseField`'s "Schedule a
+  change" mini-form has **no duplicate-month validation whatsoever**
+  (the plan's assumption it mirrored `hasDuplicateOneTimeMonth` was
+  wrong) - replaced with a real add/remove test of that component's
+  actual behavior instead.
+  Also worked around a genuine jsdom range-input quirk: setting a range
+  input's value clamps immediately against its *current* `min`/`max`
+  attributes, so testing an "inverted schedule" (Start Month > End Month)
+  requires lowering End Month *before* raising Start Month, not the
+  other order - raising Start first and then lowering End gets the End
+  value clamped back up instead of creating the inversion.
+  Verified: `npm test -- --run` (263/263, ~5.3s wall-clock vs. ~350ms for
+  the pure-function suite alone - the added integration-test weight
+  TODO-62 flagged as the real cost), `npm run lint` clean (no ESLint
+  config changes needed - existing tests already use explicit
+  `import {...} from 'vitest'` rather than relying on injected globals,
+  so the new files follow the same pattern), `npm run build` clean and
+  bundle size unaffected (test files aren't part of the production
+  entry point).
 
 ---
 
