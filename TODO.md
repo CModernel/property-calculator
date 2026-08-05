@@ -1026,6 +1026,62 @@ optionally reuse in the commit message when you implement it.
   advanced the Timeline Explorer and confirmed "House Rent Active: 1" and
   "• Whole House" appeared correctly in the Income Context column.
 
+- [x] **TODO-53 (Analysis only, no code): How should variable bank interest rates be modeled?**
+  Requested by the user - explicitly an analysis task. Findings:
+  **Data shape - correcting the TODO's own suggestion**: `interestRate`
+  is NOT a good fit for the recurring "Schedule" model
+  (`src/calculations/recurringAmount.js`, used by Income Sources/
+  Exceptional Expenses/Offset Contributions/Other Expenses) - that model
+  represents "does a cash event fire this month", which doesn't apply
+  here. Interest rate is instead exactly the same shape of thing the app
+  already has a purpose-built pattern for: **`useSteppedValue`/
+  `getSteppedValue`** (`src/hooks/useSteppedValue.js`/
+  `src/calculations/steppedValue.js`, TODO-19) - "the current permanent
+  value, superseded by later scheduled changes, no end date, no repeat
+  interval" - precisely how Strata/Utilities/Council/Insurance/
+  Maintenance/Water/Food/Transport already work. So: reuse
+  `useSteppedValue` for `interestRate` directly, with a `{startMonth,
+  amount}` (rate) changes list, resolved via `getSteppedValue` - **zero
+  new data-modeling work needed**, the exact mechanism already exists.
+  **The real design question - the repayment recalculation**: today
+  `monthlyPayment` is computed **once** outside the simulation loop
+  (`calculateMonthlyPayment(loanAmount, monthlyRate, totalMonths)`,
+  `src/App.jsx`) and passed into `offsetSimulation.js` as a constant used
+  for the entire loop (`principalPayment = monthlyPayment -
+  monthlyInterest`, `src/calculations/offsetSimulation.js:129-134`). A
+  real variable-rate mortgage does **not** just change the interest/
+  principal split at a fixed repayment - the lender recalculates the
+  repayment itself, to re-amortize the *remaining balance* over the
+  *remaining term* at the *new rate*, keeping the loan on track to finish
+  on schedule. Simply swapping in a new `monthlyRate` mid-loop while
+  keeping `monthlyPayment` fixed is materially wrong (and can even break
+  down entirely if a rate rise means the fixed old repayment no longer
+  covers the new interest).
+  **Recommended approach**: resolve the current rate every month inside
+  `offsetSimulation.js`'s loop via `getActiveAmount`-style
+  `getSteppedValue(interestRateField.base, interestRateField.changes,
+  months)`; detect when it differs from the previous month's resolved
+  rate; on a change, recompute `monthlyPayment =
+  calculateMonthlyPayment(balance, newMonthlyRate, maxMonths - months)`
+  using the loan's own existing formula (no new math needed) against the
+  *current remaining balance and remaining months*, then keep that new
+  repayment fixed until the next change. This moves `monthlyPayment`'s
+  computation from "once, outside the loop" to "recomputed on rate-change
+  months, inside the loop" - a real structural change to
+  `offsetSimulation.js`, but one that reuses 100% existing functions.
+  **Secondary scoping decisions**: the static "month 1" summary cards
+  (Repayments, Interest Amount) should resolve the rate the same way
+  every other stepped field already does
+  (`getSteppedValue(field.base, field.changes, 1)`); the "Savings vs no
+  offset" baseline (`calculateNoOffsetTotalInterest`) is recommended to
+  keep using a single fixed rate (the month-1 rate) for its entire
+  hypothetical no-offset run, as a deliberate simplification, since that
+  figure is already a rough illustrative comparison, not a real forecast.
+  **Conclusion: this is solvable with existing building blocks** (no new
+  pure functions needed beyond wiring `getSteppedValue` +
+  `calculateMonthlyPayment` differently) - captured as a concrete
+  follow-up, TODO-57.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -1164,16 +1220,6 @@ optionally reuse in the commit message when you implement it.
   personalized financial advice (see the existing disclaimer, TODO-25) -
   any output here would need to stay clearly illustrative/educational.
 
-- [ ] **TODO-53 (Analysis only, no code): How should variable bank interest rates be modeled?**
-  Requested by the user - explicitly an analysis task. `interestRate`
-  (`src/App.jsx`) is a single static value for the whole simulation today
-  - in reality NSW mortgage rates change over time (RBA cash rate moves).
-  Evaluate how best to let a rate change mid-simulation: reuse the
-  existing Schedule model (`src/calculations/recurringAmount.js`) with a
-  list of `{startMonth, rate}` changes similar to `useSteppedValue`'s
-  "Schedule a change" pattern (TODO-19), or something else - report a
-  recommended approach, don't implement yet.
-
 - [ ] **TODO-54: "Realistic Mode" - model income tax on salary**
   Requested by the user, who flagged this as a **hard task with priority
   still to be decided**. Would need: accepting either gross or net weekly
@@ -1272,4 +1318,36 @@ optionally reuse in the commit message when you implement it.
   $389,547, and Remaining Savings flipping to a negative $39,547 with the
   existing over-committed-savings warning; confirmed First Home Buyer
   stayed checked throughout with zero interaction, exactly as designed.
+
+- [ ] **TODO-57: Implement scheduled/variable interest rate changes**
+  Follow-up from TODO-53's analysis (done) - a concrete, buildable design
+  rather than an open question. Replace the single static `interestRate`
+  state (`src/App.jsx`) with `useSteppedValue(config.interestRate)` (the
+  exact same hook already used for Strata/Utilities/Council/Insurance/
+  Maintenance/Water/Food/Transport, TODO-19) - a "Schedule a rate change"
+  add-form identical to those fields' UI, likely reusing
+  `SteppedExpenseField` directly with `suffix="% p.a."`.
+  The real work is in `src/calculations/offsetSimulation.js`: inside the
+  loop, resolve the current annual rate every month via
+  `getSteppedValue(interestRateField.base, interestRateField.changes,
+  months)`; when it differs from the previous month's resolved rate,
+  **recompute** `monthlyPayment = calculateMonthlyPayment(balance,
+  calculateMonthlyRate(newRate), maxMonths - months)` - re-amortizing the
+  *remaining* balance over the *remaining* term at the *new* rate, matching
+  how real variable-rate mortgages actually work (not just swapping the
+  interest/principal split at a fixed old repayment, which is materially
+  wrong and can even fail to cover interest on a rate rise). Both
+  `calculateMonthlyPayment` and `getSteppedValue` already exist and need
+  no changes themselves - this is a wiring/structural change, moving
+  `monthlyPayment`'s computation from "once, outside the loop" to
+  "recomputed on rate-change months, inside the loop".
+  Static "month 1" summary figures (Repayments, Interest Amount) should
+  resolve the rate via `getSteppedValue(field.base, field.changes, 1)`,
+  same convention as every other stepped field. `calculateNoOffsetTotalInterest`
+  (the "Savings vs no offset" baseline) should keep using a single fixed
+  rate (the month-1 rate) for its whole hypothetical run - a deliberate,
+  documented simplification, since that figure is already an illustrative
+  comparison rather than a real forecast. Needs a `SCHEMA_VERSION` bump
+  (the saved shape changes from a flat `interestRate` number to a
+  `{base, changes}` pair, same pattern as the other stepped-field bumps).
   
