@@ -1261,22 +1261,40 @@ optionally reuse in the commit message when you implement it.
   `npm run lint`, and `npm run build` all clean - no calculation logic
   was touched, this was UI-only.
 
+- [x] **TODO-40: Simplify/clarify the "Upfront Costs (NSW)" results panel**
+  Requested by the user - the panel (Stamp Duty, LMI, Closing Costs, Total
+  Cash Required, Available Savings, Remaining Savings) read as unclear to
+  a first-time user. Added three `InfoTooltip` (`src/components/
+  InfoTooltip.jsx`, the generic tooltip introduced in TODO-60) instances
+  to `src/App.jsx`'s Upfront Costs (NSW) panel, each answering exactly
+  the question the TODO raised:
+  - **LMI row**: explains what Lenders Mortgage Insurance is, that it
+    only applies above 80% LVR (why it so often shows $0), and that it's
+    financed into the loan by default unless "Pay LMI upfront in cash" is
+    checked.
+  - **Total Cash Required row**: spells out exactly what it sums -
+    Deposit + Stamp Duty + Closing Costs, plus Foreign Purchaser
+    Surcharge and/or LMI when they apply - and clarifies it's the cash
+    needed on settlement day, separate from the loan and from ongoing
+    income/expenses.
+  - **Remaining Savings row**: explains its relationship to Available
+    Savings - `Available Savings − Total Cash Required − one-time Offset
+    Contributions` (recurring contributions excluded, since those draw on
+    future income, not savings sitting in the bank today) - and
+    distinguishes it from the ongoing monthly surplus shown in
+    🎯 TO OFFSET.
+  No layout restructuring needed beyond this - inline tooltips answered
+  every question TODO-40 raised without a bigger redesign.
+  Verified in the browser: hovered each of the three new `(?)` icons on
+  the $850k default scenario and confirmed the tooltip text matches the
+  underlying calculation (`calculateTotalCashRequired`/
+  `calculateCashRemaining`, `src/calculations/totalCashRequired.js`) in
+  each case. `npm test -- --run` (200/200), `npm run lint`, and `npm run
+  build` all clean - UI-only, no calculation changes.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
-
-- [ ] **TODO-40: Simplify/clarify the "Upfront Costs (NSW)" results panel**
-  Requested by the user - the panel (Stamp Duty, LMI, Closing Costs, Total
-  Cash Required, Available Savings, Remaining Savings) reads as unclear to
-  a first-time user: what LMI is and why it often shows $0 (LMI only
-  applies above 80% LVR - `src/calculations/lmi.js` - that threshold isn't
-  explained anywhere in the UI), what "Total Cash Required" actually sums
-  (deposit + stamp duty + closing costs, per TODO-11), and what "Remaining
-  Savings" means relative to "Available Savings" (`totalSavings -
-  totalCashRequired - totalScheduledOffset`, per TODO-12's double-counting
-  fix - also not explained in the UI). Needs a proper redesign pass (more
-  inline explanation text, tooltips, or a restructured layout), not just a
-  quick label tweak.
 
 - [ ] **TODO-47: Add dark mode (mobile + web)**
   Requested by the user. The entire app today is hardcoded to a light
@@ -1508,4 +1526,16 @@ optionally reuse in the commit message when you implement it.
   passing unchanged plus a browser check that every figure (stamp duty,
   FHB concession, foreign purchaser surcharge, closing costs defaults, all
   "NSW" UI text) is bit-for-bit identical before and after.
+
+- [ ] **TODO-61: Shorten the weekly→monthly `InfoTooltip` copy (TODO-60)**
+  Requested by the user right after seeing TODO-60's tooltips in the
+  browser. The shared `WEEKLY_TO_MONTHLY_TOOLTIP` constant
+  (`src/App.jsx`) currently has two paragraphs - the first explains the
+  52÷12 conversion, the second ("A flat ×4 would undercount...") adds
+  more detail but isn't needed; the first paragraph alone explains it
+  well enough. Trim `WEEKLY_TO_MONTHLY_TOOLTIP` down to just its first
+  `<p>`, dropping the second one entirely. Applies everywhere the
+  constant is used (Personal Expenses row, Monthly Income card header,
+  Timeline Explorer's Income Context header) automatically, since they
+  all reference the same shared constant.
 

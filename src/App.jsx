@@ -1856,6 +1856,10 @@ const PropertyInvestmentCalculator = () => {
                     <span className="text-gray-600">
                       LMI (estimate, {lvr.toFixed(1)}% LVR):
                       <LvrBadge lvr={lvr} />
+                      <InfoTooltip label="What is LMI, and why is it often $0?">
+                        <p>Lenders Mortgage Insurance (LMI) is a one-off premium lenders charge when your deposit is below 20% of the property price (LVR above 80%). It protects the lender, not you.</p>
+                        <p className="mt-2">Below 80% LVR, no LMI applies at all - that's why this often shows $0. When it does apply, it's added to (financed into) the loan by default; check "Pay LMI upfront in cash" above to pay it as cash instead.</p>
+                      </InfoTooltip>
                     </span>
                     <span className="font-semibold text-red-600">
                       {lmi > 0 ? `-$${Math.round(lmi).toLocaleString()}` : '$0'}
@@ -1870,7 +1874,13 @@ const PropertyInvestmentCalculator = () => {
                   </div>
                   <div className="border-t border-purple-200 pt-1 mt-1 font-bold">
                     <div className="flex justify-between">
-                      <span className="text-gray-700">Total Cash Required:</span>
+                      <span className="text-gray-700">
+                        Total Cash Required:
+                        <InfoTooltip label="What does Total Cash Required add up?">
+                          <p>Deposit + Stamp Duty + Closing Costs, plus the Foreign Purchaser Surcharge and/or LMI when they apply and you've chosen to pay LMI upfront.</p>
+                          <p className="mt-2">This is the cash you need ready on settlement day - separate from the loan itself, and separate from your ongoing monthly income/expenses.</p>
+                        </InfoTooltip>
+                      </span>
                       <span className="text-red-700">${Math.round(totalCashRequired).toLocaleString()}</span>
                     </div>
                   </div>
@@ -1886,7 +1896,13 @@ const PropertyInvestmentCalculator = () => {
                   </div>
                   <div className={`border-t pt-1 mt-1 font-bold ${getBalanceBgColor(cashRemaining)}`}>
                     <div className="flex justify-between">
-                      <span className="text-gray-700">Remaining Savings:</span>
+                      <span className="text-gray-700">
+                        Remaining Savings:
+                        <InfoTooltip label="How is Remaining Savings different from Available Savings?">
+                          <p>Available Savings − Total Cash Required − any one-time Offset Contributions you've already scheduled (recurring contributions aren't counted here, since they come out of future income, not savings sitting in the bank today).</p>
+                          <p className="mt-2">This is what's left in savings right after settlement - it doesn't include your ongoing monthly surplus (see 🎯 TO OFFSET below for that).</p>
+                        </InfoTooltip>
+                      </span>
                       <span className={getBalanceColor(cashRemaining)}>
                         {cashRemaining >= 0 ? '+' : '-'}${Math.abs(Math.round(cashRemaining)).toLocaleString()}
                       </span>
