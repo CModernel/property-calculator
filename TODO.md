@@ -1546,6 +1546,58 @@ optionally reuse in the commit message when you implement it.
   - purely additive to the scenario shape, no `SCHEMA_VERSION` bump
   needed (same precedent as TODO-45/59's other breakdown toggles).
 
+- [x] **TODO-58: Extract NSW-specific logic behind a `state` module boundary**
+  Follow-up from TODO-48's analysis (done). New
+  `src/calculations/states/nsw.js` exports `{ code: 'NSW', label: 'New
+  South Wales', calculateStampDuty, calculateForeignPurchaserSurcharge,
+  fhbSchemeName: 'First Home Buyer Assistance Scheme',
+  foreignPurchaserSurchargeRate: 0.08, defaultClosingCosts }` - moved
+  `stampDuty.js`'s three functions and `closingCosts.js`'s
+  `DEFAULT_CLOSING_COSTS` into it unchanged (old `stampDuty.js` deleted
+  entirely - nothing else stayed behind that would've made it a
+  meaningful file on its own; `closingCosts.js` keeps only the
+  state-agnostic `sumClosingCosts` utility). New
+  `src/calculations/states/index.js` registry (`STATES = { NSW: nsw }`,
+  `getStateModule(code)` - falls back to NSW for an unrecognised code
+  rather than throwing, since a config typo shouldn't crash the app).
+  Added `"state": "NSW"` to `config.default.json`; `src/App.jsx` reads it
+  via a plain `const stateModule = getStateModule(config.state ?? 'NSW')`
+  - **deliberately not a `useState`**, since there's no UI to switch
+  states yet, so it's effectively a fixed config-level setting like any
+  other default.
+  `App.jsx` swapped its direct `stampDuty.js` import for calls through
+  `stateModule.calculateStampDuty`/`calculateForeignPurchaserSurcharge`,
+  and every hardcoded "NSW" UI string now interpolates the module: the
+  title, both "Upfront Costs (NSW)" headings, the Foreign Purchaser
+  helper text and its surcharge line (both now also interpolate the
+  *rate* itself, `stateModule.foreignPurchaserSurchargeRate`, not just
+  the state code - a small improvement beyond the original plan, since
+  hardcoding "8%" right next to a variable rate would have been half a
+  fix). The First Home Buyer checkbox keeps its generic "First Home Buyer
+  (NSW stamp duty concession)" wording (a differently-named scheme
+  wouldn't fit naturally inlined there) and gained a new `InfoTooltip`
+  instead, naming the actual `fhbSchemeName` ("New South Wales's First
+  Home Buyer Assistance Scheme...") - placed as a sibling of the
+  `<label>`, not nested inside it, since nesting it would have pulled the
+  tooltip button's own `aria-label` into the checkbox's computed
+  accessible name (caught by the TODO-63 wiring tests immediately).
+  **Explicitly out of scope, confirmed unchanged**: `lmi.js` stays a
+  single shared module; Land Tax stays a flat editable figure; no second
+  state's real data was added - `README.md` gained a new "Adapting to
+  another Australian state" section (per the user's request) spelling
+  out exactly this: add a module under `states/`, register it, set
+  `config.state` - and explicitly documenting that LMI and Land Tax are
+  *not* part of this per-state boundary and why.
+  Verified: `npm test -- --run` (274/274 - 4 new tests in
+  `states/nsw.test.js` and `states/index.test.js`, replacing the deleted
+  `stampDuty.test.js`), `npm run lint`, `npm run build` all clean.
+  Confirmed in the browser every figure is bit-for-bit identical to
+  before the refactor on the $850k default scenario, including with
+  Foreign Purchaser checked (Stamp Duty -$9,797, Foreign Purchaser
+  Surcharge (8%) -$68,000, Total Cash Required $389,547, Remaining
+  Savings -$39,547 - matching TODO-43's original verification numbers
+  exactly), plus the new tooltip rendering correctly on hover.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -1701,33 +1753,6 @@ optionally reuse in the commit message when you implement it.
   (the saved shape changes from a flat `interestRate` number to a
   `{base, changes}` pair, same pattern as the other stepped-field bumps).
 
-- [ ] **TODO-58: Extract NSW-specific logic behind a `state` module boundary**
-  Follow-up from TODO-48's analysis (done) - the behavior-preserving half
-  of that design, buildable now without needing a second state's actual
-  tax data. Create `src/calculations/states/nsw.js` exporting
-  `{ code: 'NSW', label: 'New South Wales', calculateStampDuty,
-  calculateForeignPurchaserSurcharge, fhbSchemeName: 'First Home Buyer
-  Assistance Scheme', foreignPurchaserSurchargeRate: 0.08,
-  defaultClosingCosts }` - moving today's `stampDuty.js` functions and
-  `closingCosts.js`'s `DEFAULT_CLOSING_COSTS` into it unchanged, plus a
-  `src/calculations/states/index.js` registry (`STATES = { NSW: nswModule
-  }`, `getStateModule(code)`). Add a new `state` config field defaulting
-  to `'NSW'` (`config.default.json`, existing saved scenarios need no
-  migration since the default covers them). `src/App.jsx` swaps its
-  direct `stampDuty.js`/`closingCosts.js` imports for calls through
-  `getStateModule(state)`, and the hardcoded "NSW" UI strings (title,
-  disclaimer, "First Home Buyer (NSW stamp duty concession)", the
-  Foreign Purchaser helper text, both "Upfront Costs (NSW)" headings)
-  interpolate the selected module's `label`/`fhbSchemeName` instead.
-  **Explicitly out of scope**: `lmi.js` stays a single shared module (per
-  TODO-48's finding that LMI isn't actually state-specific); Land Tax
-  stays a flat editable figure (no per-state bracket logic added); and no
-  second state's real tax data gets added in this pass - this TODO only
-  proves the boundary works by migrating NSW's own existing logic through
-  it with zero behavior change, verified by the full existing test suite
-  passing unchanged plus a browser check that every figure (stamp duty,
-  FHB concession, foreign purchaser surcharge, closing costs defaults, all
-  "NSW" UI text) is bit-for-bit identical before and after.
 
 - [ ] **TODO-64: Turn Food/Transport into an addable list of Personal Expense items, with Phone/Internet as a default**
   Requested by the user. Today "Your Personal Expenses (Weekly)" only has

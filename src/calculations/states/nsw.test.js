@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { calculateStandardStampDuty, calculateStampDuty, calculateForeignPurchaserSurcharge } from './stampDuty';
+import nsw, { calculateStandardStampDuty, calculateStampDuty, calculateForeignPurchaserSurcharge } from './nsw';
+import { sumClosingCosts } from '../closingCosts';
 
 describe('calculateStandardStampDuty', () => {
   it('matches the reference example for a $900k purchase', () => {
@@ -65,5 +66,21 @@ describe('calculateForeignPurchaserSurcharge', () => {
 
   it('handles $0 property price', () => {
     expect(calculateForeignPurchaserSurcharge(0, true)).toBe(0);
+  });
+});
+
+describe('nsw state module shape (TODO-58)', () => {
+  it('exposes the fields every state module must have', () => {
+    expect(nsw.code).toBe('NSW');
+    expect(nsw.label).toBe('New South Wales');
+    expect(nsw.fhbSchemeName).toBe('First Home Buyer Assistance Scheme');
+    expect(nsw.foreignPurchaserSurchargeRate).toBe(0.08);
+    expect(nsw.calculateStampDuty).toBe(calculateStampDuty);
+    expect(nsw.calculateForeignPurchaserSurcharge).toBe(calculateForeignPurchaserSurcharge);
+  });
+
+  it('defaultClosingCosts sums to the documented NSW average of roughly $4,750', () => {
+    const total = sumClosingCosts(Object.values(nsw.defaultClosingCosts));
+    expect(total).toBe(4750);
   });
 });

@@ -134,6 +134,49 @@ per-key basis (you only need to include the keys you want to change). It's
 resolved at build time, so restart `npm run dev` (or re-run `npm run build`)
 after editing it for the new values to take effect.
 
+### Adapting to another Australian state
+
+Stamp duty, the First Home Buyer concession, and the foreign purchaser
+surcharge are all NSW-specific rules today, but they live behind a single
+module boundary (`src/calculations/states/`) rather than being hardcoded
+throughout the app - the calculator was built for NSW first, but the
+state-specific logic is meant to be swappable.
+
+To adapt it for a different state:
+
+1. Add a new module under `src/calculations/states/` (e.g. `vic.js`),
+   copying the shape of `nsw.js`:
+   ```js
+   const myState = {
+     code: 'VIC',                          // short label, used inline in the UI
+     label: 'Victoria',                    // full name
+     calculateStampDuty,                   // (propertyPrice, isFirstHomeBuyer) => number
+     calculateForeignPurchaserSurcharge,   // (propertyPrice, isForeignPurchaser) => number
+     fhbSchemeName: 'First Home Owner Grant', // whatever that state calls its scheme
+     foreignPurchaserSurchargeRate: 0.08,  // that state's surcharge rate
+     defaultClosingCosts: { conveyancing: 2000, /* ... */ }, // sensible starting figures
+   };
+   export default myState;
+   ```
+2. Register it in `src/calculations/states/index.js`'s `STATES` map.
+3. Set `"state": "VIC"` in `config.default.json` or your own `config.local.json`.
+
+`App.jsx` reads the selected module via `getStateModule(config.state)` and
+uses its `calculateStampDuty`/`calculateForeignPurchaserSurcharge`
+functions and `code`/`label`/`fhbSchemeName` text everywhere the UI used to
+hardcode "NSW" - no other file needs to change. Two things are
+deliberately **not** part of this per-state boundary: **LMI**
+(`src/calculations/lmi.js`) is priced by lenders/mortgage insurers
+nationally, not by state government, so every state shares the same LMI
+module; and **Land Tax** is currently just a flat, user-editable figure
+with no per-state bracket/threshold calculation (each state's actual land
+tax regime differs significantly, so this would be a separate feature to
+add, not something the current module boundary already handles).
+
+There's currently no UI to switch states at runtime - `config.state` is a
+build-time setting, the same way every other default in
+`config.default.json`/`config.local.json` is.
+
 ### Build for Production
 
 ```bash

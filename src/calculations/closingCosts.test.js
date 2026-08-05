@@ -1,13 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_CLOSING_COSTS, sumClosingCosts } from './closingCosts';
+import { sumClosingCosts } from './closingCosts';
 
-describe('DEFAULT_CLOSING_COSTS', () => {
-  it('sums to the documented NSW average of roughly $4,750', () => {
-    const total = sumClosingCosts(Object.values(DEFAULT_CLOSING_COSTS));
-    expect(total).toBe(4750);
-  });
-});
-
+// NSW's own defaultClosingCosts summing to $4,750 is asserted in
+// src/calculations/states/nsw.test.js now (TODO-58).
 describe('sumClosingCosts', () => {
   it('adds a list of cost values', () => {
     expect(sumClosingCosts([2000, 700, 350])).toBe(3050);

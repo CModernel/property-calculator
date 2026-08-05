@@ -34,9 +34,9 @@ import {
 import { calculateLoanWithOffset } from './calculations/offsetSimulation';
 import { clampToRange } from './calculations/clampToRange';
 import { safePercentage } from './calculations/safePercentage';
-import { calculateStampDuty, calculateForeignPurchaserSurcharge } from './calculations/stampDuty';
 import { estimateLmi } from './calculations/lmi';
 import { sumClosingCosts } from './calculations/closingCosts';
+import { getStateModule } from './calculations/states';
 import { calculateTotalCashRequired, calculateCashRemaining } from './calculations/totalCashRequired';
 import { getSteppedValue } from './calculations/steppedValue';
 import { getActiveAmount, isScheduleActive, countOccurrencesUpTo, classifyScheduleStatus, formatScheduleLabel, MAX_MONTH } from './calculations/recurringAmount';
@@ -73,6 +73,12 @@ const WEEKLY_TO_MONTHLY_TOOLTIP = (
 );
 
 const PropertyInvestmentCalculator = () => {
+  // Not stateful (no useState) - there's no UI to switch states yet, so this
+  // is effectively a fixed config-level setting (TODO-58). Adding a state
+  // selector later would just mean making this a useState like everything
+  // else here.
+  const stateModule = getStateModule(config.state ?? 'NSW');
+
   const [propertyPrice, setPropertyPrice] = useState(config.propertyPrice);
   const [propertyType, setPropertyType] = useState(config.propertyType); // 'house' | 'unit'
   const [downPayment, setDownPayment] = useState(config.downPayment);
@@ -226,9 +232,10 @@ const PropertyInvestmentCalculator = () => {
   const totalMonths = loanTermYears * 12;
   const monthlyPayment = calculateMonthlyPayment(loanAmount, monthlyRate, totalMonths);
 
-  // Upfront costs of buying (NSW)
-  const stampDuty = calculateStampDuty(propertyPrice, isFirstHomeBuyer);
-  const foreignPurchaserSurcharge = calculateForeignPurchaserSurcharge(propertyPrice, isForeignPurchaser);
+  // Upfront costs of buying - stamp duty/surcharge are state-specific
+  // (src/calculations/states/), LMI isn't (see nsw.js's own comment on why).
+  const stampDuty = stateModule.calculateStampDuty(propertyPrice, isFirstHomeBuyer);
+  const foreignPurchaserSurcharge = stateModule.calculateForeignPurchaserSurcharge(propertyPrice, isForeignPurchaser);
   const lmi = estimateLmi(loanAmount, lvr);
   const closingCostsSubtotal = sumClosingCosts([
     conveyancing,
@@ -695,7 +702,7 @@ const PropertyInvestmentCalculator = () => {
       <div className="bg-white rounded-xl shadow-xl p-6 mb-6">
         <h1 className="text-3xl font-bold text-gray-800 mb-2 flex items-center gap-3">
           <Home className="text-blue-600" size={36} />
-          NSW Property Investment Cash Flow Calculator
+          {stateModule.code} Property Investment Cash Flow Calculator
         </h1>
         <p className="text-gray-600">How much is left after EVERYTHING? That goes to offset automatically.</p>
       </div>
@@ -773,8 +780,14 @@ const PropertyInvestmentCalculator = () => {
                     onChange={(e) => handleFirstHomeBuyerChange(e.target.checked)}
                     className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
                   />
-                  First Home Buyer (NSW stamp duty concession)
+                  First Home Buyer ({stateModule.code} stamp duty concession)
                 </label>
+                {/* Outside the <label> deliberately - nesting it inside would
+                    pull the tooltip button's own aria-label into the
+                    checkbox's computed accessible name. */}
+                <InfoTooltip label="What scheme is this?">
+                  <p>{stateModule.label}'s <strong>{stateModule.fhbSchemeName}</strong> - full exemption up to $800k, tapering off by $1M.</p>
+                </InfoTooltip>
                 {isInvestmentProperty && (
                   <p className="text-xs text-gray-500 mt-1">Not available for an investment property - the FHB concession requires occupying it.</p>
                 )}
@@ -810,7 +823,7 @@ const PropertyInvestmentCalculator = () => {
                   Foreign Purchaser
                 </label>
                 {isForeignPurchaser && (
-                  <p className="text-xs text-gray-500 mt-1">Adds the NSW 8% Surcharge Purchaser Duty on top of Stamp Duty.</p>
+                  <p className="text-xs text-gray-500 mt-1">Adds the {stateModule.code} {Math.round(stateModule.foreignPurchaserSurchargeRate * 100)}% Surcharge Purchaser Duty on top of Stamp Duty.</p>
                 )}
               </div>
 
@@ -928,11 +941,11 @@ const PropertyInvestmentCalculator = () => {
             </div>
           </div>
 
-          {/* Upfront Costs (NSW) */}
+          {/* Upfront Costs */}
           <div className="bg-white rounded-lg shadow-md p-5">
             <h2 className="text-xl font-bold text-gray-700 mb-4 flex items-center gap-2">
               <DollarSign size={24} className="text-purple-600" />
-              Upfront Costs (NSW)
+              Upfront Costs ({stateModule.code})
             </h2>
 
             <div className="space-y-4">
@@ -1859,7 +1872,7 @@ const PropertyInvestmentCalculator = () => {
 
               {/* Upfront Costs section */}
               <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
-                <h3 className="font-semibold text-gray-700 mb-2">🏛️ Upfront Costs (NSW)</h3>
+                <h3 className="font-semibold text-gray-700 mb-2">🏛️ Upfront Costs ({stateModule.code})</h3>
                 <div className="space-y-1">
                   <div className="flex justify-between">
                     <span className="text-gray-600">
@@ -1869,7 +1882,7 @@ const PropertyInvestmentCalculator = () => {
                   </div>
                   {isForeignPurchaser && (
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Foreign Purchaser Surcharge (8%):</span>
+                      <span className="text-gray-600">Foreign Purchaser Surcharge ({Math.round(stateModule.foreignPurchaserSurchargeRate * 100)}%):</span>
                       <span className="font-semibold text-red-600">-${Math.round(foreignPurchaserSurcharge).toLocaleString()}</span>
                     </div>
                   )}
