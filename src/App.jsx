@@ -1981,28 +1981,32 @@ const PropertyInvestmentCalculator = () => {
                 </div>
               </div>
 
-              {/* Property Summary section */}
-              <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                <h3 className="font-semibold text-gray-700 mb-2">📊 Property Summary</h3>
-                <div className="space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Total Property Monthly Expenses:</span>
-                    <span className="font-semibold text-red-600">-${Math.round(totalPropertyCost).toLocaleString()}/month</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Total Property Monthly Income:</span>
-                    <span className="font-semibold text-green-600">+${Math.round(monthlyRentalIncome).toLocaleString()}/month</span>
-                  </div>
-                  <div className="border-t border-gray-300 pt-1 mt-1 font-bold">
+              {/* Property Summary section - only meaningful when the property actually
+                  earns rental income; otherwise it's just expenses restated as a
+                  negative "balance" against nothing, which duplicates Monthly Expenses. */}
+              {monthlyRentalIncome > 0 && (
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <h3 className="font-semibold text-gray-700 mb-2">📊 Property Summary</h3>
+                  <div className="space-y-1">
                     <div className="flex justify-between">
-                      <span className="text-gray-700">Net Property Monthly Balance:</span>
-                      <span className={(monthlyRentalIncome - totalPropertyCost) >= 0 ? 'text-green-600' : 'text-red-600'}>
-                        {(monthlyRentalIncome - totalPropertyCost) >= 0 ? '+' : '-'}${Math.abs(Math.round(monthlyRentalIncome - totalPropertyCost)).toLocaleString()}/month
-                      </span>
+                      <span className="text-gray-600">Total Property Monthly Expenses:</span>
+                      <span className="font-semibold text-red-600">-${Math.round(totalPropertyCost).toLocaleString()}/month</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Total Property Monthly Income:</span>
+                      <span className="font-semibold text-green-600">+${Math.round(monthlyRentalIncome).toLocaleString()}/month</span>
+                    </div>
+                    <div className="border-t border-gray-300 pt-1 mt-1 font-bold">
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Net Property Monthly Balance:</span>
+                        <span className={(monthlyRentalIncome - totalPropertyCost) >= 0 ? 'text-green-600' : 'text-red-600'}>
+                          {(monthlyRentalIncome - totalPropertyCost) >= 0 ? '+' : '-'}${Math.abs(Math.round(monthlyRentalIncome - totalPropertyCost)).toLocaleString()}/month
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Total Summary section */}
               <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 mt-4">

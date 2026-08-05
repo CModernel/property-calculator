@@ -1082,6 +1082,90 @@ optionally reuse in the commit message when you implement it.
   `calculateMonthlyPayment` differently) - captured as a concrete
   follow-up, TODO-57.
 
+- [x] **TODO-48 (Analysis only, no code): Evaluate decoupling NSW-specific logic for other Australian states**
+  Requested by the user - explicitly an analysis task. Findings, after
+  reading every calculation module the original TODO flagged:
+  **Genuinely state-specific (belongs behind a state boundary)**:
+  `src/calculations/stampDuty.js` in full - `NSW_STAMP_DUTY_TIERS`, the
+  First Home Buyer Assistance Scheme's $800k/$1M taper, and the 8%
+  Foreign Purchaser Surcharge rate are all NSW law, and every other state
+  has its own tiers, its own FHB scheme (different name, different
+  thresholds), and its own surcharge-purchaser-duty rate. Also
+  state-specific: the *registration fees/searches* portion of
+  `src/calculations/closingCosts.js`'s `DEFAULT_CLOSING_COSTS` - these are
+  government land-registry fees that genuinely differ by state.
+  **Correction to the TODO's own framing - NOT actually state-specific**:
+  `src/calculations/lmi.js` was listed as NSW-specific in the original
+  TODO text, but LMI is priced by mortgage insurers/lenders operating
+  nationally, not by state government - the "(NSW, 2026)" in its comment
+  is misleading (an artifact of this app's origin, not a real dependency
+  on state law). LMI should stay a single shared module regardless of
+  which state is selected - it does **not** need to move behind the
+  state boundary at all.
+  **Land Tax**: also flagged as NSW-specific by the original TODO, but
+  since TODO-35 it's already just a flat, user-edited figure (no formula
+  computes it) - so there is nothing to decouple *today*. It only becomes
+  a real per-state concern if a future TODO adds actual land-tax
+  bracket/threshold calculations (out of scope here).
+  **Conveyancing/inspection fees** (the rest of `DEFAULT_CLOSING_COSTS`):
+  more like national market-rate averages that loosely vary by locality,
+  not strict per-state law - but since the whole object is just default
+  starting figures, the simplest design keeps it together with
+  registration fees in one per-state defaults object rather than
+  splitting the object in two.
+  **UI text**: the title ("NSW Property Investment Cash Flow Calculator"),
+  the disclaimer, "First Home Buyer (NSW stamp duty concession)", the
+  Foreign Purchaser helper text ("NSW 8% Surcharge Purchaser Duty"), and
+  both "Upfront Costs (NSW)" headings (`src/App.jsx`) all hardcode the
+  literal string "NSW" and would need to read from the selected state's
+  label/scheme name instead.
+  **Recommended design**: a `src/calculations/states/` folder, one module
+  per state (`nsw.js` first, matching today's exact behavior) exporting a
+  consistent shape - `{ code, label, calculateStampDuty,
+  calculateForeignPurchaserSurcharge, fhbSchemeName,
+  foreignPurchaserSurchargeRate, defaultClosingCosts }` - plus a
+  `states/index.js` registry (`STATES = { NSW: nswModule }`,
+  `getStateModule(code)`), selected via a new `state` config field
+  (defaulting to `'NSW'`, so existing saved scenarios need no migration).
+  `App.jsx` swaps its current direct imports from `stampDuty.js`/
+  `closingCosts.js` for calls through the selected module, and the
+  hardcoded "NSW" UI strings interpolate the module's `label`/
+  `fhbSchemeName` instead.
+  **Conclusion**: the *extraction* half (moving today's NSW logic behind
+  this module boundary, zero behavior change, fully covered by existing
+  tests) is concretely buildable now - captured as TODO-58. Actually
+  **adding** a second state's real tax data is a separate, much larger
+  effort requiring genuine per-state tax research, and is explicitly out
+  of scope for TODO-58.
+
+- [x] **TODO-42: Rethink "Property Summary" when there's no rental income**
+  Requested by the user - "Property Summary" (Total Property Monthly
+  Expenses / Income / Net Property Monthly Balance, `src/App.jsx`) always
+  showed a "Net Property Monthly Balance" even when `monthlyRentalIncome`
+  was $0 (no House Rent/Room Rent added), where the figure was just
+  "-(all property costs)" restated with a negative sign - not a
+  meaningful comparison, and redundant with the Monthly Expenses card
+  already shown above it. Design decision: the card is only meaningful
+  once there's an actual rental income to net property costs against, so
+  the whole "Property Summary" section (`src/App.jsx`) is now gated
+  behind `monthlyRentalIncome > 0` - the same conditional-render pattern
+  already used elsewhere (e.g. Land Tax/Property Management behind
+  `isInvestmentProperty`, TODO-35), except keyed on rental income
+  actually being present rather than the investment-property flag, since
+  a non-investment property can still have House/Room Rent income (e.g. a
+  first home buyer renting out a spare room), and that case should still
+  see the card.
+  Verified in the browser on the $850k default scenario: with no income
+  sources renamed to a rental category, "📊 Property Summary" does not
+  render at all (only "💳 Monthly Expenses" and "💰 Monthly Income" show);
+  after adding a "House Rent" income source at $500/week, "📊 Property
+  Summary" reappeared showing "Total Property Monthly Expenses: -$3,844",
+  "Total Property Monthly Income: +$2,167", "Net Property Monthly
+  Balance: -$1,677" - correct and consistent with the other cards' updated
+  figures. `npm test -- --run` (200/200), `npm run lint`, and `npm run
+  build` all stayed clean since this was a pure conditional-render change
+  with no calculation logic touched.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -1098,19 +1182,6 @@ optionally reuse in the commit message when you implement it.
   fix - also not explained in the UI). Needs a proper redesign pass (more
   inline explanation text, tooltips, or a restructured layout), not just a
   quick label tweak.
-
-- [ ] **TODO-42: Rethink "Property Summary" when there's no rental income**
-  Requested by the user - "Property Summary" (Total Property Monthly
-  Expenses / Income / Net Property Monthly Balance, `src/App.jsx`) always
-  shows a "Net Property Monthly Balance" even when `monthlyRentalIncome`
-  is $0 (no Tenants added - i.e. not actually being rented out), where the
-  figure is just "-(all property costs)" and doesn't read as a meaningful
-  comparison. Needs analysis of what this card is actually _for_: is it
-  meant only for a genuine investment scenario (in which case, hide/
-  relabel it when there's no rental income at all, similar to how Land
-  Tax/Property Management are already gated behind `isInvestmentProperty`
-  from TODO-35), or does it need reframing to also make sense for an
-  owner-occupier who isn't renting anything out at all?
 
 - [ ] **TODO-45: Persist expanded/collapsed panel state on Save**
   Requested by the user - today `handleSaveScenario` (`src/App.jsx`)
@@ -1142,20 +1213,6 @@ optionally reuse in the commit message when you implement it.
   `src/components/*.jsx`), plus a toggle (or `prefers-color-scheme`
   detection) and persisting the choice. Sizeable, mechanical effort given
   how many color classes exist across the app, not a quick add.
-
-- [ ] **TODO-48 (Analysis only, no code): Evaluate decoupling NSW-specific logic for other Australian states**
-  Requested by the user - explicitly an analysis task, not implementation.
-  The app is hardcoded to NSW today: `src/calculations/stampDuty.js`
-  (NSW transfer duty tiers + FHB Assistance Scheme), `src/calculations/lmi.js`,
-  `src/calculations/closingCosts.js` (NSW-average line items), the
-  "NSW Property Investment Cash Flow Calculator" title and disclaimer
-  (TODO-25), and now Land Tax (TODO-35, NSW-specific rates/thresholds
-  too, though currently just a flat editable figure). Evaluate whether
-  these can be cleanly encapsulated behind a "state" module boundary
-  (e.g. one stamp-duty/LMI/closing-costs module per state, selected via a
-  `state` config value) so supporting a second state later is a matter of
-  adding a module, not restructuring the app - report findings/a design,
-  don't implement.
 
 - [ ] **TODO-49: Let the user choose how much of the automatic surplus goes to Offset vs. Savings**
   Requested by the user. Today **100% of the monthly surplus automatically
@@ -1350,4 +1407,31 @@ optionally reuse in the commit message when you implement it.
   comparison rather than a real forecast. Needs a `SCHEMA_VERSION` bump
   (the saved shape changes from a flat `interestRate` number to a
   `{base, changes}` pair, same pattern as the other stepped-field bumps).
-  
+
+- [ ] **TODO-58: Extract NSW-specific logic behind a `state` module boundary**
+  Follow-up from TODO-48's analysis (done) - the behavior-preserving half
+  of that design, buildable now without needing a second state's actual
+  tax data. Create `src/calculations/states/nsw.js` exporting
+  `{ code: 'NSW', label: 'New South Wales', calculateStampDuty,
+  calculateForeignPurchaserSurcharge, fhbSchemeName: 'First Home Buyer
+  Assistance Scheme', foreignPurchaserSurchargeRate: 0.08,
+  defaultClosingCosts }` - moving today's `stampDuty.js` functions and
+  `closingCosts.js`'s `DEFAULT_CLOSING_COSTS` into it unchanged, plus a
+  `src/calculations/states/index.js` registry (`STATES = { NSW: nswModule
+  }`, `getStateModule(code)`). Add a new `state` config field defaulting
+  to `'NSW'` (`config.default.json`, existing saved scenarios need no
+  migration since the default covers them). `src/App.jsx` swaps its
+  direct `stampDuty.js`/`closingCosts.js` imports for calls through
+  `getStateModule(state)`, and the hardcoded "NSW" UI strings (title,
+  disclaimer, "First Home Buyer (NSW stamp duty concession)", the
+  Foreign Purchaser helper text, both "Upfront Costs (NSW)" headings)
+  interpolate the selected module's `label`/`fhbSchemeName` instead.
+  **Explicitly out of scope**: `lmi.js` stays a single shared module (per
+  TODO-48's finding that LMI isn't actually state-specific); Land Tax
+  stays a flat editable figure (no per-state bracket logic added); and no
+  second state's real tax data gets added in this pass - this TODO only
+  proves the boundary works by migrating NSW's own existing logic through
+  it with zero behavior change, verified by the full existing test suite
+  passing unchanged plus a browser check that every figure (stamp duty,
+  FHB concession, foreign purchaser surcharge, closing costs defaults, all
+  "NSW" UI text) is bit-for-bit identical before and after.
