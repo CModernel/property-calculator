@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { INCOME_CATEGORIES, INCOME_CATEGORY_DEFAULTS } from './incomeCategories';
+import { INCOME_CATEGORIES, INCOME_CATEGORY_DEFAULTS, RENTAL_INCOME_CATEGORIES } from './incomeCategories';
 import { MAX_MONTH } from './recurringAmount';
 
 describe('INCOME_CATEGORY_DEFAULTS', () => {
@@ -9,8 +9,9 @@ describe('INCOME_CATEGORY_DEFAULTS', () => {
     }
   });
 
-  it('never overrides House Rent or Other - they keep the form\'s own baseline', () => {
+  it('never overrides House Rent, Room Rent or Other - they keep the form\'s own baseline', () => {
     expect(INCOME_CATEGORY_DEFAULTS['House Rent']).toBeUndefined();
+    expect(INCOME_CATEGORY_DEFAULTS['Room Rent']).toBeUndefined();
     expect(INCOME_CATEGORY_DEFAULTS.Other).toBeUndefined();
   });
 
@@ -44,5 +45,14 @@ describe('INCOME_CATEGORY_DEFAULTS', () => {
 
   it('defaults Dividends to quarterly, the closest supported recurrence', () => {
     expect(INCOME_CATEGORY_DEFAULTS.Dividends).toEqual({ oneTime: false, recurrence: 'quarterly', endMonth: MAX_MONTH });
+  });
+});
+
+describe('RENTAL_INCOME_CATEGORIES', () => {
+  it('contains exactly House Rent and Room Rent, both valid categories', () => {
+    expect(RENTAL_INCOME_CATEGORIES).toEqual(['House Rent', 'Room Rent']);
+    for (const category of RENTAL_INCOME_CATEGORIES) {
+      expect(INCOME_CATEGORIES).toContain(category);
+    }
   });
 });

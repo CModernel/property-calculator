@@ -1,12 +1,15 @@
 import { MAX_MONTH } from './recurringAmount';
 
 // The categories offered by the Income Name picklist, in display order.
-// "House Rent" keeps its own dedicated Shared Room sub-form (see App.jsx) -
-// named this way rather than "Tenants" since it covers both a shared room
-// and the whole property let to one tenant, and "Tenants" read as
-// room-renters only (TODO-46). "Other" reveals a free-text name field -
-// neither needs a schedule default below beyond the form's own baseline
-// ("Monthly, Forever").
+// "House Rent" (TODO-56) is a plain flat weekly amount - the entire property
+// let to one tenant/family for one weekly figure, no shared/room fields at
+// all. "Room Rent" keeps the dedicated Shared Room sub-form (see App.jsx) -
+// renting out a single room, optionally split between multiple people. The
+// two used to be bundled into one "House Rent" category (TODO-46 renamed
+// "Tenants" to "House Rent" to cover both cases), split apart here since a
+// whole-property rental and a room rental are different concepts. "Other"
+// reveals a free-text name field - none of these three need a schedule
+// default below beyond the form's own baseline ("Monthly, Forever").
 export const INCOME_CATEGORIES = [
   'Salary/Wages',
   'Self-Employment',
@@ -22,13 +25,19 @@ export const INCOME_CATEGORIES = [
   'Tax Refund',
   'Gift',
   'House Rent',
+  'Room Rent',
   'Other',
 ];
 
+// Both categories count toward "Rental Income" (see weeklyRentalIncome/
+// weeklyIncome, src/App.jsx) - checked against `income.name`, which stores
+// the category verbatim for every category except 'Other'.
+export const RENTAL_INCOME_CATEGORIES = ['House Rent', 'Room Rent'];
+
 // Default Schedule applied when a category is picked in the Income Name
 // dropdown, so the form reflects how that income naturally recurs instead of
-// always defaulting the same way. Categories omitted here (House Rent,
-// Other) keep whatever the form's current Schedule fields already are.
+// always defaulting the same way. Categories omitted here (House Rent, Room
+// Rent, Other) keep whatever the form's current Schedule fields already are.
 // Dividends defaults to "quarterly" as the closest supported recurrence -
 // the model only has monthly/quarterly/yearly, no half-yearly.
 // Child Support deliberately has no `endMonth` - unlike every other

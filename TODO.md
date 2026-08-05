@@ -1292,6 +1292,61 @@ optionally reuse in the commit message when you implement it.
   each case. `npm test -- --run` (200/200), `npm run lint`, and `npm run
   build` all clean - UI-only, no calculation changes.
 
+- [x] **TODO-61: Shorten the weekly→monthly `InfoTooltip` copy (TODO-60)**
+  Requested by the user right after seeing TODO-60's tooltips in the
+  browser - the shared `WEEKLY_TO_MONTHLY_TOOLTIP` constant
+  (`src/App.jsx`) had two paragraphs, but the first alone explained the
+  52÷12 conversion well enough. Trimmed it down to just that first `<p>`,
+  dropping the second ("A flat ×4 would undercount...") entirely -
+  applies everywhere the constant is used (Personal Expenses row, Monthly
+  Income card header, Timeline Explorer's Income Context header)
+  automatically, since they all reference the same shared constant.
+  Verified in the browser: hovering the Monthly Income tooltip now shows
+  only the single shortened sentence. `npm test -- --run` (200/200),
+  `npm run lint`, and `npm run build` all clean.
+
+- [x] **TODO-56: Split "House Rent" into "House Rent" vs. "Room Rent"**
+  Requested by the user, a follow-up to TODO-46. "House Rent" is now a
+  plain flat-amount category (`src/App.jsx`'s Add Income form falls into
+  a dedicated "Weekly Rent" `NumberSliderField`, no shared/room fields at
+  all - same slider bounds the combined category used to have). New
+  **"Room Rent"** category (`INCOME_CATEGORIES`,
+  `src/calculations/incomeCategories.js`) keeps the exact Shared-room-or-
+  not + number-of-people + per-person-amount sub-form the old "House
+  Rent" had - `addIncomeSource`'s `isHouseRent` variable renamed to
+  `isRoomRent`, gated on `newIncomeCategory === 'Room Rent'` instead.
+  **The rental-identification fix**: the old `isShared !== undefined`
+  check (used to partition `weeklyIncome`/`weeklyRentalIncome`, and in
+  the Timeline Explorer) broke the moment House Rent could have zero
+  shared-room fields at all. Replaced with a new exported
+  `RENTAL_INCOME_CATEGORIES = ['House Rent', 'Room Rent']`
+  (`incomeCategories.js`) checked against `income.name` (which already
+  stores the category verbatim for every category except 'Other') -
+  correctly identifies both new categories, and since `name` was already
+  "House Rent" for every legacy entry regardless of old shared/whole-house
+  status, **old saved entries keep counting as rental income with zero
+  data loss** - no `SCHEMA_VERSION` bump needed, purely additive/behavioral.
+  Display-only fallout for old data: the old "Whole House" label (for a
+  non-shared legacy House Rent entry) is renamed to "Single Room"
+  everywhere it's shown (income list, Timeline Explorer's per-item label)
+  since "whole house" is now exclusively the separate flat category -
+  legacy entries with `isShared: false` will cosmetically show "Single
+  Room" post-split instead of "Whole House", with their amount/schedule
+  completely unaffected. Also renamed the Timeline Explorer's "House Rent
+  Active" figure to "Rental Active", since it now covers both categories.
+  Added `RENTAL_INCOME_CATEGORIES` test coverage
+  (`incomeCategories.test.js`) and extended the existing "never overrides
+  House Rent" defaults test to also cover Room Rent.
+  Verified in the browser: added a "House Rent" entry ($500/week, shows
+  as plain "House Rent" in the list, no shared checkbox) and a "Room
+  Rent" entry with Shared Room checked (2 people × $500, shows as "Shared
+  Room" / "Shared (2 × $500)" in the Timeline Explorer) - confirmed
+  Monthly Rental Income correctly summed both ($6,500/month), Property
+  Summary (TODO-42) reappeared correctly, and at Timeline month 25,
+  "Rental Active: 2" and the per-item log showed "• House Rent" and
+  "• Shared (2 × $500)" exactly as expected. `npm test -- --run`
+  (201/201), `npm run lint`, and `npm run build` all clean.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -1418,29 +1473,6 @@ optionally reuse in the commit message when you implement it.
   interest saved, so the feature shouldn't overstate the offset side in
   isolation.
 
-- [ ] **TODO-56: Consider splitting "House Rent" into "House Rent" vs. "Room Rent"**
-  Requested by the user, a follow-up to TODO-46 (which renamed "Tenants"
-  to "House Rent" specifically to capture the whole-property-rental
-  case). Tension now: the "House Rent" category's own sub-form still
-  shows a "Shared room? (multiple people splitting this room)" checkbox
-  and per-person split (`isShared`/`numPeople`/`amountPerPerson`,
-  `src/App.jsx`) - which is really a **room-renting** concept, not a
-  whole-house one. Proposed split: **"House Rent"** becomes a plain
-  flat-amount category (no shared/room fields at all - you rent the
-  entire property to one tenant/family for one weekly amount), while
-  **"Room Rent"** becomes its own category that keeps today's
-  Shared-room-or-not + number-of-people + per-person-amount sub-form.
-  Needs a design pass: this doubles the two categories currently
-  bundled into one (`'House Rent'` in `INCOME_CATEGORIES`,
-  `src/calculations/incomeCategories.js`) into two, each with their own
-  entry in the picklist and their own icon/color/list-label handling
-  (today's `isShared !== undefined` check that identifies "this is the
-  rental category" would need to become "is this Room Rent" specifically,
-  since a plain House Rent entry would have no `isShared` field at all -
-  worth deciding how the "Rental Income" subtotal partition
-  (`src/App.jsx`, `weeklyIncome`/`weeklyRentalIncome`) should then
-  identify BOTH categories as "rental", not just the one with
-  `isShared`).
 
 - [x] **TODO-43: Add NSW Foreign Purchaser Additional Duty Surcharge (8% extra)**
   Requested by the user, explicitly flagged as **not urgent**, with the
@@ -1527,15 +1559,4 @@ optionally reuse in the commit message when you implement it.
   FHB concession, foreign purchaser surcharge, closing costs defaults, all
   "NSW" UI text) is bit-for-bit identical before and after.
 
-- [ ] **TODO-61: Shorten the weekly→monthly `InfoTooltip` copy (TODO-60)**
-  Requested by the user right after seeing TODO-60's tooltips in the
-  browser. The shared `WEEKLY_TO_MONTHLY_TOOLTIP` constant
-  (`src/App.jsx`) currently has two paragraphs - the first explains the
-  52÷12 conversion, the second ("A flat ×4 would undercount...") adds
-  more detail but isn't needed; the first paragraph alone explains it
-  well enough. Trim `WEEKLY_TO_MONTHLY_TOOLTIP` down to just its first
-  `<p>`, dropping the second one entirely. Applies everywhere the
-  constant is used (Personal Expenses row, Monthly Income card header,
-  Timeline Explorer's Income Context header) automatically, since they
-  all reference the same shared constant.
 
