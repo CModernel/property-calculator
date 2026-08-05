@@ -39,6 +39,19 @@ describe('calculateTotalCashRequired', () => {
       })
     ).toBeCloseTo(274343.5, 5);
   });
+
+  it('adds the foreign purchaser surcharge when present, defaulting to 0 when omitted', () => {
+    expect(
+      calculateTotalCashRequired({
+        downPayment: 250000,
+        stampDuty: 19593.5,
+        foreignPurchaserSurcharge: 72000,
+        closingCostsSubtotal: 4750,
+        lmi: 0,
+        payLmiUpfront: false,
+      })
+    ).toBeCloseTo(274343.5 + 72000, 5);
+  });
 });
 
 describe('calculateCashRemaining', () => {

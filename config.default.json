@@ -25,6 +25,7 @@
   "newIncomeAmount": 500,
   "newOtherExpenseAmount": 20,
   "isFirstHomeBuyer": true,
+  "isForeignPurchaser": false,
   "totalSavings": 350000,
   "conveyancing": 2000,
   "buildingInspection": 700,

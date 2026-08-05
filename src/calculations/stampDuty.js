@@ -26,3 +26,15 @@ export function calculateStampDuty(propertyPrice, isFirstHomeBuyer) {
   const dutyAt1M = calculateStandardStampDuty(1000000);
   return (dutyAt1M * (propertyPrice - 800000)) / 200000;
 }
+
+// NSW Surcharge Purchaser Duty: an extra 8% for foreign persons buying
+// residential property, on top of the standard/FHB-concession duty above.
+// A flat-rate approximation - independent of isFirstHomeBuyer/
+// isInvestmentProperty, since foreign-purchaser status depends on
+// residency/citizenship, not occupancy intent. Real-world double-tax-
+// agreement exemptions for specific countries are not modeled.
+const FOREIGN_PURCHASER_SURCHARGE_RATE = 0.08;
+
+export function calculateForeignPurchaserSurcharge(propertyPrice, isForeignPurchaser) {
+  return isForeignPurchaser ? propertyPrice * FOREIGN_PURCHASER_SURCHARGE_RATE : 0;
+}

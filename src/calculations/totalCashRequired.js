@@ -1,8 +1,10 @@
 // LMI is normally capitalised into the loan rather than paid in cash, so it
 // only counts toward the cash figure when the user explicitly opts to pay it
 // upfront (payLmiUpfront).
-export function calculateTotalCashRequired({ downPayment, stampDuty, closingCostsSubtotal, lmi, payLmiUpfront }) {
-  return downPayment + stampDuty + closingCostsSubtotal + (payLmiUpfront ? lmi : 0);
+export function calculateTotalCashRequired({
+  downPayment, stampDuty, foreignPurchaserSurcharge = 0, closingCostsSubtotal, lmi, payLmiUpfront,
+}) {
+  return downPayment + stampDuty + foreignPurchaserSurcharge + closingCostsSubtotal + (payLmiUpfront ? lmi : 0);
 }
 
 // Scheduled offset contributions draw from the same savings pool as the

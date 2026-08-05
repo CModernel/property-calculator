@@ -1224,23 +1224,52 @@ optionally reuse in the commit message when you implement it.
   interest saved, so the feature shouldn't overstate the offset side in
   isolation.
 
----
+- [ ] **TODO-56: Consider splitting "House Rent" into "House Rent" vs. "Room Rent"**
+  Requested by the user, a follow-up to TODO-46 (which renamed "Tenants"
+  to "House Rent" specifically to capture the whole-property-rental
+  case). Tension now: the "House Rent" category's own sub-form still
+  shows a "Shared room? (multiple people splitting this room)" checkbox
+  and per-person split (`isShared`/`numPeople`/`amountPerPerson`,
+  `src/App.jsx`) - which is really a **room-renting** concept, not a
+  whole-house one. Proposed split: **"House Rent"** becomes a plain
+  flat-amount category (no shared/room fields at all - you rent the
+  entire property to one tenant/family for one weekly amount), while
+  **"Room Rent"** becomes its own category that keeps today's
+  Shared-room-or-not + number-of-people + per-person-amount sub-form.
+  Needs a design pass: this doubles the two categories currently
+  bundled into one (`'House Rent'` in `INCOME_CATEGORIES`,
+  `src/calculations/incomeCategories.js`) into two, each with their own
+  entry in the picklist and their own icon/color/list-label handling
+  (today's `isShared !== undefined` check that identifies "this is the
+  rental category" would need to become "is this Room Rent" specifically,
+  since a plain House Rent entry would have no `isShared` field at all -
+  worth deciding how the "Rental Income" subtotal partition
+  (`src/App.jsx`, `weeklyIncome`/`weeklyRentalIncome`) should then
+  identify BOTH categories as "rental", not just the one with
+  `isShared`).
 
-## 🟢 LOW PRIORITY (Polish, refactoring, cleanup)
-
-- [ ] **TODO-43: Add NSW Foreign Purchaser Additional Duty Surcharge (8% extra)**
-  Requested by the user, explicitly flagged as **not urgent**. NSW charges
-  foreign persons an extra 8% surcharge purchaser duty on residential
-  property, on top of the standard transfer duty tiers
-  (`src/calculations/stampDuty.js`) - a completely different axis from
-  `isFirstHomeBuyer`/`isInvestmentProperty` (it depends on residency/
-  citizenship status, not on occupancy intent or investment status - a
-  foreign buyer could be either a first home buyer or an investor
-  overseas, or neither). Would need a new `isForeignPurchaser` flag
-  (independent of the other two) and a new surcharge calculation added on
-  top of `calculateStampDuty`'s result, plus a UI checkbox somewhere in
-  "Purchase Details" or "Upfront Costs (NSW)". Not implemented yet -
-  needs its own pass to confirm the exact current surcharge rate and any
-  exemptions (e.g. some countries have double-tax-agreement exemptions)
-  before coding it up.
+- [x] **TODO-43: Add NSW Foreign Purchaser Additional Duty Surcharge (8% extra)**
+  Requested by the user, explicitly flagged as **not urgent**, with the
+  8% rate confirmed by the user directly. Added
+  `calculateForeignPurchaserSurcharge(propertyPrice, isForeignPurchaser)`
+  (`src/calculations/stampDuty.js`) - a flat 8% of property price, kept
+  deliberately simple: real-world double-tax-agreement exemptions for
+  specific countries are **not** modeled, only a flat approximation.
+  New `isForeignPurchaser` state (`src/App.jsx`) is fully **independent**
+  of `isFirstHomeBuyer`/`isInvestmentProperty` - no mutual-exclusion logic
+  added, since foreign-purchaser status depends on residency/citizenship,
+  a genuinely different axis (a foreign buyer could be a first home buyer,
+  an investor, or neither). New checkbox in "Purchase Details" (after
+  Investment Property); `calculateTotalCashRequired`
+  (`src/calculations/totalCashRequired.js`) gained an optional
+  `foreignPurchaserSurcharge = 0` parameter so existing call sites/tests
+  needed no changes; the Upfront Costs (NSW) results panel shows a new
+  "Foreign Purchaser Surcharge (8%)" line, conditionally rendered only
+  when checked, right below Stamp Duty.
+  Verified in the browser: checked Foreign Purchaser on the $850k default
+  purchase and confirmed "Foreign Purchaser Surcharge (8%): -$68,000"
+  (exactly 8% of $850,000), Total Cash Required rising from $321,547 to
+  $389,547, and Remaining Savings flipping to a negative $39,547 with the
+  existing over-committed-savings warning; confirmed First Home Buyer
+  stayed checked throughout with zero interaction, exactly as designed.
   

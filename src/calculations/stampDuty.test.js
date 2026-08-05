@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateStandardStampDuty, calculateStampDuty } from './stampDuty';
+import { calculateStandardStampDuty, calculateStampDuty, calculateForeignPurchaserSurcharge } from './stampDuty';
 
 describe('calculateStandardStampDuty', () => {
   it('matches the reference example for a $900k purchase', () => {
@@ -51,5 +51,19 @@ describe('calculateStampDuty (First Home Buyer)', () => {
   it('charges standard duty regardless of price when not a first home buyer', () => {
     expect(calculateStampDuty(900000, false)).toBeCloseTo(calculateStandardStampDuty(900000), 5);
     expect(calculateStampDuty(500000, false)).toBeCloseTo(calculateStandardStampDuty(500000), 5);
+  });
+});
+
+describe('calculateForeignPurchaserSurcharge', () => {
+  it('is 0 when not a foreign purchaser', () => {
+    expect(calculateForeignPurchaserSurcharge(900000, false)).toBe(0);
+  });
+
+  it('charges 8% of the property price for a foreign purchaser', () => {
+    expect(calculateForeignPurchaserSurcharge(900000, true)).toBeCloseTo(72000, 5);
+  });
+
+  it('handles $0 property price', () => {
+    expect(calculateForeignPurchaserSurcharge(0, true)).toBe(0);
   });
 });

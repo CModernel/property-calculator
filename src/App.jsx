@@ -31,7 +31,7 @@ import {
 import { calculateLoanWithOffset } from './calculations/offsetSimulation';
 import { clampToRange } from './calculations/clampToRange';
 import { safePercentage } from './calculations/safePercentage';
-import { calculateStampDuty } from './calculations/stampDuty';
+import { calculateStampDuty, calculateForeignPurchaserSurcharge } from './calculations/stampDuty';
 import { estimateLmi } from './calculations/lmi';
 import { sumClosingCosts } from './calculations/closingCosts';
 import { calculateTotalCashRequired, calculateCashRemaining } from './calculations/totalCashRequired';
@@ -92,6 +92,10 @@ const PropertyInvestmentCalculator = () => {
 
   // Upfront purchase costs (NSW)
   const [isFirstHomeBuyer, setIsFirstHomeBuyer] = useState(config.isFirstHomeBuyer);
+  // Independent of isFirstHomeBuyer/isInvestmentProperty - foreign-purchaser
+  // status depends on residency/citizenship, not occupancy intent or
+  // investment status, so no mutual-exclusion logic applies here.
+  const [isForeignPurchaser, setIsForeignPurchaser] = useState(config.isForeignPurchaser ?? false);
   const [totalSavings, setTotalSavings] = useState(config.totalSavings);
   const [payLmiUpfront, setPayLmiUpfront] = useState(false);
   const [showClosingCostsBreakdown, setShowClosingCostsBreakdown] = useState(false);
@@ -202,6 +206,7 @@ const PropertyInvestmentCalculator = () => {
 
   // Upfront costs of buying (NSW)
   const stampDuty = calculateStampDuty(propertyPrice, isFirstHomeBuyer);
+  const foreignPurchaserSurcharge = calculateForeignPurchaserSurcharge(propertyPrice, isForeignPurchaser);
   const lmi = estimateLmi(loanAmount, lvr);
   const closingCostsSubtotal = sumClosingCosts([
     conveyancing,
@@ -217,6 +222,7 @@ const PropertyInvestmentCalculator = () => {
   const totalCashRequired = calculateTotalCashRequired({
     downPayment,
     stampDuty,
+    foreignPurchaserSurcharge,
     closingCostsSubtotal,
     lmi,
     payLmiUpfront,
@@ -445,7 +451,7 @@ const PropertyInvestmentCalculator = () => {
       isInvestmentProperty,
       landTax: landTaxField.base, landTaxChanges: landTaxField.changes,
       propertyManagement: propertyManagementField.base, propertyManagementChanges: propertyManagementField.changes,
-      isFirstHomeBuyer, totalSavings, payLmiUpfront,
+      isFirstHomeBuyer, isForeignPurchaser, totalSavings, payLmiUpfront,
       conveyancing, buildingInspection, pestInspection, registrationFees, searches,
       loanEstablishmentFee, propertyValuation, homeInsurance, rateAdjustments,
       incomeSources,
@@ -764,6 +770,21 @@ const PropertyInvestmentCalculator = () => {
                 )}
                 {isFirstHomeBuyer && (
                   <p className="text-xs text-gray-500 mt-1">Not available for a first home buyer - occupying the property and investing in it are mutually exclusive.</p>
+                )}
+              </div>
+
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={isForeignPurchaser}
+                    onChange={(e) => setIsForeignPurchaser(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  Foreign Purchaser
+                </label>
+                {isForeignPurchaser && (
+                  <p className="text-xs text-gray-500 mt-1">Adds the NSW 8% Surcharge Purchaser Duty on top of Stamp Duty.</p>
                 )}
               </div>
 
@@ -1807,6 +1828,12 @@ const PropertyInvestmentCalculator = () => {
                     </span>
                     <span className="font-semibold text-red-600">-${Math.round(stampDuty).toLocaleString()}</span>
                   </div>
+                  {isForeignPurchaser && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Foreign Purchaser Surcharge (8%):</span>
+                      <span className="font-semibold text-red-600">-${Math.round(foreignPurchaserSurcharge).toLocaleString()}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-gray-600">
                       LMI (estimate, {lvr.toFixed(1)}% LVR):
