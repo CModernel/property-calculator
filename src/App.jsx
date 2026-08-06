@@ -30,6 +30,7 @@ import {
   calculateTotalScheduledOffset,
 } from './calculations/loan';
 import { calculateLoanWithOffset } from './calculations/offsetSimulation';
+import { calculateOffsetTimingBenefit, calculateCardCashback } from './calculations/creditCardBenefit';
 import { clampToRange } from './calculations/clampToRange';
 import { safePercentage } from './calculations/safePercentage';
 import { estimateLmi } from './calculations/lmi';
@@ -144,6 +145,15 @@ const PropertyInvestmentCalculator = () => {
   // 0 (the default) preserves the original "savings never earns anything"
   // behavior exactly.
   const [savingsInterestRate, setSavingsInterestRate] = useState(config.savingsInterestRate ?? 0);
+  // TODO-55: a static "right now" estimate (offset-timing benefit +
+  // cashback), deliberately NOT wired into the simulation - see
+  // src/calculations/creditCardBenefit.js. Off by default (useCreditCard),
+  // so it costs nothing for anyone who doesn't opt in.
+  const [useCreditCard, setUseCreditCard] = useState(config.useCreditCard ?? false);
+  const [monthlyCardSpend, setMonthlyCardSpend] = useState(config.monthlyCardSpend ?? 1000);
+  const [avgExtraDaysHeld, setAvgExtraDaysHeld] = useState(config.avgExtraDaysHeld ?? 27);
+  const [cashbackPct, setCashbackPct] = useState(config.cashbackPct ?? 0);
+  const [annualCardFee, setAnnualCardFee] = useState(config.annualCardFee ?? 0);
   // TODO-70: optional - 0 means "not provided", which hides the Mortgage-Free
   // Age indicator entirely rather than forcing anyone to disclose their age.
   const [currentAge, setCurrentAge] = useState(config.currentAge ?? 30);
@@ -266,6 +276,15 @@ const PropertyInvestmentCalculator = () => {
   const monthlyRate = calculateMonthlyRate(interestRate);
   const totalMonths = loanTermYears * 12;
   const monthlyPayment = calculateMonthlyPayment(loanAmount, monthlyRate, totalMonths);
+
+  // TODO-55: a static, non-simulation estimate of the benefit from using a
+  // credit card (paid off in full every month) instead of debit for
+  // eligible spending - reuses the loan's own interestRate rather than a
+  // separate rate input, since the money in question is money that would
+  // otherwise leave the offset immediately.
+  const offsetTimingBenefit = calculateOffsetTimingBenefit(monthlyCardSpend, avgExtraDaysHeld, interestRate);
+  const cardCashback = calculateCardCashback(monthlyCardSpend, cashbackPct, annualCardFee);
+  const creditCardNetBenefit = offsetTimingBenefit + cardCashback;
 
   // Upfront costs of buying - stamp duty/surcharge are state-specific
   // (src/calculations/states/), LMI isn't (see nsw.js's own comment on why).
@@ -566,6 +585,7 @@ const PropertyInvestmentCalculator = () => {
       propertyManagement: propertyManagementField.base, propertyManagementChanges: propertyManagementField.changes,
       miscPropertyExpense: miscPropertyExpenseField.base, miscPropertyExpenseChanges: miscPropertyExpenseField.changes,
       isFirstHomeBuyer, isForeignPurchaser, totalSavings, offsetAllocationPct, savingsInterestRate, currentAge, showMortgageFreeAge, payLmiUpfront,
+      useCreditCard, monthlyCardSpend, avgExtraDaysHeld, cashbackPct, annualCardFee,
       conveyancing, buildingInspection, pestInspection, registrationFees, searches,
       loanEstablishmentFee, propertyValuation, homeInsurance, rateAdjustments, miscUpfrontCost,
       incomeSources,
@@ -993,6 +1013,94 @@ const PropertyInvestmentCalculator = () => {
               >
                 Annual interest earned on your savings balance (seeded from Remaining Savings, plus whatever isn't sent to the offset each month). 0% (default) means no interest is modeled.
               </NumberSliderField>
+
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+                  <input
+                    type="checkbox"
+                    checked={useCreditCard}
+                    onChange={(e) => setUseCreditCard(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-blue-500"
+                  />
+                  Model credit card usage
+                  <InfoTooltip label="How does the credit card benefit work?">
+                    <p>Paying eligible expenses by credit card instead of debit, and clearing the balance in full every month, lets that money sit in your offset a little longer before it's swept out to pay the statement - plus you may earn cashback or rewards.</p>
+                    <p className="mt-2">Assumes you never carry a balance or pay interest/late fees. Keep any expense where your bank charges a fee for <em>not</em> using debit off this - that fee can erase the whole benefit.</p>
+                  </InfoTooltip>
+                </label>
+                {!useCreditCard && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Estimates the small extra benefit of paying eligible expenses by credit card and clearing the balance in full every month.</p>
+                )}
+              </div>
+
+              {useCreditCard && (
+                <>
+                  <NumberSliderField
+                    label="Monthly Card Spend"
+                    value={monthlyCardSpend}
+                    onChange={setMonthlyCardSpend}
+                    min={0}
+                    max={10000}
+                    sliderMin={0}
+                    sliderMax={5000}
+                    step={50}
+                    color="blue"
+                    prefix="$"
+                  >
+                    Eligible expenses (paid off in full every month) that you'd move from debit to credit card.
+                  </NumberSliderField>
+
+                  <NumberSliderField
+                    label="Average Days Payment Delayed"
+                    value={avgExtraDaysHeld}
+                    onChange={setAvgExtraDaysHeld}
+                    min={0}
+                    max={60}
+                    sliderMin={0}
+                    sliderMax={45}
+                    step={1}
+                    color="blue"
+                    suffix=" days"
+                  >
+                    How much longer, on average, this money sits in your offset compared to paying by debit immediately - well under your card's advertised "interest-free days" (e.g. 55), since you spend throughout the month, not all on day one. 27 is a reasonable default.
+                  </NumberSliderField>
+
+                  <NumberSliderField
+                    label="Cashback / Rewards Rate"
+                    value={cashbackPct}
+                    onChange={setCashbackPct}
+                    min={0}
+                    max={5}
+                    sliderMin={0}
+                    sliderMax={2}
+                    step={0.1}
+                    color="blue"
+                    suffix="%"
+                  />
+
+                  <NumberSliderField
+                    label="Annual Card Fee"
+                    value={annualCardFee}
+                    onChange={setAnnualCardFee}
+                    min={0}
+                    max={1000}
+                    sliderMin={0}
+                    sliderMax={500}
+                    step={5}
+                    color="blue"
+                    prefix="$"
+                  />
+
+                  <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-sm">
+                    <p className="text-gray-700 dark:text-gray-200">
+                      💳 Estimated annual benefit: <span className="font-bold">{creditCardNetBenefit >= 0 ? '+' : '-'}${Math.abs(Math.round(creditCardNetBenefit)).toLocaleString()}</span>
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Offset timing: ~${Math.round(offsetTimingBenefit).toLocaleString()} · Cashback: ~${Math.round(monthlyCardSpend * 12 * cashbackPct / 100).toLocaleString()} · Fee: -${Math.round(annualCardFee).toLocaleString()}
+                    </p>
+                  </div>
+                </>
+              )}
 
               <div>
                 <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">

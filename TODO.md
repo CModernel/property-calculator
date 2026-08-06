@@ -2421,6 +2421,58 @@ optionally reuse in the commit message when you implement it.
   4.5%, reloaded, confirmed it persisted; cleared the saved scenario and
   confirmed it reset cleanly to 0%/100% defaults.
 
+- [x] **TODO-55: Credit Card Benefit (offset-timing + cashback, static estimate)**
+  Three prior analysis rounds converged on a much smaller design than
+  originally assumed ("hard, similar to Realistic Mode") - a flat,
+  non-simulation estimate, not a full billing-cycle simulation. This
+  session built exactly that design.
+  New pure module `src/calculations/creditCardBenefit.js`:
+  `calculateOffsetTimingBenefit(monthlyCardSpend, avgExtraDaysHeld, interestRate)`
+  (`monthlyCardSpend * (avgExtraDaysHeld/30) * (interestRate/100)` - the
+  validated "average float" formula from the analysis rounds) and
+  `calculateCardCashback(monthlyCardSpend, cashbackPct, annualCardFee)`.
+  Deliberately reuses the loan's own already-computed `interestRate`
+  (`src/App.jsx`) rather than a new rate input - the money in question
+  would otherwise leave the offset immediately, so it's the *mortgage*
+  rate that matters, not a savings rate (this app's whole value
+  proposition), and kept conceptually separate from TODO-50's "Savings
+  Interest Rate" (a different pool of money entirely - surplus that
+  never reaches the offset).
+  New checkbox "Model credit card usage" in Financial Position (right
+  after Savings Interest Rate, same "checkbox reveals dependent fields"
+  pattern as TODO-88's Mortgage-Free Age), unchecked by default. Checked,
+  it reveals 4 inputs - Monthly Card Spend, Average Days Payment Delayed
+  (default **27**, a single honest number instead of asking users to
+  convert from a marketing figure like "55 days interest-free"), Cashback
+  / Rewards Rate (default 0%), Annual Card Fee (default $0) - plus an
+  inline (not a new right-column card) result box: "Estimated annual
+  benefit: +$X" with a one-line "Offset timing: ~$A · Cashback: ~$B ·
+  Fee: -$C" breakdown, in a neutral gray box (not green) so it doesn't
+  read as "found money." A `(?)` `InfoTooltip` (the already-generalized
+  `LvrBadge` pattern - no new component needed) explains the full-balance
+  assumption and warns to keep any expense with a debit-avoidance bank
+  fee off this.
+  **Zero simulation impact by design**: nothing added to
+  `calculateLoanWithOffset`, `monthlyToOffset`, payoff time, or total
+  interest paid - purely a static, parallel calculation, same category as
+  the Purchase Health Check indicators. All 5 new state vars (`useCreditCard`,
+  `monthlyCardSpend`, `avgExtraDaysHeld`, `cashbackPct`, `annualCardFee`)
+  persisted via `handleSaveScenario` - purely additive, no
+  `SCHEMA_VERSION` bump.
+  Added 8 new tests to `creditCardBenefit.test.js` (reproduces the
+  ~$57/$124 worked examples, zero-spend/zero-rate edges, linear scaling
+  with days held, fee-exceeds-cashback going negative).
+  `npm test -- --run` (314/314), `npm run lint`, `npm run build` all
+  clean. Verified in the browser: unchecked by default with an
+  explanatory subtitle; checked it, defaults ($1,000/27 days/0%/$0)
+  produced exactly "+$55" (matches `1000 × 0.9 × 6.13% ≈ $55`) while "Time
+  to pay off" (10.8 years/129 months) and "Total interest paid"
+  ($196,743) stayed byte-identical to the checkbox-unchecked baseline -
+  confirming zero simulation impact; set Cashback to 1% and Annual Fee to
+  $50, confirmed the box updated to "+$125" with a correct "$55 · $120 ·
+  -$50" breakdown; saved, reloaded, confirmed persistence; cleared the
+  saved scenario, confirmed it reset cleanly to unchecked/defaults.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -2442,40 +2494,6 @@ optionally reuse in the commit message when you implement it.
   reuse the existing hover-tooltip pattern from `src/components/LvrBadge.jsx`
   (TODO-23, a `group`/`group-focus-within` Tailwind tooltip, no new
   dependency needed).
-
-- [ ] **TODO-55: Add a credit card usage option (delayed payment benefit)**
-  Requested by the user, flagged as **hard, similar in scope to Realistic
-  Mode (TODO-54)**. The idea: using a credit card for day-to-day spending
-  (food, etc.) lets that cash sit in the offset account longer before the
-  card's monthly statement is actually paid, effectively adding a bit of
-  extra offset benefit - modeling this properly means simulating the
-  card's billing cycle and payment timing against the existing monthly
-  loop. The user offered a **fallback if the full simulation is too
-  complex**: instead, just estimate a flat % benefit (they suggested ~2%)
-  from paying eligible expenses by credit card instead of debit - net of
-  any bank account fee some accounts charge for not using debit (which
-  can wipe out the benefit entirely if not accounted for). Needs a design
-  decision on which of the two approaches (full cycle simulation vs. flat
-  %-benefit estimate) before implementing either. **Also requested**: a
-  floating `(?)` help dialog (same `LvrBadge`-style tooltip pattern as
-  TODO-54) explaining how to use the feature, including concrete guidance
-  on which kinds of expenses should stay on debit instead of credit card
-  (e.g. anything where the account charges an extra fee for not using
-  debit, which would erase the benefit). **Follow-up analysis from the
-  user, favoring the flat %-benefit fallback over full cycle
-  simulation**: with typical eligible spending (~$1,000-1,500/month), a
-  dedicated "big savings" section promising large gains from credit-card-
-  plus-offset would be misleading - the realistic benefit is modest
-  ("Estimated annual benefit: $50-200/year", depending on eligible
-  spending, mortgage rate, cashback, and card fees). Proposed formula:
-  **Annual Benefit ≈ Average Extra Offset Balance × Mortgage Rate** - e.g.
-  $1,000 extra balance × 5.5% ≈ $55/year, $2,000 × 5.5% ≈ $110/year,
-  $3,000 × 5.5% ≈ $165/year. Worth noting in the UI copy itself (not just
-  internally) that the offset-timing benefit alone is small - the card's
-  own cashback/rewards often matter as much or more than the extra
-  interest saved, so the feature shouldn't overstate the offset side in
-  isolation.
-
 
 - [x] **TODO-43: Add NSW Foreign Purchaser Additional Duty Surcharge (8% extra)**
   Requested by the user, explicitly flagged as **not urgent**, with the
