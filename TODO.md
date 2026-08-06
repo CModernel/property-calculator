@@ -2473,27 +2473,160 @@ optionally reuse in the commit message when you implement it.
   -$50" breakdown; saved, reloaded, confirmed persistence; cleared the
   saved scenario, confirmed it reset cleanly to unchecked/defaults.
 
+- [x] **TODO-54 (Analysis only, no code): "Realistic Mode" - split into focused sub-tasks**
+  Originally "model income tax on salary," flagged hard with priority
+  undecided. The user asked to broaden scope (inflation, variable rates,
+  "any other variables") and get a second opinion before implementing
+  anything. Two analysis rounds, then a split into TODO-89 through
+  TODO-95.
+  **Round 1 (this session's own analysis)**: reframed "Realistic Mode" as
+  three independent problems (tax, inflation, rate variability), not one
+  toggle - confirmed variable interest rates are **already solved**
+  (TODO-57's `interestRateField`/scheduled rate changes + the Purchase
+  Health Check's static Interest Rate Stress Test), confirmed
+  `incomeSources` has no gross/net distinction anywhere, confirmed zero
+  inflation/CPI code exists. Proposed reframing income tax away from
+  "tax on salary" (salary is realistically already post-PAYG take-home
+  pay - taxing it again would double-count) toward "tax on non-PAYG
+  income" (self-employment/freelance/dividends/bonus, which arrives
+  without withholding and creates a real lump-sum cash-flow risk).
+  Ranked inflation options by cost: display-only "today's dollars"
+  conversion (cheapest) through full income+expense compounding
+  (priciest), leaning toward starting cheap.
+  **Round 2 (second opinion, external model)**: agreed independent
+  modules over one toggle. Disagreed on tax scope - argued most users
+  think in net income already, so gross/net support should apply to
+  *every* income source (not just non-PAYG), with automatic conversion
+  via real AU tax brackets + Medicare Levy + optional HECS/HELP.
+  Reordered priorities, ranking **property appreciation and salary
+  growth above inflation** - the app tracks `propertyPrice` as fixed
+  forever (LVR only ever improves via principal repayment, no
+  equity/net-worth figure exists at all), which is a bigger real gap
+  than CPI-adjusting a headline number. Also proposed rent growth,
+  investment vacancy rate, and a stochastic "unexpected repairs" event
+  (e.g. 1%/year chance of a $5,000 repair). Offered a complexity-budget
+  heuristic: "if the user has to understand a tax law, don't build it."
+  **Synthesis / where this session pushed back**: agreed with elevating
+  property appreciation and salary growth, and with rent
+  growth/vacancy as genuine gaps. Rejected the real-tax-bracket proposal
+  as self-contradictory - full AU brackets + Medicare Levy + HECS *is*
+  "a tax law the user has to understand," violating the second opinion's
+  own rule. Resolved by keeping gross/net support for every income
+  source (adopting that part of round 2) but converting via a single
+  user-supplied **effective tax rate %** instead of real brackets (no
+  tax data to source or maintain) - this also subsumes round 1's
+  narrower "non-PAYG only" framing, since the same mechanism covers both.
+  Rejected "unexpected repairs" as its own task: the app is 100%
+  deterministic everywhere today, and a literal random event needs
+  either Monte Carlo repetition (a genuinely different, bigger kind of
+  feature - rerun the simulation many times, show a distribution) or it
+  collapses to a deterministic expected-value uplift (0.01 × $5,000 =
+  $50/year) - which is just a bigger number in the already-existing
+  Misc Property Expense field (TODO-82). No new task queued for it.
+  **Resulting split**: TODO-89 (Property Appreciation - builds the
+  shared "compounds annually in the loop" mechanism the next three
+  reuse), TODO-90 (Salary/Wage Growth), TODO-91 (Rent Growth), TODO-92
+  (Expense Inflation), TODO-93 (Purchasing Power / "today's dollars" -
+  cheapest, no dependency on anything else), TODO-94 (Gross/Net income
+  via flat effective tax rate), TODO-95 (Investment Vacancy Rate).
+  Variable interest rates: confirmed already solved, no new task.
+
+- [x] **TODO-93: Purchasing Power / "today's dollars" display**
+  Follow-up from TODO-54's split - the cheapest, no-dependency item in
+  the whole set, built first. New `src/calculations/inflation.js`:
+  `calculatePresentValueOfInterest(monthlyData, inflationRate)` discounts
+  **each month's actual interest payment individually** back to today's
+  dollars (reusing the loan's own `calculateMonthlyRate` for the
+  annual-to-monthly conversion), rather than a single power-of-years
+  discount on the aggregate - interest is paid gradually over the loan's
+  life, not as one lump sum at the end, so this is meaningfully more
+  correct than the simplest possible approach while still being cheap (a
+  reduce over `monthlyData`, which the loop already produces).
+  New "Inflation Rate" `NumberSliderField` in Financial Position (right
+  after Savings Interest Rate, same 0-15%/0.1-step/blue-track shape as
+  the other rate inputs), default **0%** - preserves the current display
+  exactly until the user opts in. `App.jsx` calls the new function once
+  on `loanSimulation.monthlyData` (a pure read of the loop's already-
+  computed output - the simulation itself is untouched) and shows a new
+  conditional sub-line under the existing "Total interest paid" figure in
+  the "⏱️ Loan Simulation" card, only when `inflationRate > 0`: "≈ $X in
+  today's dollars (at Y% inflation)".
+  Caught one bug before it shipped: `NumberSliderField`'s `color` prop is
+  a lookup into a fixed `TRACK_CLASSES` map (`blue`/`green`/`indigo`/
+  `orange`/`purple` only, per a Tailwind-purging constraint) - an initial
+  `color="gray"` would have silently broken the slider's track styling
+  since `gray` isn't a key in that map; switched to `color="blue"`.
+  Added 4 new tests to `inflation.test.js` (a clean 1%/month worked
+  example, exact match at 0% inflation, empty-`monthlyData` edge case,
+  later months discounted more than earlier ones).
+  `npm test -- --run` (318/318), `npm run lint`, `npm run build` all
+  clean. Verified in the browser: at 0% (default) no sub-line appears;
+  set to 2.5% - "Total interest paid: $196,743" gained "≈ $179,349 in
+  today's dollars (at 2.5% inflation)" directly below it, while "Time to
+  pay off" (10.8 years/129 months) stayed unchanged, confirming zero
+  simulation impact. Saved, reloaded, confirmed persistence; cleared the
+  saved scenario, confirmed it reset cleanly to 0%.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
 
 
-- [ ] **TODO-54: "Realistic Mode" - model income tax on salary**
-  Requested by the user, who flagged this as a **hard task with priority
-  still to be decided**. Would need: accepting either gross or net weekly
-  salary as input (with net→gross needing an approximate reverse
-  calculation, since Australian income tax is progressive), accounting
-  for any other income across the financial year, and modeling **when**
-  tax is actually paid - e.g. as a periodic average (starting month 6,
-  then every 12 months) vs. letting the user specify their actual next
-  tax payment date/cadence. Touches `incomeSources`, the simulation loop,
-  and probably needs new NSW/Australian tax-bracket data - a substantial
-  feature, not a quick toggle. Needs a priority discussion with the user
-  before scheduling. **Also requested**: a floating `(?)` help dialog
-  explaining what Realistic Mode does and the tax assumptions behind it -
-  reuse the existing hover-tooltip pattern from `src/components/LvrBadge.jsx`
-  (TODO-23, a `group`/`group-focus-within` Tailwind tooltip, no new
-  dependency needed).
+- [ ] **TODO-89: Property Appreciation (annual %, tracks Projected Equity/Net Worth/LVR over time)**
+  Follow-up from TODO-54's split (analysis, done - see TODO-54's own
+  write-up in Completed). Highest-value gap per the second-opinion
+  analysis: `propertyPrice` is treated as fixed forever today - LVR only
+  ever improves via principal repayment, and no equity/net worth figure
+  exists at all. New annual growth-rate input; build the underlying
+  "compounds annually inside the monthly loop" mechanism **here first**
+  (a continuous-compounding sibling to the existing discrete-step
+  `getSteppedValue`/`useSteppedValue` pattern) and reuse it for TODO-90/
+  91/92 below rather than rebuilding it three more times. Feeds new
+  figures - Projected Property Value, Projected Equity (value - balance +
+  offset/savings), Projected LVR over time - needs a design pass on
+  presentation (a new stat vs. extending the Timeline Explorer's existing
+  "🏦 Loan | 💰 Offset | 🐖 Savings" line).
+
+- [ ] **TODO-90: Salary/Wage Growth (annual %, independent of any other growth rate)**
+  Follow-up from TODO-54's split. Small once TODO-89's compounding
+  mechanism exists. Applies to income sources (likely Salary/Wages
+  specifically, or all - needs a decision at implementation time).
+  Deliberately **not** tied to inflation/CPI - real wage growth moves
+  independently (promotions, job changes, anywhere from 0% to 5%+), per
+  the second-opinion analysis.
+
+- [ ] **TODO-91: Rent Growth (annual %, investment properties only)**
+  Follow-up from TODO-54's split. Small once TODO-89's mechanism exists -
+  same shape as TODO-90, applied to rental income sources
+  (`RENTAL_INCOME_CATEGORIES`) instead of personal income.
+
+- [ ] **TODO-92: Expense Inflation (annual %, Personal + Property Expenses)**
+  Follow-up from TODO-54's split. Small once TODO-89's mechanism exists.
+  One open design decision: a single inflation rate for both expense
+  categories, or two independent rates (property costs and personal
+  cost-of-living don't necessarily move together).
+
+- [ ] **TODO-94: Gross/Net income via a flat effective tax rate (not real AU tax brackets)**
+  Follow-up from TODO-54's split. Resolves the actual tension between the
+  two prior analysis rounds: real progressive tax brackets + Medicare
+  Levy + HECS/HELP would need users to understand tax law, which
+  contradicts the second opinion's own stated rule ("if the user has to
+  understand a tax law, don't build it"). Instead, let any income source
+  optionally be marked "Gross" with a single user-supplied **effective
+  tax rate %** to convert to net - covers both salaried people who only
+  know their gross figure AND non-PAYG income (self-employment/
+  dividends/bonus) via the same mechanism, no tax-bracket data to source
+  or maintain.
+
+- [ ] **TODO-95: Investment Vacancy Rate (weeks/year vacant, investment properties only)**
+  Follow-up from TODO-54's split. Small. Model as a deterministic average
+  haircut on simulated rental income (e.g. 2/52 weeks vacant → ~3.8%
+  reduction applied every month) - **not** a random/stochastic event, to
+  keep the app's fully-deterministic design intact (see TODO-54's own
+  write-up for why a literal random-event model was rejected). Distinct
+  from the Purchase Health Check's existing "Vacancy Buffer" indicator,
+  which only answers "how many months could you survive a vacancy right
+  now" - this would be the first feature to actually simulate one.
 
 - [x] **TODO-43: Add NSW Foreign Purchaser Additional Duty Surcharge (8% extra)**
   Requested by the user, explicitly flagged as **not urgent**, with the
@@ -2538,7 +2671,6 @@ optionally reuse in the commit message when you implement it.
   any output here would need to stay clearly illustrative/educational.
   Moved here at the user's request - deprioritized, and excluded by
   default the next time TODOs are listed (ask before including it).
-
 
 
 

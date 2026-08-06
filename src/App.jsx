@@ -31,6 +31,7 @@ import {
 } from './calculations/loan';
 import { calculateLoanWithOffset } from './calculations/offsetSimulation';
 import { calculateOffsetTimingBenefit, calculateCardCashback } from './calculations/creditCardBenefit';
+import { calculatePresentValueOfInterest } from './calculations/inflation';
 import { clampToRange } from './calculations/clampToRange';
 import { safePercentage } from './calculations/safePercentage';
 import { estimateLmi } from './calculations/lmi';
@@ -154,6 +155,11 @@ const PropertyInvestmentCalculator = () => {
   const [avgExtraDaysHeld, setAvgExtraDaysHeld] = useState(config.avgExtraDaysHeld ?? 27);
   const [cashbackPct, setCashbackPct] = useState(config.cashbackPct ?? 0);
   const [annualCardFee, setAnnualCardFee] = useState(config.annualCardFee ?? 0);
+  // TODO-93: annual % - a pure display-layer conversion of "Total interest
+  // paid" into today's dollars, no simulation changes. 0 (default) means
+  // no inflation is modeled, matching every other purely-additive rate
+  // input this session.
+  const [inflationRate, setInflationRate] = useState(config.inflationRate ?? 0);
   // TODO-70: optional - 0 means "not provided", which hides the Mortgage-Free
   // Age indicator entirely rather than forcing anyone to disclose their age.
   const [currentAge, setCurrentAge] = useState(config.currentAge ?? 30);
@@ -443,6 +449,13 @@ const PropertyInvestmentCalculator = () => {
   });
   const interestSaved = baselineSimulation.totalInterest - loanSimulation.totalInterest;
 
+  // TODO-93: "Total interest paid" in today's dollars - a pure display-layer
+  // read of loanSimulation's own monthlyData, discounting each month's
+  // actual interest payment individually rather than the aggregate by a
+  // single power-of-years factor (interest is paid gradually, not as one
+  // lump sum at the end). Nothing about the simulation itself changes.
+  const totalInterestInTodaysDollars = calculatePresentValueOfInterest(loanSimulation.monthlyData, inflationRate);
+
   // First month of the simulation. Taken from the simulation itself so it accounts for
   // everything the loop does in month 1: any scheduled lump sum, the recurring monthly
   // surplus, and exceptional expenses. Falls back to the un-offset figure when the
@@ -585,7 +598,7 @@ const PropertyInvestmentCalculator = () => {
       propertyManagement: propertyManagementField.base, propertyManagementChanges: propertyManagementField.changes,
       miscPropertyExpense: miscPropertyExpenseField.base, miscPropertyExpenseChanges: miscPropertyExpenseField.changes,
       isFirstHomeBuyer, isForeignPurchaser, totalSavings, offsetAllocationPct, savingsInterestRate, currentAge, showMortgageFreeAge, payLmiUpfront,
-      useCreditCard, monthlyCardSpend, avgExtraDaysHeld, cashbackPct, annualCardFee,
+      useCreditCard, monthlyCardSpend, avgExtraDaysHeld, cashbackPct, annualCardFee, inflationRate,
       conveyancing, buildingInspection, pestInspection, registrationFees, searches,
       loanEstablishmentFee, propertyValuation, homeInsurance, rateAdjustments, miscUpfrontCost,
       incomeSources,
@@ -1012,6 +1025,21 @@ const PropertyInvestmentCalculator = () => {
                 suffix="% p.a."
               >
                 Annual interest earned on your savings balance (seeded from Remaining Savings, plus whatever isn't sent to the offset each month). 0% (default) means no interest is modeled.
+              </NumberSliderField>
+
+              <NumberSliderField
+                label="Inflation Rate"
+                value={inflationRate}
+                onChange={setInflationRate}
+                min={0}
+                max={15}
+                sliderMin={0}
+                sliderMax={8}
+                step={0.1}
+                color="blue"
+                suffix="% p.a."
+              >
+                Shows "Total interest paid" in today's dollars alongside the nominal figure below - a display-only conversion, it doesn't change the loan simulation itself. 0% (default) shows the nominal figure only.
               </NumberSliderField>
 
               <div>
@@ -2515,6 +2543,11 @@ const PropertyInvestmentCalculator = () => {
                   <p className="text-2xl font-bold">
                     ${Math.round(loanSimulation.totalInterest).toLocaleString()}
                   </p>
+                  {inflationRate > 0 && (
+                    <p className="text-xs opacity-75 mt-1">
+                      ≈ ${Math.round(totalInterestInTodaysDollars).toLocaleString()} in today's dollars (at {inflationRate}% inflation)
+                    </p>
+                  )}
                 </div>
 
                 {savingsInterestRate > 0 && (
