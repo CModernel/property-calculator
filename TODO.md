@@ -2152,6 +2152,70 @@ optionally reuse in the commit message when you implement it.
   froze the CDP connection during TODO-47's verification) and confirmed
   it reset cleanly to the 100%/default tagline.
 
+- [x] **TODO-68/69/70: Grupo E - "🩺 Purchase Health Check" panel (10 indicators)**
+  Follow-up from TODO-67's analysis (done). New `src/calculations/
+  purchaseHealthCheck.js`: a generic `classifyByBands(value, bands)`
+  helper (generalizes `classifyLvr.js`'s own mechanism - bands ordered
+  highest-`min`-first, works identically whether higher or lower is
+  "better" since direction is just baked into which band a threshold
+  labels) plus a calculate+classify pair per indicator. New reusable
+  `src/components/HealthCheckIndicator.jsx` row (label + `InfoTooltip` +
+  colored symbol/value + one-line action) used by all 10 indicators
+  instead of repeating the markup - new collapsible "🩺 Purchase Health
+  Check" card in `src/App.jsx`, right after Property Balance, default
+  **open** (unlike the "breakdown" toggles, which default closed).
+  **Tier 1** (always shown, zero new inputs): Emergency Buffer, Housing
+  Cost Ratio, Interest Rate Stress Test (re-amortizes at +1/+2/+3% and
+  reports the highest survived delta), Upfront Cost Ratio, and a
+  state-agnostic FHB concession-loss warning (`isFirstHomeBuyer &&
+  stampDuty > 0` - reacts to the state module's own output, no NSW
+  thresholds hardcoded in `App.jsx`, per TODO-58).
+  **Tier 2** (`isInvestmentProperty`-gated, zero new inputs): Gearing
+  (a label only, not itself good/bad), Vacancy Buffer, Rental Yield
+  (annualizes existing rental `incomeSources`, with an explicit "not
+  enough data yet" state instead of a misleading 0%/weak reading when
+  no rental income has been entered).
+  **Tier 3**: Mortgage-Free Age needs the **one** new input the analysis
+  called for - "Your Current Age (optional)" in Financial Position,
+  where **0 means "not provided"** (a `NumberSliderField` with a custom
+  `formatValue` showing "Not set", rather than a true blank/empty
+  input - simplest fit for this codebase's all-numeric-fields
+  convention) and hides the indicator entirely. Offset Utilisation needs
+  no new input - added next to the Timeline Explorer itself (not the
+  main panel), tied to `snapshot.offset`/`snapshot.balance` at whichever
+  month the Timeline Explorer's own slider is on.
+  Two deliberate scope adjustments from TODO-67's original phrasing,
+  called out here rather than silently: the "shared red top-of-page
+  banner" became a banner **inside the health-check card itself**
+  (`healthCheckHasCritical`, true when any Tier 1 indicator or the FHB
+  warning is critical) rather than modifying the fixed page-top hero
+  area - less invasive, same effect (impossible to miss without
+  expanding the card, which is open by default anyway). The "full
+  threshold table" from `LvrBadge.jsx`'s tooltip became short prose +
+  a one-line threshold summary in each `InfoTooltip`, not a literal
+  `<table>` - keeps `HealthCheckIndicator` simple across 10 reuses.
+  `offsetAllocationPct`'s persistence pattern reused: `currentAge`/
+  `showHealthCheck` added to `handleSaveScenario` - purely additive, no
+  `SCHEMA_VERSION` bump.
+  Added 24 new tests to a new `purchaseHealthCheck.test.js` covering
+  every calculate/classify function and all documented band boundaries.
+  `npm test -- --run` (304/304), `npm run lint`, `npm run build` all
+  clean.
+  Verified in the browser on the app's own default scenario (a genuine,
+  useful finding, not just a smoke test): Housing Cost Ratio correctly
+  flagged 🔴 55% (high risk) and the FHB concession-loss warning
+  correctly fired (`$850k` sits in NSW's $800k-$1M taper zone, so
+  `stampDuty` is already > 0 despite `isFirstHomeBuyer`), both real
+  issues with the shipped default config, not bugs in the indicator
+  logic; confirmed the critical banner appeared because of them.
+  Switched to Investment Property and checked all three Tier 2 rows
+  (Gearing, Vacancy Buffer, and Rental Yield's "not enough data" state
+  before adding rental income); set Current Age to 35 and confirmed
+  Mortgage-Free Age showed 🟢 47 (35 + 11.6 years, rounded); moved the
+  Timeline Explorer's slider and confirmed Offset Utilisation tracked
+  the selected month (21.4% at month ~70); confirmed an `InfoTooltip`
+  opens correctly showing the threshold summary.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -2242,76 +2306,6 @@ optionally reuse in the commit message when you implement it.
   existing over-committed-savings warning; confirmed First Home Buyer
   stayed checked throughout with zero interaction, exactly as designed.
 
-- [ ] **TODO-68: Add a "🩺 Purchase Health Check" panel - Emergency Buffer, Housing Cost Ratio, Interest Rate Stress Test, Upfront Cost Ratio, FHB concession-loss warning**
-  Follow-up from TODO-67's analysis (done). A new collapsible card in the
-  results column, right after Property Balance, one row per indicator:
-  label, current value, colored dot (reuse
-  `getBalanceColor`/`getBalanceBgColor`, `src/calculations/ui.js`), a
-  one-line recommended action, and an `InfoTooltip` (reuse
-  `LvrBadge.jsx`'s existing hover-table pattern) showing the full
-  threshold table plus a short rationale. Five indicators, all zero new
-  inputs:
-  Emergency Buffer = `cashRemaining / (totalPropertyCost +
-  monthlyPersonalExpenses)` in months (≥12 excellent, 6-12 good, 3-6
-  moderate, <3 high risk - the standard "3-6 months" rule of thumb).
-  Housing Cost Ratio = `totalPropertyCost / (monthlyIncome +
-  monthlyRentalIncome)` (<30% excellent, 30-40% good, 40-50% caution,
-  ≥50% high risk).
-  Interest Rate Stress Test: re-run
-  `calculateMonthlyRate`/`calculateMonthlyPayment`/
-  `calculateTotalPropertyCost`/`calculateMonthlyNetBalance` at
-  `interestRate + 1/2/3` and report the highest rate rise the current
-  cash flow survives before going negative (survives +3% excellent,
-  +2% good, +1% moderate, fails already at +1% high risk).
-  Upfront Cost Ratio = `(totalCashRequired - downPayment) /
-  propertyPrice` (<2% excellent, 2-4% normal, ≥4% high).
-  FHB concession-loss warning: `isFirstHomeBuyer && stampDuty > 0` (the
-  concession is partially/fully gone) - a plain warning line, not a
-  banded indicator, no NSW-specific threshold numbers hardcoded in
-  `App.jsx` (stays state-module-agnostic per TODO-58).
-  Any indicator in its worst band should also trigger the shared red
-  top-of-page banner (same weight as the existing green "✅ Income
-  covers all expenses" banner) - see TODO-67 for why.
-
-- [ ] **TODO-69: Extend the Purchase Health Check panel with investment-property-only indicators - gearing, Vacancy Buffer, Rental Yield**
-  Follow-up from TODO-67's analysis (done) and TODO-68 (build that
-  first - this reuses its panel/row/tooltip pattern). Three more rows,
-  shown only when `isInvestmentProperty`, still zero new inputs:
-  Gearing sign = `monthlyRentalIncome - monthlyPayment -
-  monthlyPropertyExpenses` (positive = positive gearing, negative =
-  negative gearing - not itself good/bad, just a label plus a reminder
-  that negative gearing needs to be affordable from other income).
-  Vacancy Buffer = `cashRemaining / (monthlyPayment +
-  monthlyPropertyExpenses)` in months (≥6 excellent, 3-6 good, <3 high
-  risk).
-  Rental Yield = annualized existing House Rent/Room Rent
-  `incomeSources` entries (`weeklyRentalIncome * 52`) divided by
-  `propertyPrice` - **not** a new "expected rent" input (<3% weak, 3-5%
-  average, ≥5% strong); show an explicit "not enough data yet" state
-  instead of a 0%/weak reading when no rental income has been entered
-  at all, since that's a missing-data case, not a real weak yield.
-
-- [ ] **TODO-70: Add Mortgage-Free Age and Offset Utilisation indicators**
-  Follow-up from TODO-67's analysis (done) - the other model's own
-  suggestion, flagged there as genuinely novel (most mortgage
-  calculators don't show either). Two additions to the Purchase Health
-  Check panel (TODO-68):
-  Mortgage-Free Age needs exactly **one new optional input**: the
-  user's current age (a plain number field, e.g. in Financial Position).
-  Left blank, this whole indicator hides itself - no one is forced to
-  disclose it. Age at payoff = current age + `loanSimulation.years`
-  (<60 green, 60-67 yellow, 67-70 orange, >70 red - bands from the other
-  model's own suggestion).
-  Offset Utilisation needs **no new input** - the Timeline Explorer's
-  `monthlyData` already carries both `offset` and `balance` per month
-  (`src/calculations/offsetSimulation.js`), so `offset / (offset +
-  balance)` at whichever month the Timeline Explorer's slider currently
-  sits on is already fully derivable. Surface it next to the Timeline
-  Explorer itself rather than in the health-check panel, since it's
-  inherently tied to a selected month, not a single static "right now"
-  figure the way every other indicator here is (>20% green, 10-20%
-  yellow, 5-10% orange, <5% red).
-
 - [ ] **TODO-82: Allow adding a custom "Misc property expense" line item in Property Expenses**
   Requested by the user. Property Expenses today is a fixed set of 8
   `SteppedExpenseField`s (Strata/Utilities/Council/Insurance/
@@ -2365,6 +2359,22 @@ optionally reuse in the commit message when you implement it.
   and `src/components/*.jsx` looking for any other bare `<div>`/`<span>`/
   `<p>`/`<label>`/`<button>` wrapping visible text with no color class,
   rather than waiting for more to surface individually.
+  The user also flagged the donut's "65%" center label specifically -
+  unlike the other instances, that span (`text-[10px] font-bold
+  text-gray-500 dark:text-gray-400`, ~line 2159) already HAS a `dark:`
+  class, so this one needs visual re-verification rather than the usual
+  add-a-missing-class fix - may be a genuine low-contrast case (worth
+  trying `dark:text-gray-300`) or a false alarm caused by looking at it
+  right next to the still-broken Income/Expenses legend text beside it.
+
+- [ ] **TODO-87: Fix "TO OFFSET" card's "Per week"/"Per fortnight" values rendering black text in dark mode**
+  Reported by the user. Same root cause as TODO-72/73/86:
+  `src/App.jsx`'s "TO OFFSET (automatic)" card, the `weeklyToOffset`/
+  `fortnightlyToOffset` value spans (`className="font-semibold"`, ~lines
+  2240/2244) have no text-color class at all. Fix: add an explicit color
+  (e.g. `text-gray-700 dark:text-gray-200`, matching the sibling "Per
+  year" line's own `text-green-700 dark:text-green-400`, or reuse that
+  same green treatment for consistency across all three rows).
 
 ---
 

@@ -35,6 +35,18 @@ import { safePercentage } from './calculations/safePercentage';
 import { estimateLmi } from './calculations/lmi';
 import { sumClosingCosts } from './calculations/closingCosts';
 import { getStateModule } from './calculations/states';
+import {
+  calculateEmergencyBufferMonths, classifyEmergencyBuffer,
+  calculateHousingCostRatio, classifyHousingCostRatio,
+  calculateStressTestSurvivedDelta, classifyStressTest,
+  calculateUpfrontCostRatio, classifyUpfrontCostRatio,
+  classifyGearing,
+  calculateVacancyBufferMonths, classifyVacancyBuffer,
+  calculateRentalYield, hasEnoughDataForRentalYield, classifyRentalYield,
+  calculateMortgageFreeAge, classifyMortgageFreeAge,
+  calculateOffsetUtilisation, classifyOffsetUtilisation,
+} from './calculations/purchaseHealthCheck';
+import HealthCheckIndicator from './components/HealthCheckIndicator';
 import { calculateTotalCashRequired, calculateCashRemaining } from './calculations/totalCashRequired';
 import { getSteppedValue } from './calculations/steppedValue';
 import { getActiveAmount, isScheduleActive, countOccurrencesUpTo, classifyScheduleStatus, formatScheduleLabel, MAX_MONTH } from './calculations/recurringAmount';
@@ -123,7 +135,13 @@ const PropertyInvestmentCalculator = () => {
   // a separately-tracked savings balance - 100 (the default) preserves the
   // original "100% goes to offset automatically" behavior exactly.
   const [offsetAllocationPct, setOffsetAllocationPct] = useState(config.offsetAllocationPct ?? 100);
+  // TODO-70: optional - 0 means "not provided", which hides the Mortgage-Free
+  // Age indicator entirely rather than forcing anyone to disclose their age.
+  const [currentAge, setCurrentAge] = useState(config.currentAge ?? 0);
   const [payLmiUpfront, setPayLmiUpfront] = useState(false);
+  // TODO-68/69/70: defaults open, unlike the "breakdown" toggles below -
+  // this is a primary panel, not supplementary detail.
+  const [showHealthCheck, setShowHealthCheck] = useState(config.showHealthCheck ?? true);
   const [showClosingCostsBreakdown, setShowClosingCostsBreakdown] = useState(config.showClosingCostsBreakdown ?? false);
   const [conveyancing, setConveyancing] = useState(config.conveyancing);
   const [buildingInspection, setBuildingInspection] = useState(config.buildingInspection);
@@ -424,6 +442,45 @@ const PropertyInvestmentCalculator = () => {
     safePercentage(totalPropertyCost + monthlyPersonalExpenses, monthlyIncome + monthlyRentalIncome, 100)
   );
 
+  // Purchase Health Check panel (TODO-68/69/70) - all "month 1"/"right now"
+  // snapshots, same convention as every other static figure on this page.
+  const emergencyBufferMonths = calculateEmergencyBufferMonths(cashRemaining, totalPropertyCost + monthlyPersonalExpenses);
+  const emergencyBufferClass = classifyEmergencyBuffer(emergencyBufferMonths);
+
+  const housingCostRatio = calculateHousingCostRatio(totalPropertyCost, monthlyIncome + monthlyRentalIncome);
+  const housingCostRatioClass = classifyHousingCostRatio(housingCostRatio);
+
+  const stressTestSurvivedDelta = calculateStressTestSurvivedDelta({
+    loanAmount, interestRate, totalMonths, monthlyPropertyExpenses,
+    monthlyIncome, monthlyRentalIncome, monthlyPersonalExpenses,
+  });
+  const stressTestClass = classifyStressTest(stressTestSurvivedDelta);
+
+  const upfrontCostRatio = calculateUpfrontCostRatio(totalCashRequired, downPayment, propertyPrice);
+  const upfrontCostRatioClass = classifyUpfrontCostRatio(upfrontCostRatio);
+
+  // State-agnostic (per TODO-58) - reacts to the ALREADY-computed stampDuty
+  // output rather than hardcoding any state's concession thresholds here.
+  const fhbConcessionLost = isFirstHomeBuyer && stampDuty > 0;
+
+  // TODO-69: investment-property-only indicators.
+  const gearingCashflow = monthlyRentalIncome - monthlyPayment - monthlyPropertyExpenses;
+  const gearingClass = classifyGearing(gearingCashflow);
+
+  const vacancyBufferMonths = calculateVacancyBufferMonths(cashRemaining, monthlyPayment + monthlyPropertyExpenses);
+  const vacancyBufferClass = classifyVacancyBuffer(vacancyBufferMonths);
+
+  const rentalYieldHasData = hasEnoughDataForRentalYield(weeklyRentalIncome);
+  const rentalYield = calculateRentalYield(weeklyRentalIncome, propertyPrice);
+  const rentalYieldClass = rentalYieldHasData ? classifyRentalYield(rentalYield) : null;
+
+  // TODO-70: Mortgage-Free Age - currentAge of 0 means "not provided", hiding
+  // this indicator entirely rather than forcing anyone to disclose their age.
+  const mortgageFreeAge = currentAge > 0 ? calculateMortgageFreeAge(currentAge, loanSimulation.years) : null;
+  const mortgageFreeAgeClass = mortgageFreeAge !== null ? classifyMortgageFreeAge(mortgageFreeAge) : null;
+
+  const healthCheckHasCritical = fhbConcessionLost || [emergencyBufferClass, housingCostRatioClass, stressTestClass, upfrontCostRatioClass].some((c) => c.critical);
+
   // Invariant: downPayment never exceeds propertyPrice, enforced in both
   // directions. Without this, lowering the price below the current deposit
   // leaves a stale deposit behind (the range input clamps its own display but
@@ -505,7 +562,7 @@ const PropertyInvestmentCalculator = () => {
       isInvestmentProperty,
       landTax: landTaxField.base, landTaxChanges: landTaxField.changes,
       propertyManagement: propertyManagementField.base, propertyManagementChanges: propertyManagementField.changes,
-      isFirstHomeBuyer, isForeignPurchaser, totalSavings, offsetAllocationPct, payLmiUpfront,
+      isFirstHomeBuyer, isForeignPurchaser, totalSavings, offsetAllocationPct, currentAge, payLmiUpfront,
       conveyancing, buildingInspection, pestInspection, registrationFees, searches,
       loanEstablishmentFee, propertyValuation, homeInsurance, rateAdjustments,
       incomeSources,
@@ -513,7 +570,7 @@ const PropertyInvestmentCalculator = () => {
       personalExpenseItems,
       otherExpenseItems,
       showPropertyExpenses, showMonthlyExpensesBreakdown, showClosingCostsBreakdown,
-      showIncome, showPersonalExpenses, showPersonalExpensesBreakdown, showProgressCharts,
+      showIncome, showPersonalExpenses, showPersonalExpensesBreakdown, showProgressCharts, showHealthCheck,
       savedAt,
     };
     if (saveScenario(scenario)) {
@@ -954,6 +1011,22 @@ const PropertyInvestmentCalculator = () => {
                 suffix="%"
               >
                 % of your monthly surplus that goes to the loan offset - the rest builds your savings balance instead. 100% (default) matches the original "everything goes to offset" behavior.
+              </NumberSliderField>
+
+              <NumberSliderField
+                label="Your Current Age (optional)"
+                value={currentAge}
+                onChange={setCurrentAge}
+                min={0}
+                max={100}
+                sliderMin={18}
+                sliderMax={80}
+                step={1}
+                color="indigo"
+                suffix={currentAge > 0 ? ' years' : ''}
+                formatValue={(v) => (v > 0 ? v : 'Not set')}
+              >
+                Only used to show your Mortgage-Free Age below - leave at 0 to hide that indicator entirely.
               </NumberSliderField>
 
               {/* min must stay above 0: a 0% rate makes calculateMonthlyPayment
@@ -2198,7 +2271,130 @@ const PropertyInvestmentCalculator = () => {
             </div>
           </div>
 
+          {/* Purchase Health Check (TODO-68/69/70) */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-bold text-gray-700 dark:text-gray-200 flex items-center gap-2">
+                🩺 Purchase Health Check
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowHealthCheck(!showHealthCheck)}
+                className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+              >
+                {showHealthCheck ? '▾ Hide' : '▸ Show'}
+              </button>
+            </div>
 
+            {showHealthCheck && (
+              <>
+                {healthCheckHasCritical && (
+                  <div className="mb-3 p-3 bg-red-100 dark:bg-red-900 rounded text-red-800 dark:text-red-400 text-sm font-semibold">
+                    ⚠️ One or more indicators below need attention - not financial advice, just standard rules of thumb.
+                  </div>
+                )}
+
+                <HealthCheckIndicator
+                  label="Emergency Buffer"
+                  tooltipLabel="What is the Emergency Buffer?"
+                  valueDisplay={Number.isFinite(emergencyBufferMonths) ? `${emergencyBufferMonths.toFixed(1)} months` : '∞'}
+                  classification={emergencyBufferClass}
+                >
+                  <p>Remaining Savings divided by your total monthly outgoings (property + personal expenses) - how many months you could cover if income stopped entirely.</p>
+                  <p className="mt-2">≥12 months excellent, 6-12 good, 3-6 moderate, &lt;3 high risk - the standard "3-6 months" rule of thumb.</p>
+                </HealthCheckIndicator>
+
+                <HealthCheckIndicator
+                  label="Housing Cost Ratio"
+                  tooltipLabel="What is the Housing Cost Ratio?"
+                  valueDisplay={`${housingCostRatio.toFixed(0)}%`}
+                  classification={housingCostRatioClass}
+                >
+                  <p>Total property cost (loan repayment + property expenses) as a share of your total monthly income.</p>
+                  <p className="mt-2">&lt;30% excellent, 30-40% good, 40-50% caution, ≥50% high risk.</p>
+                </HealthCheckIndicator>
+
+                <HealthCheckIndicator
+                  label="Interest Rate Stress Test"
+                  tooltipLabel="What is the Interest Rate Stress Test?"
+                  valueDisplay={stressTestSurvivedDelta > 0 ? `Survives +${stressTestSurvivedDelta}%` : 'Fails at +1%'}
+                  classification={stressTestClass}
+                >
+                  <p>Recalculates your repayment at today's rate plus 1/2/3 percentage points, and reports the largest rise your current cash flow still survives without going into deficit.</p>
+                  <p className="mt-2">Survives +3% excellent, +2% good, +1% moderate, fails already at +1% high risk.</p>
+                </HealthCheckIndicator>
+
+                <HealthCheckIndicator
+                  label="Upfront Cost Ratio"
+                  tooltipLabel="What is the Upfront Cost Ratio?"
+                  valueDisplay={`${upfrontCostRatio.toFixed(1)}%`}
+                  classification={upfrontCostRatioClass}
+                >
+                  <p>Stamp duty, LMI (if paid upfront) and closing costs - excluding the deposit itself - as a share of the property price.</p>
+                  <p className="mt-2">&lt;2% excellent, 2-4% normal, ≥4% high.</p>
+                </HealthCheckIndicator>
+
+                {fhbConcessionLost && (
+                  <div className="py-2 border-b border-gray-100 dark:border-gray-700">
+                    <p className="text-sm text-orange-600 dark:text-orange-400 font-semibold">
+                      ⚠️ First Home Buyer concession is partially or fully gone at this price - double check {stateModule.code}'s concession thresholds.
+                    </p>
+                  </div>
+                )}
+
+                {isInvestmentProperty && (
+                  <>
+                    <HealthCheckIndicator
+                      label="Gearing"
+                      tooltipLabel="What does Gearing mean here?"
+                      valueDisplay={`${gearingCashflow >= 0 ? '+' : '-'}$${Math.abs(Math.round(gearingCashflow)).toLocaleString()}/mo`}
+                      classification={gearingClass}
+                    >
+                      <p>Rental income minus the loan repayment and property expenses. Not itself good or bad - negative gearing (a shortfall) just needs to be affordable from your other income.</p>
+                    </HealthCheckIndicator>
+
+                    <HealthCheckIndicator
+                      label="Vacancy Buffer"
+                      tooltipLabel="What is the Vacancy Buffer?"
+                      valueDisplay={Number.isFinite(vacancyBufferMonths) ? `${vacancyBufferMonths.toFixed(1)} months` : '∞'}
+                      classification={vacancyBufferClass}
+                    >
+                      <p>Remaining Savings divided by the loan repayment + property expenses - how many months you could cover the property alone with no tenant.</p>
+                      <p className="mt-2">≥6 months excellent, 3-6 good, &lt;3 high risk.</p>
+                    </HealthCheckIndicator>
+
+                    {rentalYieldHasData ? (
+                      <HealthCheckIndicator
+                        label="Rental Yield"
+                        tooltipLabel="What is Rental Yield?"
+                        valueDisplay={`${rentalYield.toFixed(1)}%`}
+                        classification={rentalYieldClass}
+                      >
+                        <p>Annualized rental income (House Rent/Room Rent) as a share of the property price.</p>
+                        <p className="mt-2">&lt;3% weak, 3-5% average, ≥5% strong.</p>
+                      </HealthCheckIndicator>
+                    ) : (
+                      <div className="py-2 text-sm text-gray-400 dark:text-gray-500 italic">
+                        Rental Yield: not enough data yet - add a House Rent/Room Rent income source.
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {mortgageFreeAgeClass && (
+                  <HealthCheckIndicator
+                    label="Mortgage-Free Age"
+                    tooltipLabel="What is Mortgage-Free Age?"
+                    valueDisplay={`${Math.round(mortgageFreeAge)}`}
+                    classification={mortgageFreeAgeClass}
+                  >
+                    <p>Your current age plus how long the loan simulation takes to pay off.</p>
+                    <p className="mt-2">&lt;60 comfortably early, 60-67 reasonable, 67-70 cutting it close, &gt;70 late - based on typical retirement age.</p>
+                  </HealthCheckIndicator>
+                )}
+              </>
+            )}
+          </div>
 
           {/* WHAT GOES TO OFFSET */}
           <div className={`rounded-lg shadow-lg p-6 border-2 ${getBalanceBgColor(monthlyNetBalance)}`}>
@@ -2415,6 +2611,19 @@ const PropertyInvestmentCalculator = () => {
                       <span className="flex items-center gap-1">🐖 Savings: ${snapshot.savings.toLocaleString()}</span>
                     </div>
                   </div>
+
+                  {/* TODO-70: tied to whichever month the slider above is on,
+                      not a single static "right now" figure like the rest of
+                      the Purchase Health Check panel. */}
+                  <HealthCheckIndicator
+                    label="Offset Utilisation (this month)"
+                    tooltipLabel="What is Offset Utilisation?"
+                    valueDisplay={`${calculateOffsetUtilisation(snapshot.offset, snapshot.balance).toFixed(1)}%`}
+                    classification={classifyOffsetUtilisation(calculateOffsetUtilisation(snapshot.offset, snapshot.balance))}
+                  >
+                    <p>Offset balance divided by (offset + remaining loan balance) at the month selected above - how much of what you still owe is already covered by your offset.</p>
+                    <p className="mt-2">&gt;20% strong, 10-20% building, 5-10% early days, &lt;5% just started.</p>
+                  </HealthCheckIndicator>
 
                   {/* SECONDARY METRICS */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
