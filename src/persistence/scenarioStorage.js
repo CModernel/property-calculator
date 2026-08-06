@@ -29,7 +29,13 @@ const STORAGE_KEY = 'propertyCalculator.scenario';
 // `personalExpenseItems` Schedule-shaped list, same shape as
 // `otherExpenseItems` - same "genuinely drops fields that could hold real
 // user data" reasoning as TODO-36's bump above.
-const SCHEMA_VERSION = 8;
+// Bumped to 9 in TODO-85: `otherExpenseItems` was retired - its categories
+// (Health/Subscriptions/Entertainment/Debt Repayment/Custom) are now just
+// more entries in `personalExpenseItems`, added via the same category
+// picklist. Same discard-not-migrate reasoning as every bump above: a
+// saved `otherExpenseItems` array could hold real user data that can't be
+// safely folded into the merged list automatically.
+const SCHEMA_VERSION = 9;
 
 // A version mismatch means the saved shape no longer matches what this
 // version of the app expects - discard rather than attempt a migration,

@@ -78,42 +78,32 @@ describe('"Add" form toggles', () => {
     expect(screen.getByLabelText('Amount ($)')).toBeInTheDocument();
   });
 
-  it('Exceptional Expenses: "+ Add" reveals the Expense Name field', async () => {
+  it('Personal Expenses: "+ Add" reveals the Expense Name category select (TODO-85: merged former "Other Expenses" categories in)', async () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole('button', { name: /Personal expenses breakdown/ }));
     const section = screen.getByText('Personal Expenses').parentElement;
 
     await user.click(within(section).getByRole('button', { name: '+ Add' }));
-    expect(screen.getByPlaceholderText(/Food, Transport, Wedding/)).toBeInTheDocument();
-  });
-
-  it('Other Expenses: "+ Add" reveals the Expense Name category select', async () => {
-    const user = userEvent.setup();
-    render(<App />);
-    await user.click(screen.getByRole('button', { name: /Personal expenses breakdown/ }));
-    const section = screen.getByText('Other Expenses').parentElement;
-
-    await user.click(within(section).getByRole('button', { name: '+ Add' }));
-    expect(screen.getByDisplayValue('Health')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Groceries')).toBeInTheDocument();
   });
 });
 
-describe('showPersonalExpenses gates all three sub-sections at once', () => {
-  it('collapsed hides Offset Contributions/Personal Expenses/Other Expenses simultaneously; expanding reveals all three', () => {
+describe('showPersonalExpenses gates both sub-sections at once', () => {
+  it('collapsed hides Offset Contributions/Personal Expenses simultaneously; expanding reveals both', () => {
     render(<App />);
-    for (const heading of ['💰 Offset Contributions Schedule', 'Personal Expenses', 'Other Expenses']) {
+    for (const heading of ['💰 Offset Contributions Schedule', 'Personal Expenses']) {
       expect(screen.queryByText(heading)).not.toBeInTheDocument();
     }
     expect(screen.queryByText('Groceries')).not.toBeInTheDocument();
   });
 
-  it('expanding reveals all three sub-sections together', async () => {
+  it('expanding reveals both sub-sections together', async () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole('button', { name: /Personal expenses breakdown/ }));
 
-    for (const heading of ['💰 Offset Contributions Schedule', 'Personal Expenses', 'Other Expenses']) {
+    for (const heading of ['💰 Offset Contributions Schedule', 'Personal Expenses']) {
       expect(screen.getByText(heading)).toBeInTheDocument();
     }
     // Groceries is a seeded personalExpenseItems list entry now (TODO-66),

@@ -13,11 +13,12 @@ async function openPersonalExpenses(user) {
   await user.click(screen.getByRole('button', { name: /Personal expenses breakdown/ }));
 }
 
-// Each of the three "Add" panels (Offset Contributions/Exceptional
-// Expenses/Other Expenses) has its own heading immediately followed by a
-// "+ Add" button sharing the same flex container - scope through that
-// heading rather than a bare "+ Add" query, since all three panels render
-// simultaneously once Personal Expenses is expanded.
+// Each of the two "Add" panels (Offset Contributions/Personal Expenses -
+// the latter merged with the former "Other Expenses" section in TODO-85)
+// has its own heading immediately followed by a "+ Add" button sharing the
+// same flex container - scope through that heading rather than a bare
+// "+ Add" query, since both panels render simultaneously once Personal
+// Expenses is expanded.
 function sectionContainer(headingText) {
   return screen.getByText(headingText).parentElement;
 }
@@ -26,74 +27,15 @@ async function openAddForm(user, headingText) {
   await user.click(within(sectionContainer(headingText)).getByRole('button', { name: '+ Add' }));
 }
 
-describe('Personal Expenses', () => {
-  it('blank name triggers the name alert', async () => {
-    const user = userEvent.setup();
-    render(<App />);
-    await openPersonalExpenses(user);
-    await openAddForm(user, 'Personal Expenses');
-
-    fireEvent.change(screen.getByPlaceholderText(/Food, Transport, Wedding/), { target: { value: '' } });
-    await user.click(screen.getByRole('button', { name: 'Add Expense' }));
-    expect(window.alert).toHaveBeenLastCalledWith('Please enter a name for the expense.');
-  });
-
-  it('amount <= 0 triggers the invalid-amount alert', async () => {
-    const user = userEvent.setup();
-    render(<App />);
-    await openPersonalExpenses(user);
-    await openAddForm(user, 'Personal Expenses');
-
-    fireEvent.change(screen.getByPlaceholderText(/Food, Transport, Wedding/), { target: { value: 'Gym' } });
-    fireEvent.change(screen.getByLabelText('Amount ($)'), { target: { value: '0' } });
-    fireEvent.blur(screen.getByLabelText('Amount ($)'));
-    await user.click(screen.getByRole('button', { name: 'Add Expense' }));
-    expect(window.alert).toHaveBeenLastCalledWith('Please enter a valid amount.');
-  });
-
-  it('an inverted schedule range triggers the month-order alert', async () => {
-    const user = userEvent.setup();
-    render(<App />);
-    await openPersonalExpenses(user);
-    await openAddForm(user, 'Personal Expenses');
-
-    fireEvent.change(screen.getByPlaceholderText(/Food, Transport, Wedding/), { target: { value: 'Gym' } });
-    const endSlider = within(screen.getByText(/End Month:/).parentElement).getByRole('slider');
-    fireEvent.change(endSlider, { target: { value: '10' } });
-    const startSlider = within(screen.getByText(/Start Month:/).parentElement).getByRole('slider');
-    fireEvent.change(startSlider, { target: { value: '50' } });
-
-    await user.click(screen.getByRole('button', { name: 'Add Expense' }));
-    expect(window.alert).toHaveBeenLastCalledWith('Start month must be before end month.');
-  });
-
-  it('a successful add/remove round-trip works', async () => {
-    const user = userEvent.setup();
-    render(<App />);
-    await openPersonalExpenses(user);
-    await openAddForm(user, 'Personal Expenses');
-
-    fireEvent.change(screen.getByPlaceholderText(/Food, Transport, Wedding/), { target: { value: 'Wedding' } });
-    fireEvent.change(screen.getByLabelText('Amount ($)'), { target: { value: '5000' } });
-    fireEvent.blur(screen.getByLabelText('Amount ($)'));
-    await user.click(screen.getByRole('button', { name: 'Add Expense' }));
-
-    expect(screen.getByText('Wedding')).toBeInTheDocument();
-    const row = screen.getByText('Wedding').closest('div').parentElement;
-    await user.click(within(row).getByRole('button', { name: '✕' }));
-    expect(screen.queryByText('Wedding')).not.toBeInTheDocument();
-  });
-});
-
-describe('Other Expenses', () => {
+describe('Personal Expenses (TODO-85: merged former "Other Expenses" categories in)', () => {
   it('selecting Custom reveals the free-text name field; other categories do not', async () => {
     const user = userEvent.setup();
     render(<App />);
     await openPersonalExpenses(user);
-    await openAddForm(user, 'Other Expenses');
+    await openAddForm(user, 'Personal Expenses');
 
     expect(screen.queryByPlaceholderText('e.g. Pet Expenses, Childcare, Gym')).not.toBeInTheDocument();
-    await user.selectOptions(screen.getByDisplayValue('Health'), 'Custom');
+    await user.selectOptions(screen.getByDisplayValue('Groceries'), 'Custom');
     expect(screen.getByPlaceholderText('e.g. Pet Expenses, Childcare, Gym')).toBeInTheDocument();
   });
 
@@ -101,8 +43,8 @@ describe('Other Expenses', () => {
     const user = userEvent.setup();
     render(<App />);
     await openPersonalExpenses(user);
-    await openAddForm(user, 'Other Expenses');
-    await user.selectOptions(screen.getByDisplayValue('Health'), 'Custom');
+    await openAddForm(user, 'Personal Expenses');
+    await user.selectOptions(screen.getByDisplayValue('Groceries'), 'Custom');
 
     await user.click(screen.getByRole('button', { name: 'Add Expense' }));
     expect(window.alert).toHaveBeenLastCalledWith('Please enter a name for the expense.');
@@ -112,10 +54,10 @@ describe('Other Expenses', () => {
     const user = userEvent.setup();
     render(<App />);
     await openPersonalExpenses(user);
-    await openAddForm(user, 'Other Expenses');
+    await openAddForm(user, 'Personal Expenses');
 
-    fireEvent.change(screen.getByLabelText('Amount ($)'), { target: { value: '0' } });
-    fireEvent.blur(screen.getByLabelText('Amount ($)'));
+    fireEvent.change(screen.getByLabelText('Monthly Amount ($)'), { target: { value: '0' } });
+    fireEvent.blur(screen.getByLabelText('Monthly Amount ($)'));
     await user.click(screen.getByRole('button', { name: 'Add Expense' }));
     expect(window.alert).toHaveBeenLastCalledWith('Please enter a valid amount.');
   });
@@ -124,7 +66,7 @@ describe('Other Expenses', () => {
     const user = userEvent.setup();
     render(<App />);
     await openPersonalExpenses(user);
-    await openAddForm(user, 'Other Expenses');
+    await openAddForm(user, 'Personal Expenses');
 
     const endSlider = within(screen.getByText(/End Month:/).parentElement).getByRole('slider');
     fireEvent.change(endSlider, { target: { value: '10' } });
@@ -135,21 +77,39 @@ describe('Other Expenses', () => {
     expect(window.alert).toHaveBeenLastCalledWith('Start month must be before end month.');
   });
 
-  it('a successful add/remove round-trip works', async () => {
+  it('a successful add/remove round-trip works with a picked category', async () => {
     const user = userEvent.setup();
     render(<App />);
     await openPersonalExpenses(user);
-    await openAddForm(user, 'Other Expenses');
+    await openAddForm(user, 'Personal Expenses');
 
-    await user.selectOptions(screen.getByDisplayValue('Health'), 'Subscriptions');
-    fireEvent.change(screen.getByLabelText('Amount ($)'), { target: { value: '20' } });
-    fireEvent.blur(screen.getByLabelText('Amount ($)'));
+    await user.selectOptions(screen.getByDisplayValue('Groceries'), 'Subscriptions');
+    fireEvent.change(screen.getByLabelText('Monthly Amount ($)'), { target: { value: '20' } });
+    fireEvent.blur(screen.getByLabelText('Monthly Amount ($)'));
     await user.click(screen.getByRole('button', { name: 'Add Expense' }));
 
     expect(screen.getByText('Subscriptions')).toBeInTheDocument();
     const row = screen.getByText('Subscriptions').closest('div').parentElement;
     await user.click(within(row).getByRole('button', { name: '✕' }));
     expect(screen.queryByText('Subscriptions')).not.toBeInTheDocument();
+  });
+
+  it('a successful add/remove round-trip works with a Custom name', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openPersonalExpenses(user);
+    await openAddForm(user, 'Personal Expenses');
+
+    await user.selectOptions(screen.getByDisplayValue('Groceries'), 'Custom');
+    fireEvent.change(screen.getByPlaceholderText('e.g. Pet Expenses, Childcare, Gym'), { target: { value: 'Wedding' } });
+    fireEvent.change(screen.getByLabelText('Monthly Amount ($)'), { target: { value: '5000' } });
+    fireEvent.blur(screen.getByLabelText('Monthly Amount ($)'));
+    await user.click(screen.getByRole('button', { name: 'Add Expense' }));
+
+    expect(screen.getByText('Wedding')).toBeInTheDocument();
+    const row = screen.getByText('Wedding').closest('div').parentElement;
+    await user.click(within(row).getByRole('button', { name: '✕' }));
+    expect(screen.queryByText('Wedding')).not.toBeInTheDocument();
   });
 });
 

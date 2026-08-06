@@ -70,11 +70,12 @@ const localConfig = Object.values(localConfigModules)[0]?.default ?? {};
 const savedScenario = loadScenario();
 const config = { ...defaultConfig, ...localConfig, ...savedScenario };
 
-// Other Expenses picklist - 'Custom' reveals a free-text name field (same
-// pattern as Income Sources' 'Other'), replacing the old flat "Other" field
-// entirely. No per-category Schedule defaults (unlike Income Sources) - the
-// form's own baseline (recurring monthly) applies uniformly.
-const OTHER_EXPENSE_CATEGORIES = ['Health', 'Subscriptions', 'Entertainment', 'Debt Repayment', 'Custom'];
+// Personal Expenses picklist (TODO-85: merged in what used to be the
+// separate "Other Expenses" section) - 'Custom' reveals a free-text name
+// field (same pattern as Income Sources' 'Other'). No per-category
+// Schedule defaults (unlike Income Sources) - the form's own baseline
+// (recurring monthly) applies uniformly.
+const PERSONAL_EXPENSE_CATEGORIES = ['Groceries', 'Transport', 'Bills', 'Health', 'Subscriptions', 'Entertainment', 'Debt Repayment', 'Custom'];
 
 // Shared explanation for every monthly figure derived from a weekly amount
 // (calculateMonthlyFromWeekly, src/calculations/loan.js) - answers "why
@@ -196,24 +197,6 @@ const PropertyInvestmentCalculator = () => {
   // recharts' actual render work only happens while the card is open.
   const [showProgressCharts, setShowProgressCharts] = useState(config.showProgressCharts ?? false);
 
-  // Other Expenses - a distinct-lifecycle expense (a subscription starts and
-  // gets cancelled, a loan ends when paid off), unlike Groceries/Transport which
-  // are an ongoing rate that occasionally changes (SteppedExpenseField).
-  // Same Schedule shape as Exceptional Expenses, including the same
-  // direct-per-occurrence-dollar-amount convention (not a $/week rate) - so
-  // this list, like Exceptional Expenses, only affects the simulation
-  // (Loan Simulation/Timeline Explorer), not the static "Personal Expenses"/
-  // "TO OFFSET" summary.
-  const [otherExpenseItems, setOtherExpenseItems] = useState(config.otherExpenseItems ?? []);
-  const [showAddOtherExpense, setShowAddOtherExpense] = useState(false);
-  const [newOtherExpenseCategory, setNewOtherExpenseCategory] = useState('Health'); // see OTHER_EXPENSE_CATEGORIES
-  const [newOtherExpenseCustomName, setNewOtherExpenseCustomName] = useState(''); // only used when category is 'Custom'
-  const [newOtherExpenseAmount, setNewOtherExpenseAmount] = useState(config.newOtherExpenseAmount);
-  const [newOtherExpenseOneTime, setNewOtherExpenseOneTime] = useState(false);
-  const [newOtherExpenseStartMonth, setNewOtherExpenseStartMonth] = useState(1);
-  const [newOtherExpenseRecurrence, setNewOtherExpenseRecurrence] = useState('monthly'); // monthly | quarterly | yearly
-  const [newOtherExpenseEndMonth, setNewOtherExpenseEndMonth] = useState(MAX_MONTH);
-
   // Offset contributions state. Same Schedule shape as Income Sources/
   // Exceptional Expenses ({startMonth, recurrence, endMonth}), resolved the
   // same way via getActiveAmount/isScheduleActive - a contribution can now
@@ -230,15 +213,18 @@ const PropertyInvestmentCalculator = () => {
   const [newContribEndMonth, setNewContribEndMonth] = useState(MAX_MONTH);
   const [newContribAmount, setNewContribAmount] = useState(config.newContribAmount);
 
-  // Personal Expenses State (TODO-66) - an addable/removable list, same
-  // Schedule-shaped model as Income Sources/Other Expenses, covering both
-  // routine recurring costs (Groceries, Transport, Phone/Internet - seeded as
-  // starter items in config.default.json) and one-off/exceptional costs
-  // (a wedding, car repair) that used to live in a separately-labeled
-  // "Exceptional Expenses" section before this TODO merged the two.
+  // Personal Expenses State (TODO-66, merged with the former "Other
+  // Expenses" section in TODO-85) - an addable/removable list, covering
+  // routine recurring costs (Groceries, Transport, Phone/Internet - seeded
+  // as starter items in config.default.json), distinct-lifecycle costs
+  // (a subscription starts and gets cancelled) and one-off/exceptional
+  // costs (a wedding, car repair). Same direct-per-occurrence-dollar-amount
+  // convention as every other Schedule-shaped list in this file (not a
+  // $/week rate).
   const [personalExpenseItems, setPersonalExpenseItems] = useState(config.personalExpenseItems ?? []);
   const [showAddExceptExp, setShowAddExceptExp] = useState(false);
-  const [newExpName, setNewExpName] = useState('');
+  const [newExpCategory, setNewExpCategory] = useState('Groceries'); // see PERSONAL_EXPENSE_CATEGORIES
+  const [newExpCustomName, setNewExpCustomName] = useState(''); // only used when category is 'Custom'
   const [newExpAmount, setNewExpAmount] = useState(config.newExpAmount);
   const [newExpOneTime, setNewExpOneTime] = useState(false);
   const [newExpStartMonth, setNewExpStartMonth] = useState(1);
@@ -342,10 +328,11 @@ const PropertyInvestmentCalculator = () => {
   // so it must stay consistent with that snapshot's offset: 0 / effectiveBalance: loanAmount.
   const monthZeroInterest = calculateInitialMonthlyInterest(loanAmount, monthlyRate);
 
-  // Your personal expenses (TODO-66) - same "right now" (month 1)
-  // convention as Income Sources/Other Expenses; weeklyPersonalExpenses is
-  // only kept around for calculateWeeklyNetBalance's own weekly-denominated
-  // math below, via the 12/52 inverse of the usual weekly->monthly factor.
+  // Your personal expenses (TODO-66, merged with the former "Other
+  // Expenses" in TODO-85) - same "right now" (month 1) convention as
+  // Income Sources; weeklyPersonalExpenses is only kept around for
+  // calculateWeeklyNetBalance's own weekly-denominated math below, via the
+  // 12/52 inverse of the usual weekly->monthly factor.
   const monthlyPersonalExpenses = getActiveAmount(personalExpenseItems, 1);
   const weeklyPersonalExpenses = monthlyPersonalExpenses * 12 / 52;
 
@@ -404,7 +391,6 @@ const PropertyInvestmentCalculator = () => {
   const loanSimulation = calculateLoanWithOffset({
     contributions: offsetContributions,
     personalExpenseItems,
-    otherExpenseItems,
     incomeSources,
     expenseFields,
     monthlyToOffset: baseMonthlySurplus,
@@ -419,7 +405,6 @@ const PropertyInvestmentCalculator = () => {
   const baselineSimulation = calculateLoanWithOffset({
     contributions: [], // No offsets
     personalExpenseItems,
-    otherExpenseItems,
     incomeSources,
     expenseFields,
     monthlyToOffset: baseMonthlySurplus,
@@ -580,7 +565,6 @@ const PropertyInvestmentCalculator = () => {
       incomeSources,
       offsetContributions,
       personalExpenseItems,
-      otherExpenseItems,
       showPropertyExpenses, showMonthlyExpensesBreakdown, showClosingCostsBreakdown,
       showIncome, showPersonalExpenses, showPersonalExpensesBreakdown, showProgressCharts, showHealthCheck,
       savedAt,
@@ -711,9 +695,12 @@ const PropertyInvestmentCalculator = () => {
     setIncomeSources(incomeSources.filter(i => i.id !== id));
   };
 
-  // Personal Expenses Functions (TODO-66)
+  // Personal Expenses Functions (TODO-66, merged with the former "Other
+  // Expenses" add-form in TODO-85: name is resolved from the selected
+  // category, or the free-text custom name when 'Custom' is picked).
   const addPersonalExpense = () => {
-    if (!newExpName) {
+    const name = newExpCategory === 'Custom' ? newExpCustomName : newExpCategory;
+    if (!name) {
       alert('Please enter a name for the expense.');
       return;
     }
@@ -728,7 +715,7 @@ const PropertyInvestmentCalculator = () => {
 
     const newExp = {
       id: Date.now(),
-      name: newExpName,
+      name,
       amount: newExpAmount,
       startMonth: newExpStartMonth,
       recurrence: newExpOneTime ? 'none' : newExpRecurrence,
@@ -737,8 +724,9 @@ const PropertyInvestmentCalculator = () => {
 
     setPersonalExpenseItems([...personalExpenseItems, newExp]);
     setShowAddExceptExp(false);
-    setNewExpName('');
-    setNewExpAmount(920);
+    setNewExpCategory('Groceries');
+    setNewExpCustomName('');
+    setNewExpAmount(config.newExpAmount);
     setNewExpOneTime(false);
     setNewExpStartMonth(1);
     setNewExpRecurrence('monthly');
@@ -747,46 +735,6 @@ const PropertyInvestmentCalculator = () => {
 
   const removePersonalExpense = (id) => {
     setPersonalExpenseItems(personalExpenseItems.filter(e => e.id !== id));
-  };
-
-  // Other Expenses Functions
-  const addOtherExpenseItem = () => {
-    const name = newOtherExpenseCategory === 'Custom' ? newOtherExpenseCustomName : newOtherExpenseCategory;
-    if (!name) {
-      alert('Please enter a name for the expense.');
-      return;
-    }
-    if (!validateAmount(newOtherExpenseAmount)) {
-      alert('Please enter a valid amount.');
-      return;
-    }
-    if (!validateScheduleRange(newOtherExpenseOneTime, newOtherExpenseStartMonth, newOtherExpenseEndMonth)) {
-      alert('Start month must be before end month.');
-      return;
-    }
-
-    const newItem = {
-      id: Date.now(),
-      name,
-      amount: newOtherExpenseAmount,
-      startMonth: newOtherExpenseStartMonth,
-      recurrence: newOtherExpenseOneTime ? 'none' : newOtherExpenseRecurrence,
-      ...(newOtherExpenseOneTime ? {} : { endMonth: newOtherExpenseEndMonth }),
-    };
-
-    setOtherExpenseItems([...otherExpenseItems, newItem]);
-    setShowAddOtherExpense(false);
-    setNewOtherExpenseCategory('Health');
-    setNewOtherExpenseCustomName('');
-    setNewOtherExpenseAmount(config.newOtherExpenseAmount);
-    setNewOtherExpenseOneTime(false);
-    setNewOtherExpenseStartMonth(1);
-    setNewOtherExpenseRecurrence('monthly');
-    setNewOtherExpenseEndMonth(MAX_MONTH);
-  };
-
-  const removeOtherExpenseItem = (id) => {
-    setOtherExpenseItems(otherExpenseItems.filter(item => item.id !== id));
   };
 
   return (
@@ -1754,12 +1702,13 @@ const PropertyInvestmentCalculator = () => {
                 </div>
               </div>
 
-              {/* PERSONAL EXPENSES (TODO-66) - an addable/removable list,
-                  same Schedule model as Income Sources/Other Expenses.
+              {/* PERSONAL EXPENSES (TODO-66, merged with the former "Other
+                  Expenses" section in TODO-85) - an addable/removable list,
+                  same Schedule model as Income Sources.
                   Groceries/Transport/Phone-Internet are just starter items here
                   (seeded in config.default.json), not fixed fields - this
                   section absorbs what used to be the separately-labeled
-                  "Exceptional Expenses" card. */}
+                  "Exceptional Expenses" and "Other Expenses" cards. */}
               <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-5 border-t-4 border-yellow-400 dark:border-yellow-700">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-bold text-gray-700 dark:text-gray-200 flex items-center gap-2">
@@ -1774,9 +1723,11 @@ const PropertyInvestmentCalculator = () => {
                   </button>
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2 mb-3">
-                  Routine costs (Groceries, Transport, Bills) or
-                  one-off/exceptional costs (a wedding, car repair) - pick
-                  "One-Time" or a repeat interval below for each.
+                  Routine costs (Groceries, Transport, Bills), lifestyle
+                  costs (Health, Subscriptions, Entertainment, Debt
+                  Repayment) or one-off/exceptional costs (a wedding, car
+                  repair) - pick a category below, or "Custom" for anything
+                  else, and "One-Time" or a repeat interval for each.
                 </p>
 
                 {showAddExceptExp && (
@@ -1784,17 +1735,28 @@ const PropertyInvestmentCalculator = () => {
                     <div className="grid gap-3">
                       <div>
                         <label className="block font-medium text-gray-700 dark:text-gray-200 mb-1">Expense Name</label>
-                        <input
-                          type="text"
-                          value={newExpName}
-                          onChange={(e) => setNewExpName(e.target.value)}
+                        <select
+                          value={newExpCategory}
+                          onChange={(e) => setNewExpCategory(e.target.value)}
                           className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                          placeholder="e.g. Food, Transport, Wedding, Netflix"
-                        />
+                        >
+                          {PERSONAL_EXPENSE_CATEGORIES.map((category) => (
+                            <option key={category}>{category}</option>
+                          ))}
+                        </select>
+                        {newExpCategory === 'Custom' && (
+                          <input
+                            type="text"
+                            value={newExpCustomName}
+                            onChange={(e) => setNewExpCustomName(e.target.value)}
+                            className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 mt-2"
+                            placeholder="e.g. Pet Expenses, Childcare, Gym"
+                          />
+                        )}
                       </div>
 
                       <NumberSliderField
-                        label="Amount ($)"
+                        label="Monthly Amount ($)"
                         value={newExpAmount}
                         onChange={setNewExpAmount}
                         min={0}
@@ -1874,132 +1836,6 @@ const PropertyInvestmentCalculator = () => {
                         </p>
                       </div>
                       <button onClick={() => removePersonalExpense(exp.id)} className="text-red-500 font-bold px-2">✕</button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* OTHER EXPENSES */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-5 border-t-4 border-purple-400 dark:border-purple-700">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-bold text-gray-700 dark:text-gray-200 flex items-center gap-2">
-                    <Wallet size={24} className="text-purple-600 dark:text-purple-400" />
-                    Other Expenses
-                  </h2>
-                  <button
-                    onClick={() => setShowAddOtherExpense(!showAddOtherExpense)}
-                    className="px-3 py-1 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600 transition-colors"
-                  >
-                    {showAddOtherExpense ? '✕ Cancel' : '+ Add'}
-                  </button>
-                </div>
-
-                {showAddOtherExpense && (
-                  <div className="mb-4 p-4 bg-purple-50 dark:bg-purple-950 rounded-lg border border-purple-200 dark:border-purple-800 text-sm">
-                    <div className="grid gap-3">
-                      <div>
-                        <label className="block font-medium text-gray-700 dark:text-gray-200 mb-1">Expense Name</label>
-                        <select
-                          value={newOtherExpenseCategory}
-                          onChange={(e) => setNewOtherExpenseCategory(e.target.value)}
-                          className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                        >
-                          {OTHER_EXPENSE_CATEGORIES.map((category) => (
-                            <option key={category}>{category}</option>
-                          ))}
-                        </select>
-                        {newOtherExpenseCategory === 'Custom' && (
-                          <input
-                            type="text"
-                            value={newOtherExpenseCustomName}
-                            onChange={(e) => setNewOtherExpenseCustomName(e.target.value)}
-                            className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 mt-2"
-                            placeholder="e.g. Pet Expenses, Childcare, Gym"
-                          />
-                        )}
-                      </div>
-
-                      <NumberSliderField
-                        label="Amount ($)"
-                        value={newOtherExpenseAmount}
-                        onChange={setNewOtherExpenseAmount}
-                        min={0}
-                        max={50000}
-                        prefix="$"
-                        hideSlider
-                      />
-
-                      <label className="flex items-center gap-2 text-xs font-medium text-gray-700 dark:text-gray-200">
-                        <input
-                          type="checkbox"
-                          checked={newOtherExpenseOneTime}
-                          onChange={(e) => setNewOtherExpenseOneTime(e.target.checked)}
-                          className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-purple-600 dark:text-purple-400 focus:ring-purple-500"
-                        />
-                        One-Time (occurs once, doesn't repeat)
-                      </label>
-
-                      <div>
-                        <label className="block font-medium text-gray-700 dark:text-gray-200 mb-1">
-                          {newOtherExpenseOneTime ? `Occurs at Month: ${newOtherExpenseStartMonth}` : `Start Month: ${newOtherExpenseStartMonth}`}
-                        </label>
-                        <input
-                          type="range" min="1" max={MAX_MONTH}
-                          value={newOtherExpenseStartMonth}
-                          onChange={(e) => setNewOtherExpenseStartMonth(Number(e.target.value))}
-                          className="w-full h-2 bg-purple-200 dark:bg-purple-900 rounded-lg appearance-none cursor-pointer"
-                        />
-                      </div>
-
-                      {!newOtherExpenseOneTime && (
-                        <div className="space-y-3">
-                          <div className="flex gap-2 text-xs">
-                            {['monthly', 'quarterly', 'yearly'].map((option) => (
-                              <button
-                                key={option}
-                                onClick={() => setNewOtherExpenseRecurrence(option)}
-                                className={`flex-1 py-1 rounded border capitalize text-gray-800 dark:text-gray-100 ${newOtherExpenseRecurrence === option ? 'bg-fuchsia-200 dark:bg-fuchsia-900 border-fuchsia-400 dark:border-fuchsia-700 font-bold' : 'bg-white dark:bg-gray-800'}`}
-                              >{option}</button>
-                            ))}
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
-                              End Month: {newOtherExpenseEndMonth === MAX_MONTH ? 'Forever' : newOtherExpenseEndMonth}
-                            </label>
-                            <input
-                              type="range" min={newOtherExpenseStartMonth} max={MAX_MONTH}
-                              value={newOtherExpenseEndMonth}
-                              onChange={(e) => setNewOtherExpenseEndMonth(Number(e.target.value))}
-                              className="w-full h-2 bg-fuchsia-200 dark:bg-fuchsia-900 rounded-lg appearance-none cursor-pointer"
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      <button
-                        onClick={addOtherExpenseItem}
-                        className="w-full py-2 bg-purple-600 text-white rounded font-bold hover:bg-purple-700"
-                      >
-                        Add Expense
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {otherExpenseItems.length === 0 && !showAddOtherExpense && (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 italic text-center">No other expenses added.</p>
-                  )}
-                  {otherExpenseItems.map(item => (
-                    <div key={item.id} className="flex justify-between items-center p-2 bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800 rounded text-sm">
-                      <div>
-                        <p className="font-bold text-gray-800 dark:text-gray-100">{item.name}</p>
-                        <p className="text-xs text-gray-600 dark:text-gray-300">
-                          ${item.amount} • {formatScheduleLabel(item)}
-                        </p>
-                      </div>
-                      <button onClick={() => removeOtherExpenseItem(item.id)} className="text-red-500 font-bold px-2">✕</button>
                     </div>
                   ))}
                 </div>
@@ -2814,7 +2650,7 @@ const PropertyInvestmentCalculator = () => {
                       <div className="bg-yellow-50 dark:bg-yellow-950 rounded-lg p-3 border border-yellow-100 dark:border-yellow-800">
                         <p className="font-bold text-yellow-800 dark:text-yellow-400 border-b border-yellow-200 dark:border-yellow-800 pb-1 mb-2">Expenses Status</p>
                         <div className="space-y-1 text-xs max-h-32 overflow-y-auto">
-                          {[...personalExpenseItems, ...otherExpenseItems].map(exp => {
+                          {personalExpenseItems.map(exp => {
                             const status = classifyScheduleStatus(exp, timelineMonth);
                             if (status === 'future') return null;
 
@@ -2825,7 +2661,7 @@ const PropertyInvestmentCalculator = () => {
                               </div>
                             );
                           })}
-                          {[...personalExpenseItems, ...otherExpenseItems].filter(e => e.startMonth <= timelineMonth).length === 0 && (
+                          {personalExpenseItems.filter(e => e.startMonth <= timelineMonth).length === 0 && (
                             <span className="italic text-gray-400 dark:text-gray-500">No expenses recorded</span>
                           )}
                         </div>

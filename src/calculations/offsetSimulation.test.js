@@ -136,26 +136,10 @@ describe('calculateLoanWithOffset', () => {
     expect(result.monthlyData[299].offset).toBe(700 * 300);
   });
 
-  it('subtracts an "Other Expenses" item (e.g. a subscription) as a direct per-occurrence amount, same as Exceptional Expenses', () => {
+  it('subtracts a one-time personal expense only on its exact month (TODO-85: former "Other Expenses" categories merged in)', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
-      personalExpenseItems: [],
-      otherExpenseItems: [{ startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH, amount: 15 }],
-      monthlyToOffset: 1000,
-      loanAmount: 10_000_000,
-      monthlyRate: 0,
-      monthlyPayment: 100,
-      maxMonths: 3,
-    });
-    const offsets = result.monthlyData.map(d => d.offset);
-    expect(offsets).toEqual([985, 1970, 2955]);
-  });
-
-  it('subtracts a one-time "Other Expenses" item only on its exact month', () => {
-    const result = calculateLoanWithOffset({
-      contributions: [],
-      personalExpenseItems: [],
-      otherExpenseItems: [{ startMonth: 2, recurrence: 'none', amount: 200 }],
+      personalExpenseItems: [{ startMonth: 2, recurrence: 'none', amount: 200 }],
       monthlyToOffset: 1000,
       loanAmount: 10_000_000,
       monthlyRate: 0,

@@ -2305,6 +2305,70 @@ optionally reuse in the commit message when you implement it.
   $1,000 raised the Closing Costs subtotal $4,750 -> $5,750 and Upfront
   Cost Ratio 1.7% -> 1.8%.
 
+- [x] **TODO-85: Merge Other Expenses into Personal Expenses as one categorized list, and relabel the Amount field**
+  Follow-up from TODO-76/77/78's analysis (done). `src/App.jsx`'s
+  "Other Expenses" section (category dropdown + Custom, no seeded items)
+  and "Personal Expenses" section (free-text name, seeded with Groceries/
+  Transport/Phone-Internet) merged into one: `personalExpenseItems`
+  absorbs everything, `otherExpenseItems` and its whole draft-state/
+  handler pair (`addOtherExpenseItem`/`removeOtherExpenseItem`) deleted
+  outright. `OTHER_EXPENSE_CATEGORIES` renamed `PERSONAL_EXPENSE_CATEGORIES`
+  and extended: `['Groceries', 'Transport', 'Bills', 'Health',
+  'Subscriptions', 'Entertainment', 'Debt Repayment', 'Custom']` (default
+  selection now `'Groceries'`, was `'Health'`). The surviving Personal
+  Expenses card's free-text "Expense Name" input became the category
+  `<select>` + conditional Custom text field (Other Expenses' existing
+  pattern), keeping the yellow/orange theme. No per-category Schedule
+  defaults, per TODO-76's own recommendation. Item shape is unchanged
+  (`{id, name, amount, startMonth, recurrence, endMonth}`) - category is
+  an add-time-only concept used to derive `name`, not a stored field
+  (matches Income Sources, which has no stored category either).
+  `calculateLoanWithOffset` (`src/calculations/offsetSimulation.js`) lost
+  its `otherExpenseItems` param entirely (not deprecated - an internal
+  function, both call sites updated in the same change); Timeline
+  Explorer's `[...personalExpenseItems, ...otherExpenseItems]` spread
+  simplified to just `personalExpenseItems`; `handleSaveScenario` drops
+  `otherExpenseItems`.
+  **Genuine behavior fix, not just a relabeling**: the "right now" Net
+  Balance/TO OFFSET figures previously excluded Other-Expenses-style
+  items by construction (a known inconsistency per TODO-77's analysis) -
+  post-merge, anything added under Health/Subscriptions/etc. now
+  correctly counts toward those static figures too. Verified live: adding
+  a $50/month "Subscriptions" item raised the subtotal $680 -> $730 and
+  dropped TO OFFSET $2470 -> $2420 immediately, not just in the
+  simulation.
+  **UX behavior change worth flagging**: the blank-name alert is now
+  reachable only when `Custom` is selected with an empty custom-name
+  field (every other category is a fixed truthy string) - previously
+  reachable directly via free text. Intentional, matches how Other
+  Expenses already worked.
+  `SCHEMA_VERSION` bumped 8 -> 9 in `src/persistence/scenarioStorage.js`
+  (comment follows the same template as TODO-36/66's prior bumps) -
+  `otherExpenseItems` could hold real user data, so old scenarios are
+  discarded cleanly rather than migrated. Removed the now-unused
+  `newOtherExpenseAmount` key from `config.default.json`.
+  Consolidated tests: `offsetSimulation.test.js` - deleted the
+  `otherExpenseItems` recurring-expense test (fully redundant with an
+  existing `personalExpenseItems` test), converted the one-time-expense
+  test to use `personalExpenseItems` (the only test proving an item is
+  absent before/after its exact month, not duplicated elsewhere).
+  `App.expensesAndContributions.test.jsx` - merged the separate Personal/
+  Other Expenses `describe` blocks into one, keeping the Custom-reveal
+  test and both a category-pick and a Custom-name add/remove round-trip.
+  `App.collapsiblePanels.test.jsx` - merged the two "+Add reveals..."
+  tests into one, updated "gates all three sub-sections" to two.
+  `scenarioStorage.test.js` - hardcoded `version: 8` fixtures updated to 9.
+  `npm test -- --run` (303/303), `npm run lint`, `npm run build` all
+  clean. Verified in the browser: no separate "Other Expenses" card
+  exists; the category dropdown defaults to "Groceries", Custom reveals
+  the free-text field; adding/removing a "Subscriptions" item works and
+  correctly moves the static figures (above); "Monthly Amount ($)" reads
+  correctly while Offset Contributions' own "Amount ($)" label is
+  untouched; saved a fresh scenario and confirmed via localStorage
+  inspection it's `version: 9` with no `otherExpenseItems` key; seeded a
+  fake `version: 8` payload (with a fake `otherExpenseItems` array) and
+  confirmed it was discarded cleanly on reload (fresh defaults, no crash).
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -2395,26 +2459,6 @@ optionally reuse in the commit message when you implement it.
   existing over-committed-savings warning; confirmed First Home Buyer
   stayed checked throughout with zero interaction, exactly as designed.
 
-
-- [ ] **TODO-85: Merge Other Expenses into Personal Expenses as one categorized list, and relabel the Amount field**
-  Follow-up from TODO-76/77/78's analysis (done). Two changes:
-  (1) Merge `src/App.jsx`'s Other Expenses section into Personal
-  Expenses - one list, one add form, using a category dropdown extending
-  `OTHER_EXPENSE_CATEGORIES` (Health/Subscriptions/Entertainment/Debt
-  Repayment) with Groceries/Transport/Bills added and "Custom" kept as
-  the free-text fallback, still seeded with the 3 starter items. No
-  per-category Schedule defaults (deliberately, per TODO-76's analysis).
-  Touches: the merged section's state (`personalExpenseItems` absorbs
-  what `otherExpenseItems` covers - decide whether to literally merge
-  the two arrays/states or just present them as one UI section backed by
-  two arrays under the hood), `config.default.json` (no `otherExpenseItems`
-  default currently exists to migrate), `SCHEMA_VERSION` (bump - existing
-  saved `otherExpenseItems` would need to either migrate into
-  `personalExpenseItems` or be dropped, per the established "discard
-  rather than partially migrate" convention), and every test file
-  currently covering Other Expenses as its own section.
-  (2) Relabel the "Amount ($)" field (both call sites, soon to be one)
-  to make the monthly convention explicit, e.g. "Monthly Amount ($)".
 
 ---
 

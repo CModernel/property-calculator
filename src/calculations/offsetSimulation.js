@@ -16,8 +16,9 @@ export function calculateLoanWithOffset({
   // Merged with what used to be Groceries/Transport/Phone-Internet
   // (SteppedExpenseField/expenseFields) - TODO-66 rebuilt those as regular
   // Schedule-shaped list entries here, same as any other personal expense.
+  // TODO-85 folded the former separate "Other Expenses" list into this
+  // same array - callers no longer pass a distinct otherExpenseItems param.
   personalExpenseItems,
-  otherExpenseItems = [],
   incomeSources = [],
   expenseFields = null,
   monthlyToOffset,
@@ -100,15 +101,12 @@ export function calculateLoanWithOffset({
     // within its range, same resolution as Income Sources/Exceptional Expenses.
     offsetBalance += getActiveAmount(contributions, months);
 
-    // Personal expenses for this month - Groceries/Transport/Phone-Internet and
-    // any exceptional/recurring cost the user has added, all resolved the
-    // same way (TODO-66).
+    // Personal expenses for this month - Groceries/Transport/Phone-Internet,
+    // any exceptional/recurring cost, and (TODO-85) the former "Other
+    // Expenses" categories (Health/Subscriptions/Entertainment/Debt
+    // Repayment/Custom) - all resolved the same way as a direct
+    // per-occurrence dollar amount, not a $/week rate.
     const monthlyPersonalExpensesCost = getActiveAmount(personalExpenseItems, months);
-
-    // Other Expenses (Health/Subscriptions/Entertainment/Debt Repayment/
-    // Custom) - a direct per-occurrence dollar amount, same convention as
-    // Exceptional Expenses above, not a $/week rate.
-    const monthlyOtherExpenseItemsCost = getActiveAmount(otherExpenseItems, months);
 
     // Income sources active this month (salary, other income, one-time
     // payments, and Tenants) - a value that can change mid-simulation (a
@@ -166,7 +164,7 @@ export function calculateLoanWithOffset({
     const netMonthlyDeposit = Math.max(
       0,
       monthlyToOffset + (initialMonthlyPayment - currentMonthlyPayment) + monthlyIncomeThisMonth - monthlyExpensesForMonth
-        - monthlyPersonalExpensesCost - monthlyOtherExpenseItemsCost
+        - monthlyPersonalExpensesCost
     );
     // TODO-49: only offsetAllocationPct of the surplus reaches the offset -
     // the rest builds the separately-tracked savings balance instead.
