@@ -889,3 +889,83 @@ describe('Salary/Wages income growth (salaryGrowthRate, TODO-90)', () => {
     expect(result.monthlyData.map(d => d.offset)).toEqual(expectedOffsets);
   });
 });
+
+describe('expense growth (expenseGrowthRate, TODO-92)', () => {
+  it('matches the plain path exactly when expenseGrowthRate is 0/omitted', () => {
+    const emptyField = { base: 0, changes: [] };
+    const shared = {
+      contributions: [],
+      personalExpenseItems: [{ startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH, amount: 50 }],
+      monthlyToOffset: 1000,
+      expenseFields: {
+        strataFees: emptyField,
+        utilities: emptyField,
+        councilRates: { base: 400, changes: [] }, // quarterly -> $100/month
+        insurance: emptyField,
+        maintenance: emptyField,
+        waterRates: emptyField,
+        landTax: emptyField,
+        propertyManagement: emptyField,
+      },
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 2,
+    };
+    const withDefault = calculateLoanWithOffset(shared);
+    const withExplicitZero = calculateLoanWithOffset({ ...shared, expenseGrowthRate: 0 });
+    expect(withExplicitZero).toEqual(withDefault);
+    expect(withDefault.monthlyData.map(d => d.offset)).toEqual([850, 1700]);
+  });
+
+  it('grows property expenses monthly at expenseGrowthRate, on top of a scheduled base value', () => {
+    const emptyField = { base: 0, changes: [] };
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      expenseFields: {
+        strataFees: emptyField,
+        utilities: emptyField,
+        councilRates: { base: 400, changes: [] }, // quarterly -> $100/month
+        insurance: emptyField,
+        maintenance: emptyField,
+        waterRates: emptyField,
+        landTax: emptyField,
+        propertyManagement: emptyField,
+      },
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      expenseGrowthRate: 12, // -> exactly 1%/month via calculateMonthlyRate
+      maxMonths: 2,
+    });
+    let cumulative = 0;
+    const expectedOffsets = [1, 2].map((month) => {
+      const grownPropertyExpense = calculateCompoundedValue(100, 12, month);
+      cumulative += 1000 - grownPropertyExpense;
+      return Math.round(cumulative);
+    });
+    expect(result.monthlyData.map(d => d.offset)).toEqual(expectedOffsets);
+  });
+
+  it('grows personal expenses monthly at expenseGrowthRate', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [{ startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH, amount: 300 }],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      expenseGrowthRate: 12,
+      maxMonths: 2,
+    });
+    let cumulative = 0;
+    const expectedOffsets = [1, 2].map((month) => {
+      const grownPersonalExpense = calculateCompoundedValue(300, 12, month);
+      cumulative += 1000 - grownPersonalExpense;
+      return Math.round(cumulative);
+    });
+    expect(result.monthlyData.map(d => d.offset)).toEqual(expectedOffsets);
+  });
+});

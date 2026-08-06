@@ -150,6 +150,12 @@ const PropertyInvestmentCalculator = () => {
   // 0 (the default) preserves the original "savings never earns anything"
   // behavior exactly.
   const [savingsInterestRate, setSavingsInterestRate] = useState(config.savingsInterestRate ?? 0);
+  // TODO-92: annual % growth applied to BOTH Personal Expenses and Property
+  // Expenses together, compounding monthly inside the simulation - 0
+  // (default) keeps expenses flat. Deliberately distinct from
+  // `inflationRate` (TODO-93) below, which only affects the "today's
+  // dollars" display and never changes the simulation itself.
+  const [expenseGrowthRate, setExpenseGrowthRate] = useState(config.expenseGrowthRate ?? 0);
   // TODO-55: a static "right now" estimate (offset-timing benefit +
   // cashback), deliberately NOT wired into the simulation - see
   // src/calculations/creditCardBenefit.js. Off by default (useCreditCard),
@@ -442,6 +448,7 @@ const PropertyInvestmentCalculator = () => {
     propertyPrice,
     propertyGrowthRate,
     salaryGrowthRate,
+    expenseGrowthRate,
     maxMonths: totalMonths,
   });
   const baselineSimulation = calculateLoanWithOffset({
@@ -460,6 +467,7 @@ const PropertyInvestmentCalculator = () => {
     propertyPrice,
     propertyGrowthRate,
     salaryGrowthRate,
+    expenseGrowthRate,
     maxMonths: totalMonths,
   });
   const interestSaved = baselineSimulation.totalInterest - loanSimulation.totalInterest;
@@ -612,7 +620,7 @@ const PropertyInvestmentCalculator = () => {
       landTax: landTaxField.base, landTaxChanges: landTaxField.changes,
       propertyManagement: propertyManagementField.base, propertyManagementChanges: propertyManagementField.changes,
       miscPropertyExpense: miscPropertyExpenseField.base, miscPropertyExpenseChanges: miscPropertyExpenseField.changes,
-      isFirstHomeBuyer, isForeignPurchaser, totalSavings, offsetAllocationPct, savingsInterestRate, currentAge, showMortgageFreeAge, payLmiUpfront,
+      isFirstHomeBuyer, isForeignPurchaser, totalSavings, offsetAllocationPct, savingsInterestRate, expenseGrowthRate, currentAge, showMortgageFreeAge, payLmiUpfront,
       useCreditCard, monthlyCardSpend, avgExtraDaysHeld, cashbackPct, annualCardFee, inflationRate,
       conveyancing, buildingInspection, pestInspection, registrationFees, searches,
       loanEstablishmentFee, propertyValuation, homeInsurance, rateAdjustments, miscUpfrontCost,
@@ -1056,6 +1064,21 @@ const PropertyInvestmentCalculator = () => {
                 suffix="% p.a."
               >
                 Annual interest earned on your savings balance (seeded from Remaining Savings, plus whatever isn't sent to the offset each month). 0% (default) means no interest is modeled.
+              </NumberSliderField>
+
+              <NumberSliderField
+                label="Expense Growth Rate"
+                value={expenseGrowthRate}
+                onChange={setExpenseGrowthRate}
+                min={-5}
+                max={15}
+                sliderMin={0}
+                sliderMax={8}
+                step={0.1}
+                color="orange"
+                suffix="% p.a."
+              >
+                Annual growth applied to your Personal and Property Expenses together, compounding inside the simulation - unlike the Inflation Rate below (which only affects the "today's dollars" display), this genuinely changes projected payoff time and total interest. 0% (default) keeps expenses flat.
               </NumberSliderField>
 
               <NumberSliderField

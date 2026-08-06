@@ -2688,6 +2688,57 @@ optionally reuse in the commit message when you implement it.
   reloaded, confirmed persistence; cleared the saved scenario, confirmed
   it reset to 0%.
 
+- [x] **TODO-92: Expense Inflation**
+  Follow-up from TODO-54's split - the third to reuse TODO-89's
+  compounding mechanism. Resolved the plan's own open question -
+  **one shared rate for both Personal and Property Expenses**, not two
+  independent ones, to keep this a single, easily-understood concept
+  (matches the TODO's own singular naming).
+  Simpler implementation than Salary Growth (TODO-90) turned out to be
+  possible: since the growth applies to *every* item in each category
+  uniformly (no per-category filtering needed, unlike Salary/Wages vs.
+  other income), there was no need for a `getActiveAmountWithGrowth`-
+  style per-item function. Instead, `calculateLoanWithOffset`
+  (`src/calculations/offsetSimulation.js`) computes one
+  `expenseGrowthMultiplier = calculateCompoundedValue(1, expenseGrowthRate, months)`
+  per month and multiplies the two already-resolved aggregate figures by
+  it: `monthlyPersonalExpensesCost` (the `getActiveAmount` sum) and
+  `monthlyExpensesForMonth` (property expenses, resolved as before via
+  each `SteppedExpenseField`'s own `getSteppedValue` - the multiplier
+  overlays on top of that final sum, so a scheduled step change and
+  ongoing growth compose correctly without touching each field's
+  resolution logic).
+  New `expenseGrowthRate = 0` param - a no-op (multiplier of 1) at the
+  default, so every existing test kept passing unchanged with zero
+  edits.
+  **Naming collision deliberately avoided**: this is *not* the same as
+  `inflationRate` (TODO-93) - that one is a pure post-hoc display
+  conversion of "Total interest paid" into today's dollars and never
+  touches the simulation; `expenseGrowthRate` genuinely changes payoff
+  time and total interest by growing the expenses that compete with the
+  offset for the same surplus. New "Expense Growth Rate"
+  `NumberSliderField` in Financial Position, placed directly between
+  Savings Interest Rate and Inflation Rate, with tooltip copy explicitly
+  cross-referencing Inflation Rate below it to head off the obvious
+  confusion of two similarly-named sliders doing different things.
+  Allows a small negative range too (falling costs), same allowance as
+  Property/Salary Growth.
+  `expenseGrowthRate` persisted via `handleSaveScenario` - purely
+  additive, no `SCHEMA_VERSION` bump.
+  Added 3 new tests to `offsetSimulation.test.js` (0%/omitted matches the
+  plain path exactly - `[850, 1700]` with both expense types present;
+  property expenses grow correctly on top of a scheduled base value;
+  personal expenses grow correctly), all computed against
+  `calculateCompoundedValue` directly rather than hand-derived numbers.
+  `npm test -- --run` (335/335), `npm run lint`, `npm run build` all
+  clean. Verified in the browser: at 6%, "Total interest paid" rose
+  $196,743 -> $216,118 while the static "Property expenses breakdown"
+  ($543/month) and "Personal expenses breakdown" ($680/month) subtotals
+  stayed exactly the same (confirming only the future simulation is
+  affected). Reset to 0%, confirmed it matched the original baseline
+  exactly. Saved at 2.5%, reloaded, confirmed persistence; cleared the
+  saved scenario, confirmed it reset to 0%.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -2697,12 +2748,6 @@ optionally reuse in the commit message when you implement it.
   Follow-up from TODO-54's split. Small once TODO-89's mechanism exists -
   same shape as TODO-90, applied to rental income sources
   (`RENTAL_INCOME_CATEGORIES`) instead of personal income.
-
-- [ ] **TODO-92: Expense Inflation (annual %, Personal + Property Expenses)**
-  Follow-up from TODO-54's split. Small once TODO-89's mechanism exists.
-  One open design decision: a single inflation rate for both expense
-  categories, or two independent rates (property costs and personal
-  cost-of-living don't necessarily move together).
 
 - [ ] **TODO-94: Gross/Net income via a flat effective tax rate (not real AU tax brackets)**
   Follow-up from TODO-54's split. Resolves the actual tension between the

@@ -65,6 +65,17 @@ export function calculateLoanWithOffset({
   // property/savings returns. 0 (default) means every existing caller/test
   // that omits this keeps working unchanged.
   salaryGrowthRate = 0,
+  // TODO-92: annual % growth applied to BOTH Personal Expenses and
+  // Property Expenses together, compounding monthly from simulation
+  // month 1 (same convention as propertyGrowthRate/salaryGrowthRate) - a
+  // single shared rate, not two independent ones, to keep this an
+  // easily-understood, single-concept feature. Deliberately distinct
+  // from `inflationRate` (TODO-93, App.jsx) - that one is a pure
+  // display-layer "today's dollars" conversion applied AFTER the
+  // simulation runs and never changes its output; this one genuinely
+  // changes payoff time and total interest, since it grows the
+  // surplus-reducing expenses inside the loop itself.
+  expenseGrowthRate = 0,
   maxMonths = 30 * 12,
 }) {
   // Nothing to offset: no surplus, no scheduled contributions, and no income
@@ -135,12 +146,16 @@ export function calculateLoanWithOffset({
     // within its range, same resolution as Income Sources/Exceptional Expenses.
     offsetBalance += getActiveAmount(contributions, months);
 
+    // TODO-92: a single growth multiplier applied to both expense
+    // categories below - a no-op (1) at the 0% default.
+    const expenseGrowthMultiplier = calculateCompoundedValue(1, expenseGrowthRate, months);
+
     // Personal expenses for this month - Groceries/Transport/Phone-Internet,
     // any exceptional/recurring cost, and (TODO-85) the former "Other
     // Expenses" categories (Health/Subscriptions/Entertainment/Debt
     // Repayment/Custom) - all resolved the same way as a direct
     // per-occurrence dollar amount, not a $/week rate.
-    const monthlyPersonalExpensesCost = getActiveAmount(personalExpenseItems, months);
+    const monthlyPersonalExpensesCost = getActiveAmount(personalExpenseItems, months) * expenseGrowthMultiplier;
 
     // Income sources active this month (salary, other income, one-time
     // payments, and Tenants) - a value that can change mid-simulation (a
@@ -189,6 +204,11 @@ export function calculateLoanWithOffset({
         propertyManagement,
         miscPropertyExpense,
       });
+      // TODO-92: grows the WHOLE resolved property-expenses figure, on top
+      // of whatever SteppedExpenseField value (possibly itself scheduled
+      // to change) is active this month - doesn't touch each field's own
+      // resolution, just overlays a multiplier on the final sum.
+      monthlyExpensesForMonth *= expenseGrowthMultiplier;
     }
 
     // Add regular monthly deposit to offset (this month's income, minus this
