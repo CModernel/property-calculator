@@ -235,7 +235,7 @@ describe('Offset Contributions', () => {
 
     expect(screen.getByText(/Plus 1 recurring contribution - applied/)).toBeInTheDocument();
 
-    // Personal Expenses now ships with 3 seeded items (Food/Transport/
+    // Personal Expenses now ships with 3 seeded items (Groceries/Transport/
     // Phone-Internet, TODO-66), each with their own "✕" - scope to the
     // whole Offset Contributions section (two levels up from its own
     // heading: past the header row, to the section's outer container that

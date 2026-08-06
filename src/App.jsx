@@ -167,7 +167,7 @@ const PropertyInvestmentCalculator = () => {
   const [showProgressCharts, setShowProgressCharts] = useState(config.showProgressCharts ?? false);
 
   // Other Expenses - a distinct-lifecycle expense (a subscription starts and
-  // gets cancelled, a loan ends when paid off), unlike Food/Transport which
+  // gets cancelled, a loan ends when paid off), unlike Groceries/Transport which
   // are an ongoing rate that occasionally changes (SteppedExpenseField).
   // Same Schedule shape as Exceptional Expenses, including the same
   // direct-per-occurrence-dollar-amount convention (not a $/week rate) - so
@@ -202,7 +202,7 @@ const PropertyInvestmentCalculator = () => {
 
   // Personal Expenses State (TODO-66) - an addable/removable list, same
   // Schedule-shaped model as Income Sources/Other Expenses, covering both
-  // routine recurring costs (Food, Transport, Phone/Internet - seeded as
+  // routine recurring costs (Groceries, Transport, Phone/Internet - seeded as
   // starter items in config.default.json) and one-off/exceptional costs
   // (a wedding, car repair) that used to live in a separately-labeled
   // "Exceptional Expenses" section before this TODO merged the two.
@@ -1601,7 +1601,7 @@ const PropertyInvestmentCalculator = () => {
 
               {/* PERSONAL EXPENSES (TODO-66) - an addable/removable list,
                   same Schedule model as Income Sources/Other Expenses.
-                  Food/Transport/Phone-Internet are just starter items here
+                  Groceries/Transport/Phone-Internet are just starter items here
                   (seeded in config.default.json), not fixed fields - this
                   section absorbs what used to be the separately-labeled
                   "Exceptional Expenses" card. */}
@@ -1619,7 +1619,7 @@ const PropertyInvestmentCalculator = () => {
                   </button>
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2 mb-3">
-                  Routine costs (Food, Transport, a phone/internet bill) or
+                  Routine costs (Groceries, Transport, Bills) or
                   one-off/exceptional costs (a wedding, car repair) - pick
                   "One-Time" or a repeat interval below for each.
                 </p>

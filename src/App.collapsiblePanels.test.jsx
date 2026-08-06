@@ -42,14 +42,14 @@ describe('results-panel breakdown toggles', () => {
     expect(screen.getByText('Strata:')).toBeInTheDocument();
   });
 
-  it('"▸ Personal Expenses:" reveals its Food/Transport sub-rows', async () => {
+  it('"▸ Personal Expenses:" reveals its Groceries/Transport sub-rows', async () => {
     const user = userEvent.setup();
     render(<App />);
     const toggle = screen.getByRole('button', { name: /▸ Personal Expenses:/ });
-    expect(screen.queryByText('Food:')).not.toBeInTheDocument();
+    expect(screen.queryByText('Groceries:')).not.toBeInTheDocument();
 
     await user.click(toggle);
-    expect(screen.getByText('Food:')).toBeInTheDocument();
+    expect(screen.getByText('Groceries:')).toBeInTheDocument();
   });
 });
 
@@ -105,7 +105,7 @@ describe('showPersonalExpenses gates all three sub-sections at once', () => {
     for (const heading of ['💰 Offset Contributions Schedule', 'Personal Expenses', 'Other Expenses']) {
       expect(screen.queryByText(heading)).not.toBeInTheDocument();
     }
-    expect(screen.queryByText('Food')).not.toBeInTheDocument();
+    expect(screen.queryByText('Groceries')).not.toBeInTheDocument();
   });
 
   it('expanding reveals all three sub-sections together', async () => {
@@ -116,8 +116,8 @@ describe('showPersonalExpenses gates all three sub-sections at once', () => {
     for (const heading of ['💰 Offset Contributions Schedule', 'Personal Expenses', 'Other Expenses']) {
       expect(screen.getByText(heading)).toBeInTheDocument();
     }
-    // Food is a seeded personalExpenseItems list entry now (TODO-66), not a
-    // fixed labeled field.
-    expect(screen.getByText('Food')).toBeInTheDocument();
+    // Groceries is a seeded personalExpenseItems list entry now (TODO-66),
+    // not a fixed labeled field.
+    expect(screen.getByText('Groceries')).toBeInTheDocument();
   });
 });

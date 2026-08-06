@@ -2016,6 +2016,27 @@ optionally reuse in the commit message when you implement it.
   confirmed readable; confirmed the top banner reads noticeably calmer
   than before. Re-checked light mode too - no regression there.
 
+- [x] **TODO-74/75: Grupo B - rename default Personal Expense "Food" to "Groceries" + update matching copy**
+  `config.default.json`'s seeded `personalExpenseItems` entry renamed
+  `Food` → `Groceries`; the Personal Expenses section's descriptive copy
+  in `src/App.jsx` updated from "Routine costs (Food, Transport, a
+  phone/internet bill)" to "Routine costs (Groceries, Transport, Bills)".
+  Also updated every code comment that referenced the old seed names by
+  name, so they don't go stale (`src/App.jsx` ×3, `src/calculations/
+  offsetSimulation.js` ×2) - left the "Expense Name" input's generic
+  placeholder (`"e.g. Food, Transport, Wedding, Netflix"`) and the "How
+  This Calculator Works" section's generic "(food, transport, etc.)"
+  aside untouched, since neither actually names the seeded item, just
+  illustrative examples.
+  Found and fixed 4 test assertions across `App.collapsiblePanels.test.jsx`
+  and `App.propertyTypeAndGating.test.jsx` that expected the literal text
+  `Food`/`Food:` - updated to `Groceries`/`Groceries:` to match.
+  `npm test -- --run` (275/275), `npm run lint`, `npm run build` all
+  clean. Verified in the browser: expanded the Personal Expenses
+  breakdown and confirmed the seeded item now reads "Groceries" and the
+  section's description reads "Routine costs (Groceries, Transport,
+  Bills)...".
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -2187,17 +2208,6 @@ optionally reuse in the commit message when you implement it.
   inherently tied to a selected month, not a single static "right now"
   figure the way every other indicator here is (>20% green, 10-20%
   yellow, 5-10% orange, <5% red).
-
-- [ ] **TODO-74: Rename the default Personal Expense "Food" to "Groceries"**
-  Requested by the user. `config.default.json`'s `personalExpenseItems`
-  seed data (`{"id": 1, "name": "Food", ...}`) - simple rename, no
-  behavior change.
-
-- [ ] **TODO-75: Update the "Routine costs (Food, Transport, a phone/internet bill)" copy to match the Groceries rename**
-  Requested by the user, follow-up to TODO-74 - suggested replacement:
-  "(Groceries, Transport, Bills)" or similar. This is the Personal
-  Expenses section's descriptive copy in `src/App.jsx` (added in
-  TODO-66), referencing the old seeded category names directly in text.
 
 - [ ] **TODO-76 (Analysis first): Consider modeling Personal Expenses with categorized types, similar to Income Sources**
   Requested by the user. Income Sources has a category dropdown

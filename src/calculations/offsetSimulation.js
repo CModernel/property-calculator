@@ -13,7 +13,7 @@ import {
 
 export function calculateLoanWithOffset({
   contributions,
-  // Merged with what used to be Food/Transport/Phone-Internet
+  // Merged with what used to be Groceries/Transport/Phone-Internet
   // (SteppedExpenseField/expenseFields) - TODO-66 rebuilt those as regular
   // Schedule-shaped list entries here, same as any other personal expense.
   personalExpenseItems,
@@ -88,7 +88,7 @@ export function calculateLoanWithOffset({
     // within its range, same resolution as Income Sources/Exceptional Expenses.
     offsetBalance += getActiveAmount(contributions, months);
 
-    // Personal expenses for this month - Food/Transport/Phone-Internet and
+    // Personal expenses for this month - Groceries/Transport/Phone-Internet and
     // any exceptional/recurring cost the user has added, all resolved the
     // same way (TODO-66).
     const monthlyPersonalExpensesCost = getActiveAmount(personalExpenseItems, months);

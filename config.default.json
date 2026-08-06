@@ -18,7 +18,7 @@
     { "id": 1, "name": "Salary", "amount": 1614, "startMonth": 1, "recurrence": "monthly", "endMonth": 360 }
   ],
   "personalExpenseItems": [
-    { "id": 1, "name": "Food", "amount": 433, "startMonth": 1, "recurrence": "monthly", "endMonth": 360 },
+    { "id": 1, "name": "Groceries", "amount": 433, "startMonth": 1, "recurrence": "monthly", "endMonth": 360 },
     { "id": 2, "name": "Transport", "amount": 217, "startMonth": 1, "recurrence": "monthly", "endMonth": 360 },
     { "id": 3, "name": "Phone/Internet", "amount": 30, "startMonth": 1, "recurrence": "monthly", "endMonth": 360 }
   ],

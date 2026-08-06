@@ -82,13 +82,13 @@ describe('Independent show* toggles (input panel vs. results panel)', () => {
 
     // Expand the results-panel "Personal Expenses" breakdown.
     await user.click(screen.getByRole('button', { name: /▸ Personal Expenses:/ }));
-    expect(screen.getByText('Food:')).toBeInTheDocument();
+    expect(screen.getByText('Groceries:')).toBeInTheDocument();
 
     // The separate input-panel "Personal expenses breakdown" toggle is unaffected.
     expect(screen.getByRole('button', { name: /Personal expenses breakdown \(subtotal/ })).toHaveTextContent('▸');
 
     // And expanding the input-panel toggle doesn't collapse the results-panel one.
     await user.click(screen.getByRole('button', { name: /Personal expenses breakdown \(subtotal/ }));
-    expect(screen.getByText('Food:')).toBeInTheDocument();
+    expect(screen.getByText('Groceries:')).toBeInTheDocument();
   });
 });
