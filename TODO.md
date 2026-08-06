@@ -2037,21 +2037,124 @@ optionally reuse in the commit message when you implement it.
   section's description reads "Routine costs (Groceries, Transport,
   Bills)...".
 
+- [x] **TODO-76/77/78 (Analysis, Grupo C): Personal Expenses categorization, the Amount weekly/monthly ambiguity, and Other Expenses redundancy**
+  Requested by the user, three interrelated questions analyzed together
+  since they share the same underlying code.
+  **TODO-78 - confirmed genuinely redundant.** Personal Expenses and
+  Other Expenses (`src/App.jsx`) are near-total duplicates: identical
+  Schedule shape, identical add-form mechanics (One-Time checkbox, Start
+  Month slider, Monthly/Quarterly/Yearly buttons, End Month slider),
+  identical `NumberSliderField` "Amount ($)" control (the only
+  difference is the slider's max - $500k for Personal vs. $50k for
+  Other, a range-tuning choice, not a conceptual one), identical
+  remove-by-✕ mechanic, and both feed the exact same
+  `getActiveAmount`/simulation totals with zero differentiated
+  treatment. The only real differences: Personal Expenses has a
+  free-text name input and ships seeded with 3 starter items
+  (Groceries/Transport/Phone-Internet); Other Expenses has a category
+  dropdown (`OTHER_EXPENSE_CATEGORIES`: Health/Subscriptions/
+  Entertainment/Debt Repayment/Custom) and ships with **zero** seeded
+  items, and its section has no descriptive text at all explaining what
+  distinguishes it from Personal Expenses (Personal Expenses does: "Routine
+  costs... or one-off/exceptional costs..."). Conclusion: no meaningful
+  conceptual or computational distinction exists today - recommend
+  merging into one section.
+  **TODO-76 - recommend reusing Other Expenses' category list, not
+  Income Sources' full pattern.** If merged, the natural category list
+  is `OTHER_EXPENSE_CATEGORIES` extended with Groceries/Transport/Bills
+  (Personal Expenses' current starter names), still ending in "Custom"
+  for free text - directly reusing the dropdown-plus-Custom-reveals-a-
+  text-field pattern already built for Other Expenses. Unlike Income
+  Sources, recommend **skipping** per-category Schedule defaults
+  (`INCOME_CATEGORY_DEFAULTS`'s equivalent) - income has a strong
+  one-time-vs-recurring convention per category (Bonus vs. Salary);
+  expense categories don't have an equally strong convention, so a
+  per-category default would mostly just be noise.
+  **TODO-77 - confirmed this is a labeling gap, not a data-model gap.**
+  The "Amount ($)" field (both sections) has no cadence qualifier at
+  all, unlike Income Sources' explicit "Weekly Amount ($)" label.
+  Traced the actual consumption: when recurrence is `'monthly'`, the
+  entered amount is used **directly** as a monthly dollar figure by
+  `getActiveAmount`/`src/calculations/offsetSimulation.js` - there is no
+  weekly-to-monthly conversion anywhere for Personal/Other Expenses
+  (unlike Income Sources' explicit `calculateMonthlyFromWeekly`, ×52/12).
+  Confirmed by the seeded magnitudes too: Groceries $433 as a *monthly*
+  figure (≈$100/week) is realistic; as a *weekly* figure it would be
+  ≈$1,878/month, unrealistically high. So the amount is already
+  unambiguously monthly-equivalent by construction - recommend
+  **against** adding a genuine weekly interval to the Schedule model
+  (`src/calculations/recurringAmount.js`'s `INTERVAL_MONTHS = {monthly:
+  1, quarterly: 3, yearly: 12}` is denominated in whole months by
+  design - `isScheduleActive`'s `(month - startMonth) % INTERVAL_MONTHS
+  === 0` check only makes sense at month granularity; shoehorning weeks
+  in would mean restructuring the model's fundamental unit across every
+  consumer, disproportionate to the actual problem). Recommend instead a
+  cheap, purely cosmetic fix: relabel the field to make the monthly
+  convention explicit (e.g. "Monthly Amount ($)").
+  **Concrete follow-up queued**: TODO-85, combining all three
+  conclusions into one implementation task.
+
+- [x] **TODO-49/79/80: Grupo D - let the user split the monthly surplus between Offset and Savings**
+  TODO-79/80 (analysis, done) confirmed TODO-49 was never built - 100% of
+  the surplus went to the offset unconditionally - and that `cashRemaining`
+  (`src/calculations/totalCashRequired.js`) already represents the user's
+  actual bank balance right after settlement, just not as a *running*
+  balance over the simulation timeline. This built the real feature using
+  that finding directly.
+  New `offsetAllocationPct` state (`src/App.jsx`, default **100** -
+  preserves the original "100% to offset" behavior byte-for-byte unless
+  changed), a new "Offset Allocation" `NumberSliderField` in Financial
+  Position. `calculateLoanWithOffset`
+  (`src/calculations/offsetSimulation.js`) gained two new params -
+  `offsetAllocationPct = 100` and `initialSavingsBalance = 0`, both
+  defaulting to the exact old behavior - and now splits each month's
+  `netMonthlyDeposit` between `offsetBalance` and a new `savingsBalance`
+  accumulator (mirrors how `offsetBalance` already accumulates), pushing
+  a new `savings` field into `monthlyData` alongside `offset`. Both
+  `loanSimulation` and `baselineSimulation` calls in `App.jsx` pass the
+  same `offsetAllocationPct` and seed `initialSavingsBalance: cashRemaining`,
+  so "interest saved" still isolates just the effect of manual
+  contributions, not the split itself. `getTimelineSnapshot`
+  (`src/calculations/timelineSnapshot.js`) gained a matching
+  `initialSavingsBalance` param to seed `savings` at its synthetic month-0
+  snapshot.
+  UI: the "🎯 TO OFFSET" card stays exactly as-is at 100%; below 100% its
+  title becomes "🎯 MONTHLY SURPLUS" and a new two-box breakdown shows "To
+  Offset (X%)" / "To Savings (100-X%)", splitting the already-computed
+  `monthlyToOffset` figure - no new calculation needed there. The header
+  tagline is conditional the same way - unchanged at 100%, otherwise
+  "...X% goes to your offset automatically, the rest builds your
+  savings." The Timeline Explorer's "🏦 Loan | 💰 Offset" line gained a
+  third "🐖 Savings" figure. `offsetAllocationPct` persists via
+  `handleSaveScenario` - purely additive, **no `SCHEMA_VERSION` bump**
+  (defaults to 100 via `config.offsetAllocationPct ?? 100` on an old
+  save, identical to every other additive change this session).
+  Explicitly out of scope (separate pending TODOs): interest accruing on
+  the savings balance (TODO-50); `noOffsetTotalInterest`'s baseline stays
+  untouched (already a deliberate fixed-payment-only simplification).
+  Added 4 new tests to `offsetSimulation.test.js` (284 total) plus a
+  `timelineSnapshot.test.js` update: default behavior unchanged, a
+  70%/30% split diverts the correct amounts, `initialSavingsBalance`
+  seeds and accumulates correctly, and passing `100` explicitly matches
+  omitting the params entirely. `npm test -- --run`, `npm run lint`,
+  `npm run build` all clean.
+  Verified in the browser: at the 100% default, the card/header/Timeline
+  Explorer are all unchanged from before this feature existed; set to
+  70% - the card split into "To Offset (70%): $1,729" / "To Savings
+  (30%): $741" (exactly 70%/30% of the $2,470 total surplus), the header
+  updated, payoff time rose from 11.6 to 14.0 years and total interest
+  from $258,967 to $323,239 (less money reaching the offset, as
+  expected), and the Timeline Explorer's Savings figure grew from
+  $28,453 at month 0 to $78,546 by month 81; set back to 100% and
+  confirmed everything reverted exactly; saved, reloaded, confirmed the
+  70%/55% split persisted; cleared the scenario (`localStorage`, to
+  avoid the native `Reset to defaults` confirm dialog that previously
+  froze the CDP connection during TODO-47's verification) and confirmed
+  it reset cleanly to the 100%/default tagline.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
-
-- [ ] **TODO-49: Let the user choose how much of the automatic surplus goes to Offset vs. Savings**
-  Requested by the user. Today **100% of the monthly surplus automatically
-  goes to the loan offset** - this is the app's core premise, stated
-  right in the header tagline ("How much is left after EVERYTHING? That
-  goes to offset automatically.") and implemented via
-  `calculateMonthlyToOffset`/`baseMonthlySurplus`
-  (`src/App.jsx`/`src/calculations/loan.js`) feeding straight into
-  `offsetSimulation.js`'s loop with no split. Adding a user-configurable
-  split (e.g. "70% to offset, 30% to savings") touches the core
-  simulation loop and probably the header's own framing/tagline - a
-  bigger change than it sounds, not a small settings tweak.
 
 - [ ] **TODO-50: Model bank interest on Available Savings (customizable rate)**
   Requested by the user. `totalSavings`/`cashRemaining`
@@ -2209,72 +2312,6 @@ optionally reuse in the commit message when you implement it.
   figure the way every other indicator here is (>20% green, 10-20%
   yellow, 5-10% orange, <5% red).
 
-- [ ] **TODO-76 (Analysis first): Consider modeling Personal Expenses with categorized types, similar to Income Sources**
-  Requested by the user. Income Sources has a category dropdown
-  (`INCOME_CATEGORIES`/`INCOME_CATEGORY_DEFAULTS`,
-  `src/calculations/incomeCategories.js`) with per-category Schedule
-  defaults; Personal Expenses (TODO-66) is already a Schedule-shaped
-  addable/removable list like Income Sources, but its "name" is a plain
-  free-text field, no category picklist. Analyze whether a similar
-  fixed category list (e.g. Groceries/Transport/Bills/Subscriptions/
-  Entertainment/Custom) with sensible per-category defaults would be
-  worth adding, and whether/how it should relate to the existing
-  "Other Expenses" categories (`OTHER_EXPENSE_CATEGORIES`) - see
-  TODO-78, which questions whether Other Expenses should exist as a
-  separate concept at all.
-
-- [ ] **TODO-77 (Important): Clarify whether Personal Expenses "Amount" is weekly or monthly, and that the Schedule model has no weekly recurrence option**
-  Requested by the user, flagged as important - they weren't sure if
-  the entered `amount` is meant per-week or per-month, would prefer
-  weekly, but the Schedule model
-  (`src/calculations/recurringAmount.js`'s `INTERVAL_MONTHS = {monthly:
-  1, quarterly: 3, yearly: 12}`) only supports monthly/quarterly/yearly
-  recurrence - there's no weekly option to pick, unlike Income Sources
-  which is explicitly weekly-denominated (`calculateMonthlyFromWeekly`)
-  by convention/copy alone, not by the Schedule shape itself. Needs a
-  design decision: either make it explicit in the UI that Personal/
-  Other Expenses amounts are monthly (labeling, tooltip), or extend the
-  Schedule model to support a weekly interval (touches
-  `isScheduleActive`/`getActiveAmount`/`countOccurrencesUpTo`/
-  `formatScheduleLabel`, all keyed off `INTERVAL_MONTHS`, plus every UI
-  spot that lists recurrence options) - suggest a solution before
-  implementing either.
-
-- [ ] **TODO-78 (Analysis): What's the actual advantage of "Other Expenses" vs. Personal Expenses - aren't they redundant?**
-  Requested by the user. Both are now Schedule-shaped addable/removable
-  lists with near-identical UI (add form, recurrence buttons, remove
-  button) - Personal Expenses seeds Food/Transport/Phone-Internet,
-  Other Expenses has its own category list (`OTHER_EXPENSE_CATEGORIES`:
-  Health/Subscriptions/Entertainment/Debt Repayment/Custom). Analyze
-  whether there's a genuine conceptual distinction worth keeping two
-  separate sections for, or whether they should be merged into one
-  (relevant to TODO-76's categorization question too).
-
-- [ ] **TODO-79 (Analysis): Why is Offset Contributions Schedule's "One-Time Contributions Total" $0 by default, and revisit the promised Offset vs. Savings split**
-  Requested by the user, who recalled that the app was supposed to let
-  the user choose how much of their weekly/monthly surplus goes to the
-  loan offset vs. their personal balance - this is exactly **TODO-49**
-  ("Let the user choose how much of the automatic surplus goes to
-  Offset vs. Savings"), still pending. The $0 default is expected/by
-  design (no contributions scheduled yet, `calculateTotalScheduledOffset`
-  returns 0 for an empty list) - not a bug - but confirms TODO-49's
-  underlying feature (a user-configurable split) hasn't been built yet;
-  today 100% of the surplus is automatic, full stop. Treat this as a
-  reminder/re-confirmation to prioritize TODO-49, not a new separate
-  investigation.
-
-- [ ] **TODO-80 (Analysis, follow-up to TODO-49/79): How to track/persist the user's actual bank balance separate from the offset account**
-  Requested by the user - if TODO-49's Offset vs. Savings split gets
-  built, the "Savings" side needs to actually accumulate somewhere
-  across the simulation (today `totalSavings`/`cashRemaining`,
-  `src/calculations/totalCashRequired.js`, are static point-in-time
-  figures, not a running balance over the simulation timeline). Analyze
-  how hard this would be to maintain correctly (mirroring how
-  `offsetBalance` already accumulates month-by-month in
-  `src/calculations/offsetSimulation.js`) before TODO-49 is scheduled -
-  check whether any existing variable already represents this, or
-  whether it's a genuinely new piece of state to design.
-
 - [ ] **TODO-82: Allow adding a custom "Misc property expense" line item in Property Expenses**
   Requested by the user. Property Expenses today is a fixed set of 8
   `SteppedExpenseField`s (Strata/Utilities/Council/Insurance/
@@ -2291,6 +2328,43 @@ optionally reuse in the commit message when you implement it.
   Establishment Fee/Property Valuation/Home Insurance/Rate Adjustments,
   state module `defaultClosingCosts` + `src/App.jsx`) with no custom
   addition mechanism.
+
+- [ ] **TODO-85: Merge Other Expenses into Personal Expenses as one categorized list, and relabel the Amount field**
+  Follow-up from TODO-76/77/78's analysis (done). Two changes:
+  (1) Merge `src/App.jsx`'s Other Expenses section into Personal
+  Expenses - one list, one add form, using a category dropdown extending
+  `OTHER_EXPENSE_CATEGORIES` (Health/Subscriptions/Entertainment/Debt
+  Repayment) with Groceries/Transport/Bills added and "Custom" kept as
+  the free-text fallback, still seeded with the 3 starter items. No
+  per-category Schedule defaults (deliberately, per TODO-76's analysis).
+  Touches: the merged section's state (`personalExpenseItems` absorbs
+  what `otherExpenseItems` covers - decide whether to literally merge
+  the two arrays/states or just present them as one UI section backed by
+  two arrays under the hood), `config.default.json` (no `otherExpenseItems`
+  default currently exists to migrate), `SCHEMA_VERSION` (bump - existing
+  saved `otherExpenseItems` would need to either migrate into
+  `personalExpenseItems` or be dropped, per the established "discard
+  rather than partially migrate" convention), and every test file
+  currently covering Other Expenses as its own section.
+  (2) Relabel the "Amount ($)" field (both call sites, soon to be one)
+  to make the monthly convention explicit, e.g. "Monthly Amount ($)".
+
+- [ ] **TODO-86: Fix Total Summary donut's "Income"/"Expenses" legend rendering black text in dark mode, and sweep for any other remaining instances**
+  Reported by the user. Same root cause as TODO-72/73: `src/App.jsx`'s
+  Total Summary section, the `<div className="flex items-center
+  gap-1">...Income</div>` / `...Expenses</div>` legend rows (~line
+  2138-2139) have no text-color class at all, so they inherit the
+  browser's default (near-black) text instead of picking up a `dark:`
+  variant - missed by TODO-47's regex-based sweep for the same reason as
+  TODO-72/73 (nothing for the sweep to attach a `dark:` variant to).
+  Fix: add `text-gray-700 dark:text-gray-200` (or similar) to both rows.
+  Also asked to sweep the rest of the codebase for any other remaining
+  instances of this exact pattern (a text-bearing element with zero
+  `text-*` class at all) - TODO-72/73/86 have each been found one at a
+  time via user reports; worth a deliberate pass through `src/App.jsx`
+  and `src/components/*.jsx` looking for any other bare `<div>`/`<span>`/
+  `<p>`/`<label>`/`<button>` wrapping visible text with no color class,
+  rather than waiting for more to surface individually.
 
 ---
 

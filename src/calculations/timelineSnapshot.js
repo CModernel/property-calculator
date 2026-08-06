@@ -4,11 +4,16 @@ import { safePercentage } from './safePercentage';
 // offsetSimulation.js's loop starts counting at month 1, so month 0 never
 // appears in monthlyData. Past the simulation's last recorded month, fall
 // back to that last month rather than returning nothing.
-export function getTimelineSnapshot(timelineMonth, monthlyData, loanAmount, monthZeroInterest) {
+export function getTimelineSnapshot(timelineMonth, monthlyData, loanAmount, monthZeroInterest, initialSavingsBalance = 0) {
   if (timelineMonth === 0) {
     return {
       balance: loanAmount,
       offset: 0,
+      // TODO-49/80: mirrors offsetSimulation.js's own initialSavingsBalance -
+      // the actual cash sitting in the bank (cashRemaining) before any
+      // monthly surplus has been split, same "nothing has happened yet"
+      // convention as the rest of this synthetic snapshot.
+      savings: Math.round(initialSavingsBalance),
       effectiveBalance: loanAmount,
       monthlyInterestPaid: Math.round(monthZeroInterest),
       totalInterestPaid: 0,

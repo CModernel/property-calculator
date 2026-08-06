@@ -119,6 +119,10 @@ const PropertyInvestmentCalculator = () => {
   // investment status, so no mutual-exclusion logic applies here.
   const [isForeignPurchaser, setIsForeignPurchaser] = useState(config.isForeignPurchaser ?? false);
   const [totalSavings, setTotalSavings] = useState(config.totalSavings);
+  // TODO-49: what share of the monthly surplus goes to the loan offset vs.
+  // a separately-tracked savings balance - 100 (the default) preserves the
+  // original "100% goes to offset automatically" behavior exactly.
+  const [offsetAllocationPct, setOffsetAllocationPct] = useState(config.offsetAllocationPct ?? 100);
   const [payLmiUpfront, setPayLmiUpfront] = useState(false);
   const [showClosingCostsBreakdown, setShowClosingCostsBreakdown] = useState(config.showClosingCostsBreakdown ?? false);
   const [conveyancing, setConveyancing] = useState(config.conveyancing);
@@ -379,6 +383,8 @@ const PropertyInvestmentCalculator = () => {
     monthlyRate,
     monthlyPayment,
     interestRateField,
+    offsetAllocationPct,
+    initialSavingsBalance: cashRemaining,
     maxMonths: totalMonths,
   });
   const baselineSimulation = calculateLoanWithOffset({
@@ -392,6 +398,8 @@ const PropertyInvestmentCalculator = () => {
     monthlyRate,
     monthlyPayment,
     interestRateField,
+    offsetAllocationPct,
+    initialSavingsBalance: cashRemaining,
     maxMonths: totalMonths,
   });
   const interestSaved = baselineSimulation.totalInterest - loanSimulation.totalInterest;
@@ -497,7 +505,7 @@ const PropertyInvestmentCalculator = () => {
       isInvestmentProperty,
       landTax: landTaxField.base, landTaxChanges: landTaxField.changes,
       propertyManagement: propertyManagementField.base, propertyManagementChanges: propertyManagementField.changes,
-      isFirstHomeBuyer, isForeignPurchaser, totalSavings, payLmiUpfront,
+      isFirstHomeBuyer, isForeignPurchaser, totalSavings, offsetAllocationPct, payLmiUpfront,
       conveyancing, buildingInspection, pestInspection, registrationFees, searches,
       loanEstablishmentFee, propertyValuation, homeInsurance, rateAdjustments,
       incomeSources,
@@ -720,7 +728,11 @@ const PropertyInvestmentCalculator = () => {
             <Home className="text-blue-600 dark:text-blue-400" size={36} />
             {stateModule.code} Property Investment Cash Flow Calculator
           </h1>
-          <p className="text-gray-600 dark:text-gray-300">How much is left after EVERYTHING? That goes to offset automatically.</p>
+          <p className="text-gray-600 dark:text-gray-300">
+            {offsetAllocationPct === 100
+              ? 'How much is left after EVERYTHING? That goes to offset automatically.'
+              : `How much is left after EVERYTHING? ${offsetAllocationPct}% goes to your offset automatically, the rest builds your savings.`}
+          </p>
         </div>
         <button
           type="button"
@@ -927,6 +939,21 @@ const PropertyInvestmentCalculator = () => {
                 formatBound={formatCompactMoney}
               >
                 The whole savings pool the deposit and upfront costs come out of.
+              </NumberSliderField>
+
+              <NumberSliderField
+                label="Offset Allocation"
+                value={offsetAllocationPct}
+                onChange={setOffsetAllocationPct}
+                min={0}
+                max={100}
+                sliderMin={0}
+                sliderMax={100}
+                step={5}
+                color="blue"
+                suffix="%"
+              >
+                % of your monthly surplus that goes to the loan offset - the rest builds your savings balance instead. 100% (default) matches the original "everything goes to offset" behavior.
               </NumberSliderField>
 
               {/* min must stay above 0: a 0% rate makes calculateMonthlyPayment
@@ -2176,7 +2203,7 @@ const PropertyInvestmentCalculator = () => {
           {/* WHAT GOES TO OFFSET */}
           <div className={`rounded-lg shadow-lg p-6 border-2 ${getBalanceBgColor(monthlyNetBalance)}`}>
             <h2 className="text-lg font-bold text-gray-700 dark:text-gray-200 mb-3 text-center">
-              🎯 TO OFFSET (automatic)
+              {offsetAllocationPct === 100 ? '🎯 TO OFFSET (automatic)' : '🎯 MONTHLY SURPLUS (automatic)'}
             </h2>
 
             <div className="text-center mb-4">
@@ -2185,6 +2212,27 @@ const PropertyInvestmentCalculator = () => {
               </p>
               <p className="text-sm text-gray-600 dark:text-gray-300">per month</p>
             </div>
+
+            {/* TODO-49: split the same total surplus by offsetAllocationPct -
+                these are display-only, the actual per-month split happens
+                inside offsetSimulation.js's loop against the real monthly
+                figures, not this static "right now" one. */}
+            {offsetAllocationPct !== 100 && (
+              <div className="grid grid-cols-2 gap-3 mb-4 text-center">
+                <div className="p-2 bg-white/60 dark:bg-black/20 rounded-lg">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">To Offset ({offsetAllocationPct}%)</p>
+                  <p className="text-lg font-bold text-blue-700 dark:text-blue-400">
+                    ${Math.round(monthlyToOffset * offsetAllocationPct / 100).toLocaleString()}
+                  </p>
+                </div>
+                <div className="p-2 bg-white/60 dark:bg-black/20 rounded-lg">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">To Savings ({100 - offsetAllocationPct}%)</p>
+                  <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
+                    ${Math.round(monthlyToOffset * (100 - offsetAllocationPct) / 100).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-2 text-sm border-t pt-3">
               <div className="flex justify-between">
@@ -2341,7 +2389,7 @@ const PropertyInvestmentCalculator = () => {
             </div>
 
             {(() => {
-              const snapshot = getTimelineSnapshot(timelineMonth, loanSimulation.monthlyData, loanAmount, monthZeroInterest);
+              const snapshot = getTimelineSnapshot(timelineMonth, loanSimulation.monthlyData, loanAmount, monthZeroInterest, cashRemaining);
               if (!snapshot) return null;
 
               const effectiveProgress = calculateEffectiveProgress(loanAmount, snapshot.effectiveBalance);
@@ -2355,10 +2403,16 @@ const PropertyInvestmentCalculator = () => {
                     <p className="text-4xl font-extrabold text-blue-900 mb-2">
                       ${snapshot.effectiveBalance.toLocaleString()}
                     </p>
-                    <div className="flex justify-center gap-4 text-sm text-gray-500 dark:text-gray-400">
+                    <div className="flex justify-center gap-4 text-sm text-gray-500 dark:text-gray-400 flex-wrap">
                       <span className="flex items-center gap-1">🏦 Loan: ${snapshot.balance.toLocaleString()}</span>
                       <span className="text-gray-300 dark:text-gray-600">|</span>
                       <span className="flex items-center gap-1">💰 Offset: ${snapshot.offset.toLocaleString()}</span>
+                      <span className="text-gray-300 dark:text-gray-600">|</span>
+                      {/* TODO-49/80: the running savings balance, seeded from
+                          cashRemaining at month 0 and growing by whatever
+                          share of the surplus offsetAllocationPct doesn't
+                          send to the offset (flat if the allocation is 100%). */}
+                      <span className="flex items-center gap-1">🐖 Savings: ${snapshot.savings.toLocaleString()}</span>
                     </div>
                   </div>
 

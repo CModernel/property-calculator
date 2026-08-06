@@ -12,11 +12,17 @@ describe('getTimelineSnapshot', () => {
     expect(snapshot).toEqual({
       balance: 500000,
       offset: 0,
+      savings: 0,
       effectiveBalance: 500000,
       monthlyInterestPaid: 2292,
       totalInterestPaid: 0,
       totalPrincipalPaid: 0,
     });
+  });
+
+  it('seeds the month-0 savings snapshot from initialSavingsBalance when given', () => {
+    const snapshot = getTimelineSnapshot(0, monthlyData, 500000, 2291.67, 28453);
+    expect(snapshot.savings).toBe(28453);
   });
 
   it('finds the exact month in monthlyData', () => {

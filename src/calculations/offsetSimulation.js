@@ -33,6 +33,17 @@ export function calculateLoanWithOffset({
   // rate behavior (monthlyRate/monthlyPayment never change), so every caller
   // that doesn't pass this keeps working unchanged.
   interestRateField = null,
+  // TODO-49: what share of the monthly surplus goes to the loan offset vs.
+  // a separately-tracked savings balance. 100 (the default) means every
+  // existing caller/test that omits this keeps the old all-to-offset
+  // behavior byte-for-byte.
+  offsetAllocationPct = 100,
+  // TODO-80: the savings side needs a starting point to accumulate from -
+  // the real caller seeds this with cashRemaining (the static "Remaining
+  // Savings" figure, src/calculations/totalCashRequired.js), the actual
+  // cash sitting in the bank right after settlement. Defaults to 0 so
+  // existing tests that don't care about it are unaffected.
+  initialSavingsBalance = 0,
   maxMonths = 30 * 12,
 }) {
   // Nothing to offset: no surplus, no scheduled contributions, and no income
@@ -51,6 +62,7 @@ export function calculateLoanWithOffset({
 
   let balance = loanAmount;
   let offsetBalance = 0;
+  let savingsBalance = initialSavingsBalance;
   let totalInterest = 0;
   let months = 0;
   const monthlyData = [];
@@ -150,7 +162,11 @@ export function calculateLoanWithOffset({
       monthlyToOffset + (initialMonthlyPayment - currentMonthlyPayment) + monthlyIncomeThisMonth - monthlyExpensesForMonth
         - monthlyPersonalExpensesCost - monthlyOtherExpenseItemsCost
     );
-    offsetBalance += netMonthlyDeposit;
+    // TODO-49: only offsetAllocationPct of the surplus reaches the offset -
+    // the rest builds the separately-tracked savings balance instead.
+    const offsetShare = netMonthlyDeposit * (offsetAllocationPct / 100);
+    offsetBalance += offsetShare;
+    savingsBalance += netMonthlyDeposit - offsetShare;
 
     // Offset cannot exceed loan balance
     const effectiveOffset = Math.min(offsetBalance, balance);
@@ -171,6 +187,7 @@ export function calculateLoanWithOffset({
       month: months,
       balance: Math.round(balance),
       offset: Math.round(effectiveOffset),
+      savings: Math.round(savingsBalance),
       effectiveBalance: Math.round(effectiveBalance),
       monthlyInterestPaid: Math.round(monthlyInterest),
       totalInterestPaid: Math.round(totalInterest),

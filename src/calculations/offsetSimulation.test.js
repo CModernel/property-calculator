@@ -625,3 +625,66 @@ describe('scheduled/variable interest rate changes (interestRateField, TODO-57)'
     expect(afterChange[0]).toBeLessThan(beforeChange[0] - 1);
   });
 });
+
+describe('offset vs. savings split (offsetAllocationPct/initialSavingsBalance, TODO-49)', () => {
+  it('defaults to sending 100% of the surplus to the offset, savings stays at 0', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 3,
+    });
+    expect(result.monthlyData.map(d => d.offset)).toEqual([1000, 2000, 3000]);
+    expect(result.monthlyData.map(d => d.savings)).toEqual([0, 0, 0]);
+  });
+
+  it('splits the monthly surplus between offset and savings by offsetAllocationPct', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      offsetAllocationPct: 70,
+      maxMonths: 3,
+    });
+    expect(result.monthlyData.map(d => d.offset)).toEqual([700, 1400, 2100]);
+    expect(result.monthlyData.map(d => d.savings)).toEqual([300, 600, 900]);
+  });
+
+  it('seeds the running savings balance from initialSavingsBalance and accumulates on top', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      offsetAllocationPct: 0,
+      initialSavingsBalance: 5000,
+      maxMonths: 3,
+    });
+    // Every dollar of surplus goes to savings, none to the offset.
+    expect(result.monthlyData.map(d => d.offset)).toEqual([0, 0, 0]);
+    expect(result.monthlyData.map(d => d.savings)).toEqual([6000, 7000, 8000]);
+  });
+
+  it('passing offsetAllocationPct: 100 explicitly matches omitting it entirely', () => {
+    const shared = {
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 3,
+    };
+    const withDefault = calculateLoanWithOffset(shared);
+    const withExplicit100 = calculateLoanWithOffset({ ...shared, offsetAllocationPct: 100, initialSavingsBalance: 0 });
+    expect(withExplicit100).toEqual(withDefault);
+  });
+});
