@@ -1713,6 +1713,56 @@ optionally reuse in the commit message when you implement it.
   `loan.js` functions' tests), `npm run lint`, and `npm run build` all
   clean.
 
+- [x] **TODO-57: Implement scheduled/variable interest rate changes**
+  Follow-up from TODO-53's analysis. `interestRate` (`src/App.jsx`) is now
+  `useSteppedValue(config.interestRate, config.interestRateChanges)` -
+  the exact same "Schedule a rate change" UI as Strata/Utilities/etc,
+  reusing `SteppedExpenseField` directly with `suffix="% p.a."`. The
+  static "month 1" figures (Repayments, Interest Amount, upfront-cost
+  estimates, the "Savings vs no offset" baseline) all keep resolving the
+  rate via `getSteppedValue(interestRateField.base, interestRateField.changes,
+  1)`, same convention as every other stepped field - a deliberate,
+  documented simplification for `calculateNoOffsetTotalInterest`'s
+  illustrative baseline specifically.
+  The real work is in `src/calculations/offsetSimulation.js`:
+  `calculateLoanWithOffset` gained an optional `interestRateField` param
+  (omitted entirely -> byte-for-byte identical to the old fixed-rate
+  behavior, so none of the ~25 existing tests needed to change). When
+  given, the loop resolves the annual rate every month via
+  `getSteppedValue`, and on any month where it differs from the previous
+  one, **recomputes** `monthlyPayment = calculateMonthlyPayment(balance,
+  calculateMonthlyRate(newRate), maxMonths - months + 1)` - re-amortizing
+  the *remaining* balance (not the original loan amount) over the
+  *remaining* term (`+1` because `months` is the about-to-be-paid
+  installment's own 1-indexed number, so the remaining term includes it)
+  at the *new* rate, matching how real variable-rate mortgages actually
+  work. Also fixed a real correctness gap surfaced by this change:
+  `monthlyToOffset` (the caller's surplus figure) has the *original*
+  month-1 payment baked into it (`App.jsx`'s `baseMonthlySurplus`) - a
+  rate change discovered mid-loop is now reconciled via a
+  `(initialMonthlyPayment - currentMonthlyPayment)` correction term each
+  month, so the reported offset surplus actually moves with the new
+  installment instead of silently staying pinned to the stale one.
+  No `SCHEMA_VERSION` bump: unlike TODO-36/66's genuine field drops, this
+  is purely additive - `interestRate` stays the same key/shape (a plain
+  number = the stepped field's `base`), and the new `interestRateChanges`
+  array key defaults cleanly to `[]` via `useSteppedValue`'s own default
+  parameter when absent from an old saved scenario, exactly like every
+  other stepped field's original (un-bumped) introduction.
+  Added 3 new tests to `offsetSimulation.test.js` (275 total):
+  no-scheduled-changes equivalence to the old fixed-rate call, a rate
+  hike re-amortized over the remaining term still reaching a fully
+  paid-off balance exactly at term end, and the surplus-correction term
+  showing a smaller (but still flat) net deposit starting exactly on the
+  change's month. `npm test -- --run` (275/275), `npm run lint`, and
+  `npm run build` all clean.
+  Verified in the browser: added a schedule change (7.5% from month 13)
+  under Interest Rate - "Time to pay off" correctly rose from 10.8 to
+  11.6 years, while the static "Repayments: $3,301" stayed unchanged
+  (month-1 figure, as designed); saved, reloaded, and confirmed the
+  scheduled change survived exactly as entered; removed it and confirmed
+  the list emptied cleanly.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -1823,39 +1873,6 @@ optionally reuse in the commit message when you implement it.
   $389,547, and Remaining Savings flipping to a negative $39,547 with the
   existing over-committed-savings warning; confirmed First Home Buyer
   stayed checked throughout with zero interaction, exactly as designed.
-
-- [ ] **TODO-57: Implement scheduled/variable interest rate changes**
-  Follow-up from TODO-53's analysis (done) - a concrete, buildable design
-  rather than an open question. Replace the single static `interestRate`
-  state (`src/App.jsx`) with `useSteppedValue(config.interestRate)` (the
-  exact same hook already used for Strata/Utilities/Council/Insurance/
-  Maintenance/Water/Food/Transport, TODO-19) - a "Schedule a rate change"
-  add-form identical to those fields' UI, likely reusing
-  `SteppedExpenseField` directly with `suffix="% p.a."`.
-  The real work is in `src/calculations/offsetSimulation.js`: inside the
-  loop, resolve the current annual rate every month via
-  `getSteppedValue(interestRateField.base, interestRateField.changes,
-  months)`; when it differs from the previous month's resolved rate,
-  **recompute** `monthlyPayment = calculateMonthlyPayment(balance,
-  calculateMonthlyRate(newRate), maxMonths - months)` - re-amortizing the
-  *remaining* balance over the *remaining* term at the *new* rate, matching
-  how real variable-rate mortgages actually work (not just swapping the
-  interest/principal split at a fixed old repayment, which is materially
-  wrong and can even fail to cover interest on a rate rise). Both
-  `calculateMonthlyPayment` and `getSteppedValue` already exist and need
-  no changes themselves - this is a wiring/structural change, moving
-  `monthlyPayment`'s computation from "once, outside the loop" to
-  "recomputed on rate-change months, inside the loop".
-  Static "month 1" summary figures (Repayments, Interest Amount) should
-  resolve the rate via `getSteppedValue(field.base, field.changes, 1)`,
-  same convention as every other stepped field. `calculateNoOffsetTotalInterest`
-  (the "Savings vs no offset" baseline) should keep using a single fixed
-  rate (the month-1 rate) for its whole hypothetical run - a deliberate,
-  documented simplification, since that figure is already an illustrative
-  comparison rather than a real forecast. Needs a `SCHEMA_VERSION` bump
-  (the saved shape changes from a flat `interestRate` number to a
-  `{base, changes}` pair, same pattern as the other stepped-field bumps).
-
 
 ---
 

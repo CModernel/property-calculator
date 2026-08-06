@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { calculateLoanWithOffset } from './offsetSimulation';
+import { calculateMonthlyRate, calculateMonthlyPayment } from './loan';
 import { MAX_MONTH } from './recurringAmount';
 
 describe('calculateLoanWithOffset', () => {
@@ -526,5 +527,101 @@ describe('calculateLoanWithOffset', () => {
     const offsets = result.monthlyData.map(d => d.offset);
     // $1000 surplus - ($100 + $50 + $200 + $150) = $500/month net.
     expect(offsets).toEqual([500, 1000]);
+  });
+});
+
+describe('scheduled/variable interest rate changes (interestRateField, TODO-57)', () => {
+  it('behaves identically to the fixed-rate call when the field has no scheduled changes', () => {
+    const loanAmount = 100000;
+    const rate = 6;
+    const monthlyRate = calculateMonthlyRate(rate);
+    const monthlyPayment = calculateMonthlyPayment(loanAmount, monthlyRate, 12);
+    const shared = {
+      contributions: [{ startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH, amount: 200 }],
+      personalExpenseItems: [],
+      monthlyToOffset: 0,
+      loanAmount,
+      monthlyRate,
+      monthlyPayment,
+      maxMonths: 12,
+    };
+
+    const withField = calculateLoanWithOffset({ ...shared, interestRateField: { base: rate, changes: [] } });
+    const withoutField = calculateLoanWithOffset(shared);
+
+    expect(withField).toEqual(withoutField);
+  });
+
+  it('re-amortizes the remaining balance over the remaining term on a rate change, still paying off exactly by term end', () => {
+    // No offset activity at all (monthlyToOffset stays clamped to 0 the whole
+    // way, see the netMonthlyDeposit assertion below) - isolates plain
+    // amortization so a rate hike's effect on the payoff schedule is
+    // unambiguous. Needs a 0-amount income source to skip the "nothing to
+    // offset" sentinel shortcut, same trick as the tests above.
+    const loanAmount = 100000;
+    const initialRate = 6;
+    const initialMonthlyRate = calculateMonthlyRate(initialRate);
+    const initialMonthlyPayment = calculateMonthlyPayment(loanAmount, initialMonthlyRate, 12);
+
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [{ id: 1, name: 'Salary', amount: 0, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
+      monthlyToOffset: 0,
+      loanAmount,
+      monthlyRate: initialMonthlyRate,
+      monthlyPayment: initialMonthlyPayment,
+      interestRateField: { base: initialRate, changes: [{ startMonth: 6, amount: 9 }] },
+      maxMonths: 12,
+    });
+
+    // A rate rise mid-term, re-amortized over the remaining term, still
+    // reaches a fully paid-off balance right at month 12 - simply swapping
+    // the interest/principal split at the stale 6%-based installment
+    // (the pre-TODO-57 behavior) would undershoot this, since that
+    // installment doesn't fully cover a 9% loan's amortization schedule.
+    expect(result.monthlyData).toHaveLength(12);
+    expect(result.monthlyData[11].balance).toBe(0);
+  });
+
+  it('reduces the reported surplus starting exactly on the change\'s startMonth, not before or after (delta correction)', () => {
+    // monthlyToOffset (5000) is a caller-supplied constant with the ORIGINAL
+    // month-1 payment already baked in (App.jsx's baseMonthlySurplus
+    // convention) - large enough here that nothing ever clamps to 0, so the
+    // net deposit is observable every month.
+    const loanAmount = 250000;
+    const initialRate = 5.38;
+    const initialMonthlyRate = calculateMonthlyRate(initialRate);
+    const initialMonthlyPayment = calculateMonthlyPayment(loanAmount, initialMonthlyRate, 360);
+
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 5000,
+      loanAmount,
+      monthlyRate: initialMonthlyRate,
+      monthlyPayment: initialMonthlyPayment,
+      interestRateField: { base: initialRate, changes: [{ startMonth: 13, amount: 6.38 }] },
+      maxMonths: 360,
+    });
+
+    // `offset` is a running total that's re-rounded to the nearest dollar
+    // EVERY month, so consecutive differences carry ±$1 of rounding jitter
+    // even when the true underlying deposit is perfectly constant - a
+    // "spread stays tiny" check, not an exact-equality one.
+    const netDeposit = (i) => result.monthlyData[i].offset - (i === 0 ? 0 : result.monthlyData[i - 1].offset);
+    const spread = (arr) => Math.max(...arr) - Math.min(...arr);
+    const beforeChange = Array.from({ length: 12 }, (_, i) => netDeposit(i)); // months 1-12
+    const afterChange = Array.from({ length: 12 }, (_, i) => netDeposit(12 + i)); // months 13-24
+
+    // Flat before the change (still just the original monthlyToOffset)...
+    expect(spread(beforeChange)).toBeLessThanOrEqual(1);
+    // ...flat again after it, at a new (lower) level once the higher-rate
+    // installment is correctly reflected...
+    expect(spread(afterChange)).toBeLessThanOrEqual(1);
+    // ...and a rate RISE re-amortized over the remaining term raises the
+    // installment, which must show up as a SMALLER net surplus - not a
+    // stale one still reflecting the original 5.38% payment.
+    expect(afterChange[0]).toBeLessThan(beforeChange[0] - 1);
   });
 });

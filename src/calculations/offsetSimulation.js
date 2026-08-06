@@ -2,6 +2,8 @@ import { getSteppedValue } from './steppedValue';
 import { getActiveAmount } from './recurringAmount';
 import {
   calculateMonthlyFromWeekly,
+  calculateMonthlyRate,
+  calculateMonthlyPayment,
   calculateMonthlyStrata,
   calculateMonthlyCouncil,
   calculateMonthlyWaterRates,
@@ -22,6 +24,15 @@ export function calculateLoanWithOffset({
   loanAmount,
   monthlyRate,
   monthlyPayment,
+  // TODO-57: optional {base, changes} - when given, the loop re-resolves the
+  // annual rate every month and, on any month where it differs from the
+  // previous one, re-amortizes the REMAINING balance over the REMAINING term
+  // at the NEW rate (matching how a real variable-rate mortgage recalculates
+  // its repayment) instead of just swapping the interest/principal split at a
+  // stale fixed installment. Omitted entirely -> identical to the old fixed-
+  // rate behavior (monthlyRate/monthlyPayment never change), so every caller
+  // that doesn't pass this keeps working unchanged.
+  interestRateField = null,
   maxMonths = 30 * 12,
 }) {
   // Nothing to offset: no surplus, no scheduled contributions, and no income
@@ -44,8 +55,32 @@ export function calculateLoanWithOffset({
   let months = 0;
   const monthlyData = [];
 
+  // The caller's monthlyToOffset already has the ORIGINAL (month-1)
+  // monthlyPayment baked in (see App.jsx's baseMonthlySurplus) - a rate
+  // change discovered mid-loop can only be corrected here, by adding back the
+  // difference between that original payment and whatever's active this
+  // month (see netMonthlyDeposit below).
+  const initialMonthlyPayment = monthlyPayment;
+  let currentAnnualRate = interestRateField
+    ? getSteppedValue(interestRateField.base, interestRateField.changes, 1)
+    : null;
+  let currentMonthlyRate = monthlyRate;
+  let currentMonthlyPayment = monthlyPayment;
+
   while (balance > 0.01 && months < maxMonths) {
     months++;
+
+    if (interestRateField) {
+      const annualRateThisMonth = getSteppedValue(interestRateField.base, interestRateField.changes, months);
+      if (annualRateThisMonth !== currentAnnualRate) {
+        currentAnnualRate = annualRateThisMonth;
+        currentMonthlyRate = calculateMonthlyRate(currentAnnualRate);
+        // +1: `months` is this (about-to-be-paid) installment's own 1-indexed
+        // number, so the remaining term INCLUDES it - e.g. at months=6 of a
+        // 12-month loan, 7 payments (6 through 12) are left, not 6.
+        currentMonthlyPayment = calculateMonthlyPayment(balance, currentMonthlyRate, maxMonths - months + 1);
+      }
+    }
 
     // Apply any offset contributions active this month - a one-time
     // contribution (recurrence: 'none') only fires on its exact startMonth,
@@ -106,10 +141,13 @@ export function calculateLoanWithOffset({
     // `monthlyToOffset` here excludes income and expenseFields - both are
     // added/subtracted per month above instead, since neither can be
     // pre-collapsed into a single constant once either can change
-    // mid-simulation.
+    // mid-simulation. The `(initialMonthlyPayment - currentMonthlyPayment)`
+    // term corrects for a rate change (TODO-57): it's 0 whenever the payment
+    // hasn't changed, and otherwise reconciles monthlyToOffset's stale baked-
+    // in original payment with whatever installment is actually active now.
     const netMonthlyDeposit = Math.max(
       0,
-      monthlyToOffset + monthlyIncomeThisMonth - monthlyExpensesForMonth
+      monthlyToOffset + (initialMonthlyPayment - currentMonthlyPayment) + monthlyIncomeThisMonth - monthlyExpensesForMonth
         - monthlyPersonalExpensesCost - monthlyOtherExpenseItemsCost
     );
     offsetBalance += netMonthlyDeposit;
@@ -121,11 +159,11 @@ export function calculateLoanWithOffset({
     const effectiveBalance = balance - effectiveOffset;
 
     // Monthly interest on effective balance
-    const monthlyInterest = effectiveBalance * monthlyRate;
+    const monthlyInterest = effectiveBalance * currentMonthlyRate;
     totalInterest += monthlyInterest;
 
     // Pay the installment (interest + principal)
-    const principalPayment = monthlyPayment - monthlyInterest;
+    const principalPayment = currentMonthlyPayment - monthlyInterest;
     balance = Math.max(0, balance - principalPayment);
 
     // Save data for Timeline Explorer (Every Month)

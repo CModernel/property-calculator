@@ -251,10 +251,11 @@ describe('SteppedExpenseField "Schedule a change" (representative test on Utilit
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole('button', { name: /Property expenses breakdown/ }));
-    // Utilities is the first SteppedExpenseField rendered when propertyType
-    // is 'house' (Strata is hidden entirely in that case), so it's always
-    // index 0 among the "+ Schedule a change" buttons.
-    await user.click(screen.getAllByRole('button', { name: '+ Schedule a change' })[0]);
+    // Interest Rate (Financial Position, TODO-57) is now the first
+    // SteppedExpenseField in the whole page, so Utilities - the first one
+    // inside Property Expenses when propertyType is 'house' (Strata is
+    // hidden entirely in that case) - is index 1, not 0.
+    await user.click(screen.getAllByRole('button', { name: '+ Schedule a change' })[1]);
 
     // "New amount"'s label isn't htmlFor-linked - scope to its form container
     // (a sibling of the "Starting month" label) and use the implicit

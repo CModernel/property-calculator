@@ -80,7 +80,10 @@ const PropertyInvestmentCalculator = () => {
   const [propertyPrice, setPropertyPrice] = useState(config.propertyPrice);
   const [propertyType, setPropertyType] = useState(config.propertyType); // 'house' | 'unit'
   const [downPayment, setDownPayment] = useState(config.downPayment);
-  const [interestRate, setInterestRate] = useState(config.interestRate);
+  // TODO-57: a stepped/scheduled rate, same "Schedule a rate change" pattern
+  // as Strata/Utilities/etc below - `interestRate` (the resolved "month 1"
+  // value) is derived further down, right next to where it's used.
+  const interestRateField = useSteppedValue(config.interestRate, config.interestRateChanges);
   const [loanTermYears, setLoanTermYears] = useState(config.loanTermYears);
   const strataFeesField = useSteppedValue(config.strataFees, config.strataFeesChanges);
   const utilitiesField = useSteppedValue(config.utilities, config.utilitiesChanges);
@@ -229,6 +232,12 @@ const PropertyInvestmentCalculator = () => {
   // Loan calculations
   const loanAmount = calculateLoanAmount(propertyPrice, downPayment);
   const lvr = safePercentage(loanAmount, propertyPrice);
+  // Current ("month 1") rate - same convention as every other stepped field
+  // (Strata/Utilities/etc) and Income Sources/Tenants: a scheduled change
+  // that hasn't kicked in yet shouldn't affect what these static figures
+  // show right now. The simulation below resolves the rate itself, monthly,
+  // via interestRateField directly (TODO-57).
+  const interestRate = getSteppedValue(interestRateField.base, interestRateField.changes, 1);
   const monthlyRate = calculateMonthlyRate(interestRate);
   const totalMonths = loanTermYears * 12;
   const monthlyPayment = calculateMonthlyPayment(loanAmount, monthlyRate, totalMonths);
@@ -364,6 +373,7 @@ const PropertyInvestmentCalculator = () => {
     loanAmount,
     monthlyRate,
     monthlyPayment,
+    interestRateField,
     maxMonths: totalMonths,
   });
   const baselineSimulation = calculateLoanWithOffset({
@@ -376,6 +386,7 @@ const PropertyInvestmentCalculator = () => {
     loanAmount,
     monthlyRate,
     monthlyPayment,
+    interestRateField,
     maxMonths: totalMonths,
   });
   const interestSaved = baselineSimulation.totalInterest - loanSimulation.totalInterest;
@@ -470,7 +481,8 @@ const PropertyInvestmentCalculator = () => {
   const handleSaveScenario = () => {
     const savedAt = Date.now();
     const scenario = {
-      propertyPrice, propertyType, downPayment, interestRate, loanTermYears,
+      propertyPrice, propertyType, downPayment, loanTermYears,
+      interestRate: interestRateField.base, interestRateChanges: interestRateField.changes,
       strataFees: strataFeesField.base, strataFeesChanges: strataFeesField.changes,
       utilities: utilitiesField.base, utilitiesChanges: utilitiesField.changes,
       councilRates: councilRatesField.base, councilRatesChanges: councilRatesField.changes,
@@ -904,10 +916,9 @@ const PropertyInvestmentCalculator = () => {
 
               {/* min must stay above 0: a 0% rate makes calculateMonthlyPayment
                   divide 0 by 0, turning every figure on the page into NaN. */}
-              <NumberSliderField
+              <SteppedExpenseField
+                field={interestRateField}
                 label="Interest Rate"
-                value={interestRate}
-                onChange={setInterestRate}
                 min={0.1}
                 max={20}
                 sliderMin={3}
