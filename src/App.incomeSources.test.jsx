@@ -151,11 +151,11 @@ describe('Add Income success + remove', () => {
     fireEvent.blur(screen.getByLabelText('Weekly Amount ($)'));
     await user.click(screen.getByRole('button', { name: 'Add Income' }));
 
-    // Two rows now: the default "Salary" source plus the new "Bonus" one.
+    // Two rows now: the default "Salary/Wages" source plus the new "Bonus" one.
     const bonusRow = screen.getByText('Bonus').closest('div').parentElement;
     await user.click(within(bonusRow).getByRole('button', { name: '✕' }));
 
     expect(screen.queryByText('Bonus')).not.toBeInTheDocument();
-    expect(screen.getByText('Salary')).toBeInTheDocument();
+    expect(screen.getByText('Salary/Wages')).toBeInTheDocument();
   });
 });

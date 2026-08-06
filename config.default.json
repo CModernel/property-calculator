@@ -15,7 +15,7 @@
   "landTax": 0,
   "propertyManagement": 0,
   "incomeSources": [
-    { "id": 1, "name": "Salary", "amount": 1614, "startMonth": 1, "recurrence": "monthly", "endMonth": 360 }
+    { "id": 1, "name": "Salary/Wages", "amount": 1614, "startMonth": 1, "recurrence": "monthly", "endMonth": 360 }
   ],
   "personalExpenseItems": [
     { "id": 1, "name": "Groceries", "amount": 433, "startMonth": 1, "recurrence": "monthly", "endMonth": 360 },

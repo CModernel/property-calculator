@@ -1,5 +1,6 @@
 import { getSteppedValue } from './steppedValue';
-import { getActiveAmount } from './recurringAmount';
+import { getActiveAmount, getActiveAmountWithGrowth } from './recurringAmount';
+import { SALARY_INCOME_CATEGORY } from './incomeCategories';
 import {
   calculateMonthlyFromWeekly,
   calculateMonthlyRate,
@@ -57,6 +58,13 @@ export function calculateLoanWithOffset({
   // propertyValue field is read by anything that doesn't ask for it).
   propertyPrice = 0,
   propertyGrowthRate = 0,
+  // TODO-90: annual % growth applied only to Salary/Wages income sources,
+  // compounding from simulation month 1 (a deliberate simplification, same
+  // convention as propertyGrowthRate above) - independent of every other
+  // rate in this app, since real wage growth doesn't track inflation or
+  // property/savings returns. 0 (default) means every existing caller/test
+  // that omits this keeps working unchanged.
+  salaryGrowthRate = 0,
   maxMonths = 30 * 12,
 }) {
   // Nothing to offset: no surplus, no scheduled contributions, and no income
@@ -78,6 +86,12 @@ export function calculateLoanWithOffset({
   ) {
     return { years: 999, months: maxMonths, totalInterest: 999999, totalSavingsInterest: 0, monthlyData: [] };
   }
+
+  // TODO-90: split once outside the loop (incomeSources itself never
+  // changes during the simulation) rather than filtering on every
+  // iteration.
+  const salaryIncomeSources = incomeSources.filter(i => i.name === SALARY_INCOME_CATEGORY);
+  const otherIncomeSources = incomeSources.filter(i => i.name !== SALARY_INCOME_CATEGORY);
 
   let balance = loanAmount;
   let offsetBalance = 0;
@@ -133,7 +147,13 @@ export function calculateLoanWithOffset({
     // date-ranged or one-time source) can't be pre-collapsed into a single
     // constant outside the loop, unlike the old single fortnightlyIncome
     // scalar this replaced.
-    const monthlyIncomeThisMonth = calculateMonthlyFromWeekly(getActiveAmount(incomeSources, months));
+    // TODO-90: Salary/Wages sources grow at salaryGrowthRate; everything
+    // else resolves the same way as before (a no-op split at the 0%
+    // default, since getActiveAmountWithGrowth matches getActiveAmount
+    // exactly then).
+    const monthlyIncomeThisMonth = calculateMonthlyFromWeekly(
+      getActiveAmountWithGrowth(salaryIncomeSources, months, salaryGrowthRate) + getActiveAmount(otherIncomeSources, months)
+    );
 
     // Property expenses for this month, each resolved to whichever scheduled
     // change (if any) is in effect - same reasoning as tenant rent above: a

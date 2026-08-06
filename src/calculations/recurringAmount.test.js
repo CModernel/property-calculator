@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getActiveAmount, isScheduleActive, countOccurrencesUpTo, classifyScheduleStatus, formatScheduleLabel, MAX_MONTH } from './recurringAmount';
+import { getActiveAmount, getActiveAmountWithGrowth, isScheduleActive, countOccurrencesUpTo, classifyScheduleStatus, formatScheduleLabel, MAX_MONTH } from './recurringAmount';
 
 describe('isScheduleActive', () => {
   it('is active only on its exact month when recurrence is "none"', () => {
@@ -60,6 +60,24 @@ describe('getActiveAmount', () => {
 
   it('returns 0 for an empty list', () => {
     expect(getActiveAmount([], 1)).toBe(0);
+  });
+});
+
+describe('getActiveAmountWithGrowth (TODO-90)', () => {
+  const items = [{ amount: 1000, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }];
+
+  it('matches getActiveAmount exactly at 0% growth', () => {
+    expect(getActiveAmountWithGrowth(items, 12, 0)).toBe(getActiveAmount(items, 12));
+  });
+
+  it('compounds monthly at 1%/month (12% p.a.)', () => {
+    expect(getActiveAmountWithGrowth(items, 1, 12)).toBeCloseTo(1010, 2);
+    expect(getActiveAmountWithGrowth(items, 12, 12)).toBeCloseTo(1000 * Math.pow(1.01, 12), 6);
+  });
+
+  it('is 0 for a month where nothing is active, regardless of growth', () => {
+    const oneTime = [{ amount: 500, startMonth: 6, recurrence: 'none' }];
+    expect(getActiveAmountWithGrowth(oneTime, 7, 10)).toBe(0);
   });
 });
 

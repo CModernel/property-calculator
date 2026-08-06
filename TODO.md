@@ -2631,18 +2631,67 @@ optionally reuse in the commit message when you implement it.
   row/line disappeared again. Saved at 3.5%, reloaded, confirmed
   persistence; cleared the saved scenario, confirmed it reset to 0%.
 
+- [x] **TODO-90: Salary/Wage Growth**
+  Follow-up from TODO-54's split - the first to reuse TODO-89's
+  compounding mechanism. Scoped narrowly to income sources categorized
+  exactly `'Salary/Wages'` (new `SALARY_INCOME_CATEGORY` export,
+  `src/calculations/incomeCategories.js`) - not "all personal income" -
+  to keep this an accurately-named, tightly-scoped feature distinct from
+  Rent Growth (TODO-91) and any future investment-return growth.
+  New `getActiveAmountWithGrowth(items, month, annualGrowthRate)`
+  (`src/calculations/recurringAmount.js`) - same shape as the existing
+  `getActiveAmount`, but multiplies each active item's amount by a growth
+  factor from `calculateCompoundedValue(1, annualGrowthRate, month)`
+  (TODO-89's shared mechanism). `calculateLoanWithOffset`
+  (`src/calculations/offsetSimulation.js`) gained `salaryGrowthRate = 0`,
+  splits `incomeSources` into Salary/Wages vs. everything else **once**
+  outside the loop (the array itself never changes mid-simulation), and
+  sums `getActiveAmountWithGrowth(salaryIncomeSources, months,
+  salaryGrowthRate) + getActiveAmount(otherIncomeSources, months)` each
+  month - a no-op split at the 0% default, since the growth function
+  matches the plain one exactly then.
+  New "Salary Growth Rate" `NumberSliderField` in the Income section,
+  right after the "💵 Income Sources" header (inside the existing
+  breakdown toggle, alongside what it affects) - allows a small negative
+  range too (a pay cut/reduced hours), same allowance as TODO-89's
+  Property Growth Rate. Deliberately **not** tied to inflation/savings/
+  property growth - real wage growth moves on its own (promotions, job
+  changes). Growth compounds from simulation month 1, not from each
+  income source's own `startMonth` (a deliberate simplification, same
+  convention as Property Appreciation). Static "right now" income
+  figures (`weeklyIncome`, the Income breakdown subtotal) are correctly
+  untouched - this only affects the future simulation.
+  `salaryGrowthRate` persisted via `handleSaveScenario` - purely
+  additive, no `SCHEMA_VERSION` bump.
+  **Bug caught before shipping, not after**: the app's own seeded default
+  income source (`config.default.json`) was named `"Salary"` - a legacy
+  free-text value predating the category system - which would have
+  silently never matched the new `'Salary/Wages'` category filter,
+  making the whole feature a no-op on the shipped default scenario
+  despite passing every unit test (which all used correctly-named
+  fixtures). Caught during browser verification when a nonzero rate
+  produced zero change; fixed by renaming the seed to `"Salary/Wages"`
+  (matching what the add-form itself already writes when a user picks
+  that category) and updating the one test
+  (`App.incomeSources.test.jsx`) that asserted the old literal text.
+  Added 3 new tests to `recurringAmount.test.js` (matches `getActiveAmount`
+  exactly at 0%, compounds correctly, 0 when nothing's active) and 2 to
+  `offsetSimulation.test.js` (0%/omitted matches the plain path exactly,
+  growth applies only to Salary/Wages while a Dividends entry stays flat).
+  `npm test -- --run` (332/332), `npm run lint`, `npm run build` all
+  clean. Verified in the browser: after the seed-name fix, setting Salary
+  Growth Rate to 8% dropped "Total interest paid" $196,743 -> $138,716
+  and raised "You save" $448,646 -> $506,674, while the Income
+  breakdown's $1,614/week subtotal stayed exactly the same (confirming
+  only the future simulation is affected, not today's snapshot). Reset to
+  0%, confirmed it matched the original baseline exactly. Saved at 3%,
+  reloaded, confirmed persistence; cleared the saved scenario, confirmed
+  it reset to 0%.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
 
-
-- [ ] **TODO-90: Salary/Wage Growth (annual %, independent of any other growth rate)**
-  Follow-up from TODO-54's split. Small once TODO-89's compounding
-  mechanism exists. Applies to income sources (likely Salary/Wages
-  specifically, or all - needs a decision at implementation time).
-  Deliberately **not** tied to inflation/CPI - real wage growth moves
-  independently (promotions, job changes, anywhere from 0% to 5%+), per
-  the second-opinion analysis.
 
 - [ ] **TODO-91: Rent Growth (annual %, investment properties only)**
   Follow-up from TODO-54's split. Small once TODO-89's mechanism exists -

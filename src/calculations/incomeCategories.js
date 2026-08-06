@@ -34,6 +34,12 @@ export const INCOME_CATEGORIES = [
 // the category verbatim for every category except 'Other'.
 export const RENTAL_INCOME_CATEGORIES = ['House Rent', 'Room Rent'];
 
+// TODO-90: which income sources Salary Growth applies to - deliberately
+// narrow (not "all personal income") so this task stays a tight,
+// accurately-named feature, distinct from Rent Growth (TODO-91) and any
+// future investment-return growth.
+export const SALARY_INCOME_CATEGORY = 'Salary/Wages';
+
 // Default Schedule applied when a category is picked in the Income Name
 // dropdown, so the form reflects how that income naturally recurs instead of
 // always defaulting the same way. Categories omitted here (House Rent, Room

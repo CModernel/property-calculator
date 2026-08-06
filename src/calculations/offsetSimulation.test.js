@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { calculateLoanWithOffset } from './offsetSimulation';
-import { calculateMonthlyRate, calculateMonthlyPayment } from './loan';
+import { calculateMonthlyRate, calculateMonthlyPayment, calculateMonthlyFromWeekly } from './loan';
 import { MAX_MONTH } from './recurringAmount';
 import { calculateCompoundedValue } from './growthRate';
 
@@ -843,5 +843,49 @@ describe('property value over time (propertyPrice/propertyGrowthRate, TODO-89)',
       maxMonths: 12,
     });
     expect(result.monthlyData[11].propertyValue).toBeLessThan(850000);
+  });
+});
+
+describe('Salary/Wages income growth (salaryGrowthRate, TODO-90)', () => {
+  it('matches getActiveAmount exactly (no growth) when salaryGrowthRate is 0/omitted', () => {
+    const shared = {
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [{ id: 1, name: 'Salary/Wages', amount: 300, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 3,
+    };
+    const withDefault = calculateLoanWithOffset(shared);
+    const withExplicitZero = calculateLoanWithOffset({ ...shared, salaryGrowthRate: 0 });
+    expect(withExplicitZero).toEqual(withDefault);
+    // 300/week -> 1300/month (calculateMonthlyFromWeekly), cumulative into the offset.
+    expect(withDefault.monthlyData.map(d => d.offset)).toEqual([1300, 2600, 3900]);
+  });
+
+  it('grows Salary/Wages income monthly at salaryGrowthRate, leaving other income categories untouched', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [
+        { id: 1, name: 'Salary/Wages', amount: 300, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH },
+        { id: 2, name: 'Dividends', amount: 100, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH },
+      ],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      salaryGrowthRate: 12, // -> exactly 1%/month via calculateMonthlyRate
+      maxMonths: 3,
+    });
+    let cumulative = 0;
+    const expectedOffsets = [1, 2, 3].map((month) => {
+      const grownSalary = calculateCompoundedValue(300, 12, month);
+      cumulative += calculateMonthlyFromWeekly(grownSalary + 100); // Dividends stays flat at 100
+      return Math.round(cumulative);
+    });
+    expect(result.monthlyData.map(d => d.offset)).toEqual(expectedOffsets);
   });
 });

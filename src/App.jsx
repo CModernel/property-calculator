@@ -196,6 +196,11 @@ const PropertyInvestmentCalculator = () => {
   // elsewhere in the file (TODO-56 - name-based, not isShared-based, since
   // plain House Rent entries carry no isShared field at all).
   const [incomeSources, setIncomeSources] = useState(config.incomeSources ?? []);
+  // TODO-90: annual % growth applied only to Salary/Wages income sources,
+  // compounding monthly from simulation month 1 - independent of any other
+  // growth rate in this app (inflation, savings, property). 0 (default)
+  // means every existing scenario behaves byte-for-byte identically.
+  const [salaryGrowthRate, setSalaryGrowthRate] = useState(config.salaryGrowthRate ?? 0);
   const [showIncome, setShowIncome] = useState(config.showIncome ?? false);
   const [showAddIncome, setShowAddIncome] = useState(false);
   const [newIncomeCategory, setNewIncomeCategory] = useState('Salary/Wages'); // see INCOME_CATEGORIES (src/calculations/incomeCategories.js)
@@ -436,6 +441,7 @@ const PropertyInvestmentCalculator = () => {
     savingsInterestRate,
     propertyPrice,
     propertyGrowthRate,
+    salaryGrowthRate,
     maxMonths: totalMonths,
   });
   const baselineSimulation = calculateLoanWithOffset({
@@ -453,6 +459,7 @@ const PropertyInvestmentCalculator = () => {
     savingsInterestRate,
     propertyPrice,
     propertyGrowthRate,
+    salaryGrowthRate,
     maxMonths: totalMonths,
   });
   const interestSaved = baselineSimulation.totalInterest - loanSimulation.totalInterest;
@@ -610,6 +617,7 @@ const PropertyInvestmentCalculator = () => {
       conveyancing, buildingInspection, pestInspection, registrationFees, searches,
       loanEstablishmentFee, propertyValuation, homeInsurance, rateAdjustments, miscUpfrontCost,
       incomeSources,
+      salaryGrowthRate,
       offsetContributions,
       personalExpenseItems,
       showPropertyExpenses, showMonthlyExpensesBreakdown, showClosingCostsBreakdown,
@@ -1545,6 +1553,21 @@ const PropertyInvestmentCalculator = () => {
                   {showAddIncome ? '✕ Cancel' : '+ Add'}
                 </button>
               </div>
+
+              <NumberSliderField
+                label="Salary Growth Rate"
+                value={salaryGrowthRate}
+                onChange={setSalaryGrowthRate}
+                min={-5}
+                max={15}
+                sliderMin={0}
+                sliderMax={8}
+                step={0.1}
+                color="green"
+                suffix="% p.a."
+              >
+                Annual growth applied only to "Salary/Wages" income sources, compounding monthly - independent of inflation, savings, or property growth (real wage growth moves on its own, via promotions or job changes). 0% (default) keeps salary income flat.
+              </NumberSliderField>
 
               {/* Add income form */}
               {showAddIncome && (

@@ -1,3 +1,5 @@
+import { calculateCompoundedValue } from './growthRate';
+
 // Same max month used everywhere else in the app (tenant/exceptional-expense
 // sliders) - also doubles as the "Forever" sentinel for endMonth, per the
 // user's own suggestion: an item ending at the max month never gets cut off
@@ -22,6 +24,16 @@ export function isScheduleActive(schedule, month) {
 // Income Sources and Exceptional Expenses, which use the exact same shape.
 export function getActiveAmount(items, month) {
   return items.reduce((sum, item) => (isScheduleActive(item, month) ? sum + item.amount : sum), 0);
+}
+
+// TODO-90: same as getActiveAmount, but each active item's amount grows by
+// a fixed annual rate compounding from simulation month 1 - not from the
+// item's own startMonth, a deliberate simplification (matches TODO-89's
+// Property Appreciation, which also grows from month 1 regardless of when
+// the mortgage itself started).
+export function getActiveAmountWithGrowth(items, month, annualGrowthRate) {
+  const growthMultiplier = calculateCompoundedValue(1, annualGrowthRate, month);
+  return items.reduce((sum, item) => (isScheduleActive(item, month) ? sum + item.amount * growthMultiplier : sum), 0);
 }
 
 // How many times a schedule has fired by the given month (inclusive) -
