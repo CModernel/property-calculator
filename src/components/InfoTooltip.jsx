@@ -6,7 +6,7 @@ const InfoTooltip = ({ label, children }) => (
   <span className="relative inline-flex group align-middle ml-1">
     <button
       type="button"
-      className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] leading-none border cursor-default focus:outline-none focus:ring-2 focus:ring-gray-300 bg-gray-100 text-gray-500 border-gray-300"
+      className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] leading-none border cursor-default focus:outline-none focus:ring-2 focus:ring-gray-300 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-600"
       aria-label={label}
     >
       ?
@@ -14,7 +14,7 @@ const InfoTooltip = ({ label, children }) => (
 
     <div
       role="tooltip"
-      className="invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 transition-opacity duration-150 absolute z-20 top-full left-1/2 -translate-x-1/2 mt-2 w-64 max-w-[90vw] rounded-lg border border-gray-200 bg-white p-3 shadow-lg text-xs text-gray-600 font-normal normal-case"
+      className="invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 transition-opacity duration-150 absolute z-20 top-full left-1/2 -translate-x-1/2 mt-2 w-64 max-w-[90vw] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 shadow-lg text-xs text-gray-600 dark:text-gray-300 font-normal normal-case"
     >
       {children}
     </div>

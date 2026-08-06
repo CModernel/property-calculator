@@ -1,3 +1,12 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* The page content is capped at max-w-7xl and centered (src/App.jsx), so on
+   wider viewports/aspect ratios there's empty space outside it - html/body
+   need their own themed background (TODO-47) or that space stays the
+   browser's default white regardless of dark mode. */
+html,
+body {
+  @apply bg-slate-50 dark:bg-slate-900;
+}

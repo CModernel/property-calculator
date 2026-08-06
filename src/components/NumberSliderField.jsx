@@ -5,11 +5,11 @@ import { parseNumberInput } from '../calculations/parseNumberInput';
 // Tailwind only keeps classes that appear as complete literal strings in the
 // source, so the track colour CANNOT be built as `bg-${color}-200`.
 const TRACK_CLASSES = {
-  blue: 'bg-blue-200',
-  green: 'bg-green-200',
-  indigo: 'bg-indigo-200',
-  orange: 'bg-orange-200',
-  purple: 'bg-purple-200',
+  blue: 'bg-blue-200 dark:bg-blue-900',
+  green: 'bg-green-200 dark:bg-green-900',
+  indigo: 'bg-indigo-200 dark:bg-indigo-900',
+  orange: 'bg-orange-200 dark:bg-orange-900',
+  purple: 'bg-purple-200 dark:bg-purple-900',
 };
 
 // A number field paired with a slider. The number field is the source of truth
@@ -78,17 +78,17 @@ const NumberSliderField = ({
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2 mb-1">
-        <label htmlFor={id} className="block text-sm font-medium text-gray-700">
+        <label htmlFor={id} className="block text-sm font-medium text-gray-700 dark:text-gray-200">
           {label}
         </label>
-        <span className="text-sm font-semibold text-gray-800 tabular-nums">
+        <span className="text-sm font-semibold text-gray-800 dark:text-gray-100 tabular-nums">
           {prefix}{formatValue(preview)}{suffix}
         </span>
       </div>
 
       <div className="relative">
         {prefix && (
-          <span className="absolute inset-y-0 left-2 flex items-center text-sm text-gray-500 pointer-events-none">
+          <span className="absolute inset-y-0 left-2 flex items-center text-sm text-gray-500 dark:text-gray-400 pointer-events-none">
             {prefix}
           </span>
         )}
@@ -107,7 +107,7 @@ const NumberSliderField = ({
           onBlur={commit}
           onKeyDown={handleNumberKeyDown}
           onKeyUp={handleNumberKeyUp}
-          className={`w-full ${prefix ? 'pl-6' : 'pl-2'} pr-2 py-1 border border-gray-300 rounded text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-gray-300`}
+          className={`w-full ${prefix ? 'pl-6' : 'pl-2'} pr-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm tabular-nums bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-300`}
         />
       </div>
 
@@ -127,18 +127,18 @@ const NumberSliderField = ({
             className={`w-full h-2 mt-2 rounded-lg appearance-none cursor-pointer ${TRACK_CLASSES[color]}`}
           />
 
-          <div className="flex justify-between text-xs text-gray-400 mt-1 tabular-nums">
-            <span className={belowRange ? 'text-amber-600 font-medium' : undefined}>
+          <div className="flex justify-between text-xs text-gray-400 dark:text-gray-500 mt-1 tabular-nums">
+            <span className={belowRange ? 'text-amber-600 dark:text-amber-400 font-medium' : undefined}>
               {belowRange && '<'}{prefix}{showBound(sliderMin)}
             </span>
-            <span className={aboveRange ? 'text-amber-600 font-medium' : undefined}>
+            <span className={aboveRange ? 'text-amber-600 dark:text-amber-400 font-medium' : undefined}>
               {prefix}{showBound(safeSliderMax)}{aboveRange && '+'}
             </span>
           </div>
         </>
       )}
 
-      {children && <p className="text-xs text-gray-500 mt-1">{children}</p>}
+      {children && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{children}</p>}
     </div>
   );
 };

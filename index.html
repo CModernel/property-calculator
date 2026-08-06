@@ -5,6 +5,19 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>property-calculator</title>
+    <script>
+      // Mirrors src/hooks/useDarkMode.js's own logic (same key, same
+      // fallback) - runs synchronously before React mounts so there's no
+      // flash of the wrong theme on load.
+      (function () {
+        try {
+          var saved = localStorage.getItem('propertyCalculator.theme');
+          var prefersDark = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var isDark = saved === 'dark' || (saved !== 'light' && prefersDark);
+          document.documentElement.classList.toggle('dark', isDark);
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -5,19 +5,28 @@ import { withMonthlyPrincipal, getYearTickMonths } from '../calculations/chartDa
 // The classic amortization chart: per-month Principal vs. Interest,
 // stacked - shows the crossover point and how offset shifts it earlier
 // (TODO-51).
-const PrincipalInterestChart = ({ monthlyData }) => (
+// Same JS-level color handling as LoanBalanceChart.jsx (TODO-47) - recharts
+// props don't respond to Tailwind's `dark:` variant.
+const PrincipalInterestChart = ({ monthlyData, isDarkMode }) => (
   <ResponsiveContainer width="100%" height={200}>
     <AreaChart data={withMonthlyPrincipal(monthlyData)} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+      <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#374151' : '#e5e7eb'} />
       <XAxis
         dataKey="month"
         ticks={getYearTickMonths(monthlyData.length)}
         tickFormatter={(month) => `${Math.round(month / 12)}y`}
+        tick={{ fill: isDarkMode ? '#9ca3af' : '#666' }}
       />
-      <YAxis tickFormatter={(v) => `$${formatCompactMoney(v)}`} width={70} />
+      <YAxis
+        tickFormatter={(v) => `$${formatCompactMoney(v)}`}
+        width={70}
+        tick={{ fill: isDarkMode ? '#9ca3af' : '#666' }}
+      />
       <Tooltip
         formatter={(value) => `$${Math.round(value).toLocaleString()}`}
         labelFormatter={(month) => `Month ${month}`}
+        contentStyle={isDarkMode ? { backgroundColor: '#1f2937', border: '1px solid #374151', color: '#f3f4f6' } : undefined}
+        labelStyle={isDarkMode ? { color: '#f3f4f6' } : undefined}
       />
       <Legend />
       <Area
