@@ -1944,6 +1944,42 @@ optionally reuse in the commit message when you implement it.
   themes - the gutters outside the centered content now match the theme
   instead of staying white - and again at a 390×844 mobile portrait size.
 
+- [x] **TODO-71: Fix the Remaining Savings colored panel not covering the full bottom of the Upfront Costs (NSW) card**
+  Reported by the user. First attempt (adding `-mx-3 -mb-3 px-3 pb-3
+  rounded-b-lg` to the "Remaining Savings" highlight div, canceling the
+  card's own `p-3`) fixed the left/right edges but the user immediately
+  caught that the bottom gap was still there in both themes, and
+  correctly guessed the cause themselves: `space-y-1` on the parent row
+  container. Confirmed via `getBoundingClientRect`/`getComputedStyle` in
+  the browser - `-mx-3` worked (`margin-left/right: -12px`), but
+  `-mb-3` computed to `margin-bottom: 0px` regardless of the class being
+  present and matching the element (`el.matches('.-mb-3')` was `true`).
+  Root cause: Tailwind's `space-y-1` implements its gap by setting
+  `margin-top`/`margin-bottom` via a `--tw-space-y-reverse`-driven calc()
+  on `> :not([hidden]) ~ :not([hidden])` - a higher-specificity selector
+  than a plain single utility class - so it was silently overriding this
+  row's own `-mb-3` (margin-bottom explicitly forced to 0 on the group's
+  last child) while leaving margin-left/right untouched, since space-y-*
+  never touches the x-axis.
+  Real fix: moved the highlight div to be a **sibling** of the
+  `space-y-1` container instead of its last child, so it's no longer
+  targeted by that selector at all - kept its own `mt-1` (0.25rem,
+  identical to the space-y-1 gap it used to inherit) so the visual
+  spacing above it is unchanged. `-mx-3 -mb-3 px-3 pb-3 rounded-b-lg`
+  now apply cleanly with nothing overriding them. Confirmed the nested
+  red "you've committed $X more..." warning box (`cashRemaining < 0`)
+  was never a separate issue - it's self-contained regardless of the
+  parent's sizing.
+  `npm test -- --run` (275/275), `npm run lint`, `npm run build` all
+  clean. Verified precisely this time, not just visually: re-ran the
+  same `getBoundingClientRect` check after the fix (`marginBottom:
+  "-12px"`, card-bottom-to-highlight-bottom gap of 1px = exactly the
+  card's own border width) and zoomed screenshots in both light and dark
+  mode, for both the positive (green, default $28,453) and negative
+  (red, forced by dropping Available Savings to $10,000) states - the
+  highlight now genuinely reaches the card's rounded bottom corner with
+  no gap in any of the four combinations.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -2115,6 +2151,145 @@ optionally reuse in the commit message when you implement it.
   inherently tied to a selected month, not a single static "right now"
   figure the way every other indicator here is (>20% green, 10-20%
   yellow, 5-10% orange, <5% red).
+
+- [ ] **TODO-72: Fix schedule-field labels rendering with unstyled (effectively black) text in dark mode**
+  Reported by the user (Personal Expenses' "End Month", Income Sources'
+  "Start Month"/"End Month"). Root cause found: these are all
+  `<label className="block text-xs font-medium mb-1">` with **no text-
+  color class at all** - TODO-47's dark-mode sweep was a regex-based
+  script that added a `dark:` variant next to an EXISTING color class,
+  so anywhere the original code had no color class to begin with, there
+  was nothing for it to attach to and the label silently kept
+  inheriting the default (black-ish) color. Confirmed exact spots in
+  `src/App.jsx`: the "Number of People" label (~line 1306), Income
+  Sources' Start/End Month labels (~1370, ~1394), Offset Contributions'
+  End Month label (~1518 - its sibling Start Month label at ~1494 is
+  fine, already has `text-gray-700 dark:text-gray-200`, which is why
+  only some labels in the same form are broken), Personal Expenses' End
+  Month label (~1686), Other Expenses' End Month label (~1812). Fix:
+  add `text-gray-700 dark:text-gray-200` (matching the already-correct
+  sibling labels) to all of these.
+
+- [ ] **TODO-73: Fix Monthly/Quarterly/Yearly recurrence buttons rendering with unstyled (effectively black) text in dark mode**
+  Same root cause as TODO-72, different element type - the recurrence
+  toggle buttons (`className={\`flex-1 py-1 rounded border capitalize
+  ${...}\`}`) have no text-color class either, in all 4 places they
+  appear in `src/App.jsx`: Income Sources (~line 1388), Offset
+  Contributions (~1512), Personal Expenses (~1680), Other Expenses
+  (~1806). Needs a text color that reads well against both the
+  "selected" background (`bg-{color}-200 dark:bg-{color}-900`) and the
+  "unselected" one (`bg-white dark:bg-gray-800`) in both themes.
+
+- [ ] **TODO-74: Rename the default Personal Expense "Food" to "Groceries"**
+  Requested by the user. `config.default.json`'s `personalExpenseItems`
+  seed data (`{"id": 1, "name": "Food", ...}`) - simple rename, no
+  behavior change.
+
+- [ ] **TODO-75: Update the "Routine costs (Food, Transport, a phone/internet bill)" copy to match the Groceries rename**
+  Requested by the user, follow-up to TODO-74 - suggested replacement:
+  "(Groceries, Transport, Bills)" or similar. This is the Personal
+  Expenses section's descriptive copy in `src/App.jsx` (added in
+  TODO-66), referencing the old seeded category names directly in text.
+
+- [ ] **TODO-76 (Analysis first): Consider modeling Personal Expenses with categorized types, similar to Income Sources**
+  Requested by the user. Income Sources has a category dropdown
+  (`INCOME_CATEGORIES`/`INCOME_CATEGORY_DEFAULTS`,
+  `src/calculations/incomeCategories.js`) with per-category Schedule
+  defaults; Personal Expenses (TODO-66) is already a Schedule-shaped
+  addable/removable list like Income Sources, but its "name" is a plain
+  free-text field, no category picklist. Analyze whether a similar
+  fixed category list (e.g. Groceries/Transport/Bills/Subscriptions/
+  Entertainment/Custom) with sensible per-category defaults would be
+  worth adding, and whether/how it should relate to the existing
+  "Other Expenses" categories (`OTHER_EXPENSE_CATEGORIES`) - see
+  TODO-78, which questions whether Other Expenses should exist as a
+  separate concept at all.
+
+- [ ] **TODO-77 (Important): Clarify whether Personal Expenses "Amount" is weekly or monthly, and that the Schedule model has no weekly recurrence option**
+  Requested by the user, flagged as important - they weren't sure if
+  the entered `amount` is meant per-week or per-month, would prefer
+  weekly, but the Schedule model
+  (`src/calculations/recurringAmount.js`'s `INTERVAL_MONTHS = {monthly:
+  1, quarterly: 3, yearly: 12}`) only supports monthly/quarterly/yearly
+  recurrence - there's no weekly option to pick, unlike Income Sources
+  which is explicitly weekly-denominated (`calculateMonthlyFromWeekly`)
+  by convention/copy alone, not by the Schedule shape itself. Needs a
+  design decision: either make it explicit in the UI that Personal/
+  Other Expenses amounts are monthly (labeling, tooltip), or extend the
+  Schedule model to support a weekly interval (touches
+  `isScheduleActive`/`getActiveAmount`/`countOccurrencesUpTo`/
+  `formatScheduleLabel`, all keyed off `INTERVAL_MONTHS`, plus every UI
+  spot that lists recurrence options) - suggest a solution before
+  implementing either.
+
+- [ ] **TODO-78 (Analysis): What's the actual advantage of "Other Expenses" vs. Personal Expenses - aren't they redundant?**
+  Requested by the user. Both are now Schedule-shaped addable/removable
+  lists with near-identical UI (add form, recurrence buttons, remove
+  button) - Personal Expenses seeds Food/Transport/Phone-Internet,
+  Other Expenses has its own category list (`OTHER_EXPENSE_CATEGORIES`:
+  Health/Subscriptions/Entertainment/Debt Repayment/Custom). Analyze
+  whether there's a genuine conceptual distinction worth keeping two
+  separate sections for, or whether they should be merged into one
+  (relevant to TODO-76's categorization question too).
+
+- [ ] **TODO-79 (Analysis): Why is Offset Contributions Schedule's "One-Time Contributions Total" $0 by default, and revisit the promised Offset vs. Savings split**
+  Requested by the user, who recalled that the app was supposed to let
+  the user choose how much of their weekly/monthly surplus goes to the
+  loan offset vs. their personal balance - this is exactly **TODO-49**
+  ("Let the user choose how much of the automatic surplus goes to
+  Offset vs. Savings"), still pending. The $0 default is expected/by
+  design (no contributions scheduled yet, `calculateTotalScheduledOffset`
+  returns 0 for an empty list) - not a bug - but confirms TODO-49's
+  underlying feature (a user-configurable split) hasn't been built yet;
+  today 100% of the surplus is automatic, full stop. Treat this as a
+  reminder/re-confirmation to prioritize TODO-49, not a new separate
+  investigation.
+
+- [ ] **TODO-80 (Analysis, follow-up to TODO-49/79): How to track/persist the user's actual bank balance separate from the offset account**
+  Requested by the user - if TODO-49's Offset vs. Savings split gets
+  built, the "Savings" side needs to actually accumulate somewhere
+  across the simulation (today `totalSavings`/`cashRemaining`,
+  `src/calculations/totalCashRequired.js`, are static point-in-time
+  figures, not a running balance over the simulation timeline). Analyze
+  how hard this would be to maintain correctly (mirroring how
+  `offsetBalance` already accumulates month-by-month in
+  `src/calculations/offsetSimulation.js`) before TODO-49 is scheduled -
+  check whether any existing variable already represents this, or
+  whether it's a genuinely new piece of state to design.
+
+- [ ] **TODO-81: Slider min/max boundary labels are low-contrast gray in dark mode**
+  Reported by the user - the `$0`/`$X,XXX`-style min/max labels shown
+  below each `NumberSliderField` slider (`src/components/
+  NumberSliderField.jsx`, `text-gray-400 dark:text-gray-500`) are hard
+  to read against the dark card backgrounds. `dark:text-gray-500` isn't
+  light enough for good contrast - needs a lighter shade (e.g.
+  `dark:text-gray-400` or `dark:text-gray-300`).
+
+- [ ] **TODO-82: Allow adding a custom "Misc property expense" line item in Property Expenses**
+  Requested by the user. Property Expenses today is a fixed set of 8
+  `SteppedExpenseField`s (Strata/Utilities/Council/Insurance/
+  Maintenance/Water/Land Tax/Property Management, `src/App.jsx`) with
+  no way to add anything not in that list - unlike Personal/Other
+  Expenses, which are open-ended addable lists. Needs a design decision
+  on shape (a single flat custom-amount field vs. a full Schedule-based
+  addable list like the others) before implementing.
+
+- [ ] **TODO-83: Allow adding a custom "Misc Upfront Cost" line item in Upfront Costs**
+  Requested by the user, same idea as TODO-82 for the other fixed-field
+  section - Upfront Costs is a fixed set of fields (Conveyancing/
+  Building Inspection/Pest Inspection/Registration Fees/Searches/Loan
+  Establishment Fee/Property Valuation/Home Insurance/Rate Adjustments,
+  state module `defaultClosingCosts` + `src/App.jsx`) with no custom
+  addition mechanism.
+
+- [ ] **TODO-84: Soften the "Personal project... not financial advice" warning banner's color palette in dark mode**
+  Reported by the user - the amber banner (`bg-amber-50 dark:bg-amber-
+  950 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-
+  amber-400`, `src/App.jsx`) reads as too vivid/eye-catching in dark
+  mode. Suggest a more muted treatment (e.g. a more desaturated/lower-
+  opacity amber background, or a neutral gray background with just the
+  text/icon carrying the amber accent) - a design taste call, needs a
+  decision before implementing.
 
 ---
 

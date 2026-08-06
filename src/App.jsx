@@ -1938,26 +1938,33 @@ const PropertyInvestmentCalculator = () => {
                     <span className="text-gray-600 dark:text-gray-300">Available Savings:</span>
                     <span className="font-semibold text-gray-700 dark:text-gray-200">${totalSavings.toLocaleString()}</span>
                   </div>
-                  <div className={`border-t pt-1 mt-1 font-bold ${getBalanceBgColor(cashRemaining)}`}>
-                    <div className="flex justify-between">
-                      <span className="text-gray-700 dark:text-gray-200">
-                        Remaining Savings:
-                        <InfoTooltip label="How is Remaining Savings different from Available Savings?">
-                          <p>Available Savings − Total Cash Required − any one-time Offset Contributions you've already scheduled (recurring contributions aren't counted here, since they come out of future income, not savings sitting in the bank today).</p>
-                          <p className="mt-2">This is what's left in savings right after settlement - it doesn't include your ongoing monthly surplus (see 🎯 TO OFFSET below for that).</p>
-                        </InfoTooltip>
-                      </span>
-                      <span className={getBalanceColor(cashRemaining)}>
-                        {cashRemaining >= 0 ? '+' : '-'}${Math.abs(Math.round(cashRemaining)).toLocaleString()}
-                      </span>
-                    </div>
-                    {cashRemaining < 0 && (
-                      <p className="mt-2 p-2 bg-red-50 dark:bg-red-950 border border-red-300 dark:border-red-700 rounded text-xs text-red-700 dark:text-red-400 font-normal">
-                        ⚠️ You've committed ${Math.abs(Math.round(cashRemaining)).toLocaleString()} more than your
-                        savings cover (deposit + upfront costs + scheduled contributions).
-                      </p>
-                    )}
+                </div>
+                {/* Deliberately a SIBLING of the space-y-1 div above, not its last
+                    child - space-y-1 sets margin-bottom: 0 on its last child via a
+                    higher-specificity selector, which silently overrode -mb-3 and
+                    left a gap of the card's own bg peeking through underneath.
+                    -mx-3 -mb-3 (canceling the card's own p-3) + matching px-3 pb-3
+                    pushes this highlight out to the card's actual edges/bottom
+                    corner instead of stopping short. */}
+                <div className={`border-t pt-1 mt-1 -mx-3 -mb-3 px-3 pb-3 rounded-b-lg font-bold ${getBalanceBgColor(cashRemaining)}`}>
+                  <div className="flex justify-between">
+                    <span className="text-gray-700 dark:text-gray-200">
+                      Remaining Savings:
+                      <InfoTooltip label="How is Remaining Savings different from Available Savings?">
+                        <p>Available Savings − Total Cash Required − any one-time Offset Contributions you've already scheduled (recurring contributions aren't counted here, since they come out of future income, not savings sitting in the bank today).</p>
+                        <p className="mt-2">This is what's left in savings right after settlement - it doesn't include your ongoing monthly surplus (see 🎯 TO OFFSET below for that).</p>
+                      </InfoTooltip>
+                    </span>
+                    <span className={getBalanceColor(cashRemaining)}>
+                      {cashRemaining >= 0 ? '+' : '-'}${Math.abs(Math.round(cashRemaining)).toLocaleString()}
+                    </span>
                   </div>
+                  {cashRemaining < 0 && (
+                    <p className="mt-2 p-2 bg-red-50 dark:bg-red-950 border border-red-300 dark:border-red-700 rounded text-xs text-red-700 dark:text-red-400 font-normal">
+                      ⚠️ You've committed ${Math.abs(Math.round(cashRemaining)).toLocaleString()} more than your
+                      savings cover (deposit + upfront costs + scheduled contributions).
+                    </p>
+                  )}
                 </div>
               </div>
 
