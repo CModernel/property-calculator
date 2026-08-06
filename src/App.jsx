@@ -140,6 +140,10 @@ const PropertyInvestmentCalculator = () => {
   // a separately-tracked savings balance - 100 (the default) preserves the
   // original "100% goes to offset automatically" behavior exactly.
   const [offsetAllocationPct, setOffsetAllocationPct] = useState(config.offsetAllocationPct ?? 100);
+  // TODO-50: annual % interest on the savings balance, compounded monthly -
+  // 0 (the default) preserves the original "savings never earns anything"
+  // behavior exactly.
+  const [savingsInterestRate, setSavingsInterestRate] = useState(config.savingsInterestRate ?? 0);
   // TODO-70: optional - 0 means "not provided", which hides the Mortgage-Free
   // Age indicator entirely rather than forcing anyone to disclose their age.
   const [currentAge, setCurrentAge] = useState(config.currentAge ?? 30);
@@ -400,6 +404,7 @@ const PropertyInvestmentCalculator = () => {
     interestRateField,
     offsetAllocationPct,
     initialSavingsBalance: cashRemaining,
+    savingsInterestRate,
     maxMonths: totalMonths,
   });
   const baselineSimulation = calculateLoanWithOffset({
@@ -414,6 +419,7 @@ const PropertyInvestmentCalculator = () => {
     interestRateField,
     offsetAllocationPct,
     initialSavingsBalance: cashRemaining,
+    savingsInterestRate,
     maxMonths: totalMonths,
   });
   const interestSaved = baselineSimulation.totalInterest - loanSimulation.totalInterest;
@@ -559,7 +565,7 @@ const PropertyInvestmentCalculator = () => {
       landTax: landTaxField.base, landTaxChanges: landTaxField.changes,
       propertyManagement: propertyManagementField.base, propertyManagementChanges: propertyManagementField.changes,
       miscPropertyExpense: miscPropertyExpenseField.base, miscPropertyExpenseChanges: miscPropertyExpenseField.changes,
-      isFirstHomeBuyer, isForeignPurchaser, totalSavings, offsetAllocationPct, currentAge, showMortgageFreeAge, payLmiUpfront,
+      isFirstHomeBuyer, isForeignPurchaser, totalSavings, offsetAllocationPct, savingsInterestRate, currentAge, showMortgageFreeAge, payLmiUpfront,
       conveyancing, buildingInspection, pestInspection, registrationFees, searches,
       loanEstablishmentFee, propertyValuation, homeInsurance, rateAdjustments, miscUpfrontCost,
       incomeSources,
@@ -971,6 +977,21 @@ const PropertyInvestmentCalculator = () => {
                 suffix="%"
               >
                 % of your monthly surplus that goes to the loan offset - the rest builds your savings balance instead. 100% (default) matches the original "everything goes to offset" behavior.
+              </NumberSliderField>
+
+              <NumberSliderField
+                label="Savings Interest Rate"
+                value={savingsInterestRate}
+                onChange={setSavingsInterestRate}
+                min={0}
+                max={15}
+                sliderMin={0}
+                sliderMax={8}
+                step={0.1}
+                color="green"
+                suffix="% p.a."
+              >
+                Annual interest earned on your savings balance (seeded from Remaining Savings, plus whatever isn't sent to the offset each month). 0% (default) means no interest is modeled.
               </NumberSliderField>
 
               <div>
@@ -2388,6 +2409,14 @@ const PropertyInvestmentCalculator = () => {
                   </p>
                 </div>
 
+                {savingsInterestRate > 0 && (
+                  <div className="bg-white dark:bg-gray-800/20 backdrop-blur rounded-lg p-3">
+                    <p className="text-sm opacity-90">Savings interest earned:</p>
+                    <p className="text-2xl font-bold">
+                      ${Math.round(loanSimulation.totalSavingsInterest).toLocaleString()}
+                    </p>
+                  </div>
+                )}
 
                 {offsetContributions.length > 1 && (
                   <div className="bg-cyan-400/30 backdrop-blur rounded-lg p-2 text-xs">

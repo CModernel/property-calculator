@@ -2369,18 +2369,61 @@ optionally reuse in the commit message when you implement it.
   fake `version: 8` payload (with a fake `otherExpenseItems` array) and
   confirmed it was discarded cleanly on reload (fresh defaults, no crash).
 
+- [x] **TODO-50: Model bank interest on the savings balance (customizable rate)**
+  Requested by the user. Hooked into TODO-49's `savingsBalance` (`src/
+  calculations/offsetSimulation.js`) - the running total of surplus NOT
+  sent to the loan offset, seeded from `cashRemaining` - rather than the
+  static `totalSavings`/`cashRemaining` figures directly, since that's
+  where money actually "sits" over the simulation timeline.
+  New `savingsInterestRate` param (annual %, default **0** - every
+  existing scenario/test behaves byte-for-byte identically until the user
+  opts in), new green "Savings Interest Rate" `NumberSliderField` in
+  Financial Position (`src/App.jsx`, right after "Offset Allocation").
+  Reused the already-imported `calculateMonthlyRate` (`src/calculations/
+  loan.js`) to convert to a monthly fraction once, outside the loop.
+  Inside the loop, interest accrues on last month's ending balance
+  *before* this month's deposit is added (matches how a real bank
+  statement works - existing balance earns interest, new deposits start
+  earning next month), tracked via a new `totalSavingsInterest`
+  accumulator (mirrors `totalInterest`'s own pattern, returned unrounded).
+  **Real correctness fix along the way, not just new surface**: the
+  existing "nothing to offset" early-out guard assumed zero surplus/
+  income/contributions meant nothing changes over time - false once a
+  nonzero `initialSavingsBalance` earns nonzero interest, since the lump
+  sum keeps compounding even with zero ongoing activity. Guard now also
+  requires `!(initialSavingsBalance > 0 && savingsInterestRate > 0)` to
+  early-out, so that combination correctly falls through to the real loop.
+  Both `loanSimulation`/`baselineSimulation` calls in `App.jsx` pass the
+  same `savingsInterestRate` (same treatment as `offsetAllocationPct`/
+  `initialSavingsBalance`, keeping the "interest saved" comparison
+  consistent). New "Savings interest earned" stat in the "⏱️ Loan
+  Simulation" card, right after "Total interest paid" - shown only when
+  `savingsInterestRate > 0` to avoid a "$0" stat cluttering the card when
+  unused. Timeline Explorer needed no changes - its "🐖 Savings" figure
+  already just reads the loop's own `savings` field, which now includes
+  the compounded interest automatically. Persisted via
+  `handleSaveScenario` - purely additive, no `SCHEMA_VERSION` bump.
+  Added 3 new tests to `offsetSimulation.test.js`: explicit 0% matches
+  omitting the param; a 12%/yr rate (exactly 1%/month) compounds cleanly
+  on a $10k lump with no ongoing deposits (`[10100, 10201, 10303]`,
+  `totalSavingsInterest` ≈ 303.01); the early-out guard fix itself (zero
+  surplus/income/contributions but a nonzero lump + rate still compounds
+  instead of hitting the `monthlyData: []` sentinel). Updated one exact
+  `toEqual` assertion on the sentinel shape for the new
+  `totalSavingsInterest: 0` field.
+  `npm test -- --run` (306/306), `npm run lint`, `npm run build` all
+  clean. Verified in the browser: at 0% (default) the Loan Simulation
+  card shows no "Savings interest earned" stat; set Offset Allocation to
+  70% and Savings Interest Rate to 4% - the stat appeared ($55,730 on the
+  default scenario), and the Timeline Explorer's Savings figure at month
+  139 ($175,953) clearly reflected compounding, not just linear deposits.
+  Reset the rate to 0% and confirmed the stat disappeared again. Saved at
+  4.5%, reloaded, confirmed it persisted; cleared the saved scenario and
+  confirmed it reset cleanly to 0%/100% defaults.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
-
-- [ ] **TODO-50: Model bank interest on Available Savings (customizable rate)**
-  Requested by the user. `totalSavings`/`cashRemaining`
-  (`src/calculations/totalCashRequired.js`) are static figures today -
-  no interest accrual is modeled on the savings pool at all. Would need a
-  new customizable interest rate input and a calculation for how much the
-  remaining/unallocated savings earn over time, feeding into... unclear
-  yet where this should surface (a new figure in "Financial Position"? in
-  the Timeline Explorer?) - needs its own design pass.
 
 
 - [ ] **TODO-54: "Realistic Mode" - model income tax on salary**

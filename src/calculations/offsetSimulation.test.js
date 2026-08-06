@@ -13,7 +13,7 @@ describe('calculateLoanWithOffset', () => {
       monthlyRate: 0.005,
       monthlyPayment: 500,
     });
-    expect(result).toEqual({ years: 999, months: 360, totalInterest: 999999, monthlyData: [] });
+    expect(result).toEqual({ years: 999, months: 360, totalInterest: 999999, totalSavingsInterest: 0, monthlyData: [] });
   });
 
   it('always reports a numeric months, on the sentinel path too', () => {
@@ -720,5 +720,64 @@ describe('offset vs. savings split (offsetAllocationPct/initialSavingsBalance, T
     const withDefault = calculateLoanWithOffset(shared);
     const withExplicit100 = calculateLoanWithOffset({ ...shared, offsetAllocationPct: 100, initialSavingsBalance: 0 });
     expect(withExplicit100).toEqual(withDefault);
+  });
+});
+
+describe('savings interest accrual (savingsInterestRate, TODO-50)', () => {
+  it('passing savingsInterestRate: 0 explicitly matches omitting it entirely', () => {
+    const shared = {
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      offsetAllocationPct: 70,
+      initialSavingsBalance: 5000,
+      maxMonths: 3,
+    };
+    const withDefault = calculateLoanWithOffset(shared);
+    const withExplicitZero = calculateLoanWithOffset({ ...shared, savingsInterestRate: 0 });
+    expect(withExplicitZero).toEqual(withDefault);
+  });
+
+  it('compounds monthly on the running balance before adding that month\'s deposit', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      offsetAllocationPct: 100, // every dollar of surplus goes to offset, none to savings
+      initialSavingsBalance: 10000,
+      savingsInterestRate: 12, // -> exactly 1%/month via calculateMonthlyRate
+      maxMonths: 3,
+    });
+    // No deposits reach savings (offsetAllocationPct: 100) - growth is pure
+    // interest: 10000 -> 10100 -> 10201 -> 10303.01 (rounded to 10303).
+    expect(result.monthlyData.map(d => d.savings)).toEqual([10100, 10201, 10303]);
+    expect(result.totalSavingsInterest).toBeCloseTo(303.01, 2);
+  });
+
+  it('still compounds the initial savings balance even with zero ongoing surplus/income/contributions', () => {
+    // Without the TODO-50 early-out fix, this would hit the "nothing to
+    // offset" sentinel and return monthlyData: [] - dropping the fact that
+    // a lump sum sitting in savings keeps earning interest regardless of
+    // whether anything else is happening this month.
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      initialSavingsBalance: 10000,
+      savingsInterestRate: 12,
+      maxMonths: 3,
+    });
+    expect(result.monthlyData).not.toEqual([]);
+    expect(result.monthlyData.map(d => d.savings)).toEqual([10100, 10201, 10303]);
   });
 });

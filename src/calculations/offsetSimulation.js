@@ -45,6 +45,10 @@ export function calculateLoanWithOffset({
   // cash sitting in the bank right after settlement. Defaults to 0 so
   // existing tests that don't care about it are unaffected.
   initialSavingsBalance = 0,
+  // TODO-50: annual % interest on the savings balance, compounded monthly.
+  // 0 (the default) means every existing caller/test that omits this keeps
+  // the old "savings never earns anything" behavior byte-for-byte.
+  savingsInterestRate = 0,
   maxMonths = 30 * 12,
 }) {
   // Nothing to offset: no surplus, no scheduled contributions, and no income
@@ -53,20 +57,28 @@ export function calculateLoanWithOffset({
   // "does not pay off early". `months` must be present and match the full
   // term - callers read it for the timeline bounds, and omitting it used to
   // render "Middle (NaN)" / "End (undefined)".
+  // TODO-50: this early-out is only valid when the savings balance ALSO has
+  // nothing left to do - a nonzero initialSavingsBalance still compounds
+  // every month under a nonzero savingsInterestRate even with zero ongoing
+  // surplus/income/contributions, so that combination must fall through to
+  // the real loop instead of being skipped.
   if (
     monthlyToOffset <= 0 &&
     incomeSources.length === 0 &&
-    contributions.reduce((s, c) => s + c.amount, 0) === 0
+    contributions.reduce((s, c) => s + c.amount, 0) === 0 &&
+    !(initialSavingsBalance > 0 && savingsInterestRate > 0)
   ) {
-    return { years: 999, months: maxMonths, totalInterest: 999999, monthlyData: [] };
+    return { years: 999, months: maxMonths, totalInterest: 999999, totalSavingsInterest: 0, monthlyData: [] };
   }
 
   let balance = loanAmount;
   let offsetBalance = 0;
   let savingsBalance = initialSavingsBalance;
   let totalInterest = 0;
+  let totalSavingsInterest = 0;
   let months = 0;
   const monthlyData = [];
+  const savingsMonthlyRate = calculateMonthlyRate(savingsInterestRate);
 
   // The caller's monthlyToOffset already has the ORIGINAL (month-1)
   // monthlyPayment baked in (see App.jsx's baseMonthlySurplus) - a rate
@@ -166,6 +178,14 @@ export function calculateLoanWithOffset({
       monthlyToOffset + (initialMonthlyPayment - currentMonthlyPayment) + monthlyIncomeThisMonth - monthlyExpensesForMonth
         - monthlyPersonalExpensesCost
     );
+    // TODO-50: interest accrues on last month's ending balance BEFORE this
+    // month's deposit is added - matches how a real bank statement works
+    // (existing balance earns interest, new deposits start earning next
+    // month). Runs even when savingsInterestRate is 0 (a no-op multiply).
+    const savingsInterestThisMonth = savingsBalance * savingsMonthlyRate;
+    savingsBalance += savingsInterestThisMonth;
+    totalSavingsInterest += savingsInterestThisMonth;
+
     // TODO-49: only offsetAllocationPct of the surplus reaches the offset -
     // the rest builds the separately-tracked savings balance instead.
     const offsetShare = netMonthlyDeposit * (offsetAllocationPct / 100);
@@ -209,6 +229,7 @@ export function calculateLoanWithOffset({
     years: months / 12,
     months: months,
     totalInterest: totalInterest,
+    totalSavingsInterest: totalSavingsInterest,
     monthlyData: monthlyData
   };
 }
