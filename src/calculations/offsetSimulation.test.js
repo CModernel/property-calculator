@@ -528,6 +528,56 @@ describe('calculateLoanWithOffset', () => {
     // $1000 surplus - ($100 + $50 + $200 + $150) = $500/month net.
     expect(offsets).toEqual([500, 1000]);
   });
+
+  it('subtracts miscPropertyExpense every month when present (TODO-82)', () => {
+    const emptyField = { base: 0, changes: [] };
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      expenseFields: {
+        strataFees: emptyField,
+        utilities: emptyField,
+        councilRates: emptyField,
+        insurance: emptyField,
+        maintenance: emptyField,
+        waterRates: emptyField,
+        landTax: emptyField,
+        propertyManagement: emptyField,
+        miscPropertyExpense: { base: 80, changes: [] },
+      },
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 2,
+    });
+    const offsets = result.monthlyData.map(d => d.offset);
+    expect(offsets).toEqual([920, 1840]);
+  });
+
+  it('defaults miscPropertyExpense to 0 when the key is absent from expenseFields (TODO-82)', () => {
+    const emptyField = { base: 0, changes: [] };
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      expenseFields: {
+        strataFees: emptyField,
+        utilities: emptyField,
+        councilRates: emptyField,
+        insurance: emptyField,
+        maintenance: emptyField,
+        waterRates: emptyField,
+        landTax: emptyField,
+        propertyManagement: emptyField,
+      },
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 1,
+    });
+    expect(result.monthlyData[0].offset).toBe(1000);
+  });
 });
 
 describe('scheduled/variable interest rate changes (interestRateField, TODO-57)', () => {

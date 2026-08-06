@@ -36,9 +36,13 @@ export function calculateMonthlyLandTax(landTax) {
 export function calculateMonthlyPropertyExpenses({
   monthlyStrata, utilities, monthlyCouncil, insurance,
   maintenance, monthlyWaterRates, monthlyLandTax, propertyManagement,
+  // TODO-82: a free-text "Misc" line item for anything not covered by the
+  // other 8 fields. Defaults to 0 so every existing caller/test that omits
+  // it keeps working unchanged.
+  miscPropertyExpense = 0,
 }) {
   return monthlyStrata + utilities + monthlyCouncil + insurance
-    + maintenance + monthlyWaterRates + monthlyLandTax + propertyManagement;
+    + maintenance + monthlyWaterRates + monthlyLandTax + propertyManagement + miscPropertyExpense;
 }
 
 export function calculateTotalPropertyCost(monthlyPayment, monthlyPropertyExpenses) {

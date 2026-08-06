@@ -2270,6 +2270,41 @@ optionally reuse in the commit message when you implement it.
   (🟢 41, matching 30 + ~11.6 years' loan simulation); unchecking hides
   both again cleanly.
 
+- [x] **TODO-82/83: Grupo J - custom "Misc" line items in Property Expenses and Upfront Costs**
+  Design decision (was left open in both TODOs' original wording): a
+  single flat field, not a full addable list like Personal/Other
+  Expenses - "Misc" implies one catch-all line, not an open-ended
+  category system, and it keeps both sections' existing fixed-field
+  shape intact.
+  **TODO-82**: new "Misc Property Expense (monthly)" - a
+  `SteppedExpenseField` (same schedule-based shape as the other 8
+  Property Expenses fields, so it can change mid-simulation like any of
+  them), added last in the main grid (applies to every property type,
+  unlike Land Tax/Property Management which stay investment-only).
+  `calculateMonthlyPropertyExpenses` (`src/calculations/loan.js`) gained
+  a `miscPropertyExpense = 0` param; `offsetSimulation.js`'s loop reads
+  `expenseFields.miscPropertyExpense` defensively (`? ... : 0`) so
+  existing hand-built `expenseFields` objects in tests that omit the key
+  keep working unchanged. Also added to the "Monthly Expenses" breakdown
+  list in the Property Balance card.
+  **TODO-83**: new "Misc Upfront Cost" - a plain `NumberSliderField`
+  (matching the rest of Upfront Costs, which are one-time amounts, not
+  schedule-based), added last in the closing-costs breakdown and folded
+  into `closingCostsSubtotal` via `sumClosingCosts` (already a generic
+  sum, so no calculation-layer change needed there).
+  Both persisted via `handleSaveScenario` - purely additive, no
+  `SCHEMA_VERSION` bump.
+  Added 4 new tests (`loan.test.js`: default-to-0 and adds-when-present;
+  `offsetSimulation.test.js`: subtracts monthly when present, defaults
+  to 0 when the key is absent from `expenseFields`).
+  `npm test -- --run` (308/308), `npm run lint`, `npm run build` all
+  clean. Verified in the browser: setting Misc Property Expense to $50
+  raised the Property Expenses subtotal $543 -> $593/month and correctly
+  rippled through to "TO OFFSET"'s per-week/fortnight/year figures and
+  "Time to pay off" (129 -> 130 months); setting Misc Upfront Cost to
+  $1,000 raised the Closing Costs subtotal $4,750 -> $5,750 and Upfront
+  Cost Ratio 1.7% -> 1.8%.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -2360,22 +2395,6 @@ optionally reuse in the commit message when you implement it.
   existing over-committed-savings warning; confirmed First Home Buyer
   stayed checked throughout with zero interaction, exactly as designed.
 
-- [ ] **TODO-82: Allow adding a custom "Misc property expense" line item in Property Expenses**
-  Requested by the user. Property Expenses today is a fixed set of 8
-  `SteppedExpenseField`s (Strata/Utilities/Council/Insurance/
-  Maintenance/Water/Land Tax/Property Management, `src/App.jsx`) with
-  no way to add anything not in that list - unlike Personal/Other
-  Expenses, which are open-ended addable lists. Needs a design decision
-  on shape (a single flat custom-amount field vs. a full Schedule-based
-  addable list like the others) before implementing.
-
-- [ ] **TODO-83: Allow adding a custom "Misc Upfront Cost" line item in Upfront Costs**
-  Requested by the user, same idea as TODO-82 for the other fixed-field
-  section - Upfront Costs is a fixed set of fields (Conveyancing/
-  Building Inspection/Pest Inspection/Registration Fees/Searches/Loan
-  Establishment Fee/Property Valuation/Home Insurance/Rate Adjustments,
-  state module `defaultClosingCosts` + `src/App.jsx`) with no custom
-  addition mechanism.
 
 - [ ] **TODO-85: Merge Other Expenses into Personal Expenses as one categorized list, and relabel the Amount field**
   Follow-up from TODO-76/77/78's analysis (done). Two changes:

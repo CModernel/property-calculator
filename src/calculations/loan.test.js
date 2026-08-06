@@ -96,6 +96,25 @@ describe('property expenses', () => {
       })
     ).toBe(500);
   });
+
+  it('defaults miscPropertyExpense to 0 when omitted (TODO-82)', () => {
+    expect(
+      calculateMonthlyPropertyExpenses({
+        monthlyStrata: 0, utilities: 0, monthlyCouncil: 0, insurance: 0,
+        maintenance: 0, monthlyWaterRates: 0, monthlyLandTax: 0, propertyManagement: 0,
+      })
+    ).toBe(0);
+  });
+
+  it('adds miscPropertyExpense when present (TODO-82)', () => {
+    expect(
+      calculateMonthlyPropertyExpenses({
+        monthlyStrata: 0, utilities: 0, monthlyCouncil: 0, insurance: 0,
+        maintenance: 0, monthlyWaterRates: 0, monthlyLandTax: 0, propertyManagement: 0,
+        miscPropertyExpense: 75,
+      })
+    ).toBe(75);
+  });
 });
 
 describe('calculateMonthlyWaterRates / calculateMonthlyLandTax', () => {

@@ -108,6 +108,10 @@ const PropertyInvestmentCalculator = () => {
   const insuranceField = useSteppedValue(config.insurance, config.insuranceChanges);
   const maintenanceField = useSteppedValue(config.maintenance, config.maintenanceChanges);
   const waterRatesField = useSteppedValue(config.waterRates, config.waterRatesChanges);
+  // TODO-82: a free-text "Misc" line item for any property expense not
+  // covered by the 8 fields above - applies to every property type, not
+  // gated by isInvestmentProperty like Land Tax/Property Management below.
+  const miscPropertyExpenseField = useSteppedValue(config.miscPropertyExpense ?? 0, config.miscPropertyExpenseChanges);
   const [showPropertyExpenses, setShowPropertyExpenses] = useState(config.showPropertyExpenses ?? false);
   // Results panel: collapses the Property Balance card's "Monthly Expenses"
   // property-expense line items (Strata/Council/Utilities/Insurance/
@@ -153,6 +157,9 @@ const PropertyInvestmentCalculator = () => {
   const [propertyValuation, setPropertyValuation] = useState(config.propertyValuation);
   const [homeInsurance, setHomeInsurance] = useState(config.homeInsurance);
   const [rateAdjustments, setRateAdjustments] = useState(config.rateAdjustments);
+  // TODO-83: a free-text "Misc" one-time upfront cost, same idea as
+  // miscPropertyExpenseField above but for Upfront Costs.
+  const [miscUpfrontCost, setMiscUpfrontCost] = useState(config.miscUpfrontCost ?? 0);
 
   // Income sources (salary, other income, house rent, one-time payments) - a
   // single "Schedule" shape { startMonth, recurrence: 'none'|'monthly'|
@@ -285,6 +292,7 @@ const PropertyInvestmentCalculator = () => {
     propertyValuation,
     homeInsurance,
     rateAdjustments,
+    miscUpfrontCost,
   ]);
   const totalCashRequired = calculateTotalCashRequired({
     downPayment,
@@ -316,6 +324,7 @@ const PropertyInvestmentCalculator = () => {
   const propertyManagement = isInvestmentProperty
     ? getSteppedValue(propertyManagementField.base, propertyManagementField.changes, 1)
     : 0;
+  const miscPropertyExpense = getSteppedValue(miscPropertyExpenseField.base, miscPropertyExpenseField.changes, 1);
 
   // Monthly property expenses
   const monthlyStrata = calculateMonthlyStrata(strataFees);
@@ -324,7 +333,7 @@ const PropertyInvestmentCalculator = () => {
   const monthlyLandTax = calculateMonthlyLandTax(landTax);
   const monthlyPropertyExpenses = calculateMonthlyPropertyExpenses({
     monthlyStrata, utilities, monthlyCouncil, insurance,
-    maintenance, monthlyWaterRates, monthlyLandTax, propertyManagement,
+    maintenance, monthlyWaterRates, monthlyLandTax, propertyManagement, miscPropertyExpense,
   });
   const totalPropertyCost = calculateTotalPropertyCost(monthlyPayment, monthlyPropertyExpenses);
 
@@ -385,6 +394,7 @@ const PropertyInvestmentCalculator = () => {
     // propertyManagement values above.
     landTax: isInvestmentProperty ? landTaxField : { base: 0, changes: [] },
     propertyManagement: isInvestmentProperty ? propertyManagementField : { base: 0, changes: [] },
+    miscPropertyExpense: miscPropertyExpenseField,
   };
 
   // Complete loan simulation with offset. maxMonths must match the chosen
@@ -563,9 +573,10 @@ const PropertyInvestmentCalculator = () => {
       isInvestmentProperty,
       landTax: landTaxField.base, landTaxChanges: landTaxField.changes,
       propertyManagement: propertyManagementField.base, propertyManagementChanges: propertyManagementField.changes,
+      miscPropertyExpense: miscPropertyExpenseField.base, miscPropertyExpenseChanges: miscPropertyExpenseField.changes,
       isFirstHomeBuyer, isForeignPurchaser, totalSavings, offsetAllocationPct, currentAge, showMortgageFreeAge, payLmiUpfront,
       conveyancing, buildingInspection, pestInspection, registrationFees, searches,
-      loanEstablishmentFee, propertyValuation, homeInsurance, rateAdjustments,
+      loanEstablishmentFee, propertyValuation, homeInsurance, rateAdjustments, miscUpfrontCost,
       incomeSources,
       offsetContributions,
       personalExpenseItems,
@@ -1220,6 +1231,20 @@ const PropertyInvestmentCalculator = () => {
                     color="orange"
                     prefix="$"
                   />
+                  <NumberSliderField
+                    label="Misc Upfront Cost"
+                    value={miscUpfrontCost}
+                    onChange={setMiscUpfrontCost}
+                    min={0}
+                    max={5000}
+                    sliderMin={0}
+                    sliderMax={2000}
+                    step={25}
+                    color="orange"
+                    prefix="$"
+                  >
+                    Anything not covered by the fields above.
+                  </NumberSliderField>
                 </div>
               )}
             </div>
@@ -1316,6 +1341,19 @@ const PropertyInvestmentCalculator = () => {
                     prefix="$"
                   >
                     ≈ ${Math.round(waterRates / 4)}/month
+                  </SteppedExpenseField>
+
+                  <SteppedExpenseField
+                    field={miscPropertyExpenseField}
+                    label="Misc Property Expense (monthly)"
+                    min={0}
+                    max={2000}
+                    sliderMax={500}
+                    step={10}
+                    color="orange"
+                    prefix="$"
+                  >
+                    Anything not covered by the fields above (e.g. pest control, gardening).
                   </SteppedExpenseField>
                 </div>
 
@@ -2144,6 +2182,10 @@ const PropertyInvestmentCalculator = () => {
                             </div>
                           </>
                         )}
+                        <div className="flex justify-between">
+                          <span className="text-gray-500 dark:text-gray-400">Misc:</span>
+                          <span className="text-red-500">-${Math.round(miscPropertyExpense).toLocaleString()}</span>
+                        </div>
                       </div>
                     )}
                   </div>

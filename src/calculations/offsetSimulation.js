@@ -135,6 +135,11 @@ export function calculateLoanWithOffset({
         expenseFields.propertyManagement.changes,
         months
       );
+      // TODO-82: optional - older calls/tests that build expenseFields by
+      // hand without this key keep working, resolving to 0.
+      const miscPropertyExpense = expenseFields.miscPropertyExpense
+        ? getSteppedValue(expenseFields.miscPropertyExpense.base, expenseFields.miscPropertyExpense.changes, months)
+        : 0;
       monthlyExpensesForMonth = calculateMonthlyPropertyExpenses({
         monthlyStrata: calculateMonthlyStrata(strata),
         utilities,
@@ -144,6 +149,7 @@ export function calculateLoanWithOffset({
         monthlyWaterRates: calculateMonthlyWaterRates(waterRates),
         monthlyLandTax: calculateMonthlyLandTax(landTax),
         propertyManagement,
+        miscPropertyExpense,
       });
     }
 
