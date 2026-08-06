@@ -1980,6 +1980,42 @@ optionally reuse in the commit message when you implement it.
   highlight now genuinely reaches the card's rounded bottom corner with
   no gap in any of the four combinations.
 
+- [x] **TODO-72/73/81/84: Grupo A - dark mode polish fixes**
+  Four small, already-diagnosed dark-mode issues, fixed together since
+  they're all quick Tailwind class additions in the same general area.
+  **TODO-72** (labels with no text-color class at all, inheriting the
+  browser's default near-black text - missed by TODO-47's regex-based
+  sweep since there was no existing color class to attach a `dark:`
+  variant to): added `text-gray-700 dark:text-gray-200` via one
+  `replace_all` on the shared `className="block text-xs font-medium
+  mb-1"` string, fixing all 6 spots at once (Number of People, Income
+  Sources' Start/End Month, Offset Contributions' End Month, Personal
+  Expenses' End Month, Other Expenses' End Month) in `src/App.jsx`.
+  **TODO-73** (Monthly/Quarterly/Yearly recurrence buttons, same root
+  cause): added `text-gray-800 dark:text-gray-100` via one `replace_all`
+  on the shared `` `flex-1 py-1 rounded border capitalize ${` `` prefix,
+  fixing all 4 forms (Income Sources, Offset Contributions, Personal
+  Expenses, Other Expenses) at once - reads clearly against both the
+  "selected" and "unselected" backgrounds in both themes.
+  **TODO-81**: `src/components/NumberSliderField.jsx`'s slider min/max
+  boundary labels - `dark:text-gray-500` wasn't light enough; simplified
+  to a single `text-gray-400` with no `dark:` override at all, since
+  gray-400 already reads fine on both a white and a dark card background.
+  **TODO-84**: the top warning banner (`src/App.jsx`) - changed
+  `dark:bg-amber-950` to `dark:bg-amber-950/40` (translucent, blends into
+  the page instead of standing out as a bright block) and
+  `dark:border-amber-800` to `dark:border-amber-900` (a more subdued
+  border), keeping `dark:text-amber-400` so the warning icon/text still
+  reads clearly.
+  `npm test -- --run` (275/275), `npm run lint`, `npm run build` all
+  clean - pure class-string changes, no logic touched. Verified in the
+  browser in dark mode: opened the Income Sources Add form and confirmed
+  "Start Month: 1"/"End Month: Forever" and the Monthly/Quarterly/Yearly
+  buttons are all clearly legible now (previously invisible-ish black-
+  on-dark text); zoomed the `$0`/`$3M`-style slider boundary labels and
+  confirmed readable; confirmed the top banner reads noticeably calmer
+  than before. Re-checked light mode too - no regression there.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -2152,34 +2188,6 @@ optionally reuse in the commit message when you implement it.
   figure the way every other indicator here is (>20% green, 10-20%
   yellow, 5-10% orange, <5% red).
 
-- [ ] **TODO-72: Fix schedule-field labels rendering with unstyled (effectively black) text in dark mode**
-  Reported by the user (Personal Expenses' "End Month", Income Sources'
-  "Start Month"/"End Month"). Root cause found: these are all
-  `<label className="block text-xs font-medium mb-1">` with **no text-
-  color class at all** - TODO-47's dark-mode sweep was a regex-based
-  script that added a `dark:` variant next to an EXISTING color class,
-  so anywhere the original code had no color class to begin with, there
-  was nothing for it to attach to and the label silently kept
-  inheriting the default (black-ish) color. Confirmed exact spots in
-  `src/App.jsx`: the "Number of People" label (~line 1306), Income
-  Sources' Start/End Month labels (~1370, ~1394), Offset Contributions'
-  End Month label (~1518 - its sibling Start Month label at ~1494 is
-  fine, already has `text-gray-700 dark:text-gray-200`, which is why
-  only some labels in the same form are broken), Personal Expenses' End
-  Month label (~1686), Other Expenses' End Month label (~1812). Fix:
-  add `text-gray-700 dark:text-gray-200` (matching the already-correct
-  sibling labels) to all of these.
-
-- [ ] **TODO-73: Fix Monthly/Quarterly/Yearly recurrence buttons rendering with unstyled (effectively black) text in dark mode**
-  Same root cause as TODO-72, different element type - the recurrence
-  toggle buttons (`className={\`flex-1 py-1 rounded border capitalize
-  ${...}\`}`) have no text-color class either, in all 4 places they
-  appear in `src/App.jsx`: Income Sources (~line 1388), Offset
-  Contributions (~1512), Personal Expenses (~1680), Other Expenses
-  (~1806). Needs a text color that reads well against both the
-  "selected" background (`bg-{color}-200 dark:bg-{color}-900`) and the
-  "unselected" one (`bg-white dark:bg-gray-800`) in both themes.
-
 - [ ] **TODO-74: Rename the default Personal Expense "Food" to "Groceries"**
   Requested by the user. `config.default.json`'s `personalExpenseItems`
   seed data (`{"id": 1, "name": "Food", ...}`) - simple rename, no
@@ -2257,14 +2265,6 @@ optionally reuse in the commit message when you implement it.
   check whether any existing variable already represents this, or
   whether it's a genuinely new piece of state to design.
 
-- [ ] **TODO-81: Slider min/max boundary labels are low-contrast gray in dark mode**
-  Reported by the user - the `$0`/`$X,XXX`-style min/max labels shown
-  below each `NumberSliderField` slider (`src/components/
-  NumberSliderField.jsx`, `text-gray-400 dark:text-gray-500`) are hard
-  to read against the dark card backgrounds. `dark:text-gray-500` isn't
-  light enough for good contrast - needs a lighter shade (e.g.
-  `dark:text-gray-400` or `dark:text-gray-300`).
-
 - [ ] **TODO-82: Allow adding a custom "Misc property expense" line item in Property Expenses**
   Requested by the user. Property Expenses today is a fixed set of 8
   `SteppedExpenseField`s (Strata/Utilities/Council/Insurance/
@@ -2281,15 +2281,6 @@ optionally reuse in the commit message when you implement it.
   Establishment Fee/Property Valuation/Home Insurance/Rate Adjustments,
   state module `defaultClosingCosts` + `src/App.jsx`) with no custom
   addition mechanism.
-
-- [ ] **TODO-84: Soften the "Personal project... not financial advice" warning banner's color palette in dark mode**
-  Reported by the user - the amber banner (`bg-amber-50 dark:bg-amber-
-  950 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-
-  amber-400`, `src/App.jsx`) reads as too vivid/eye-catching in dark
-  mode. Suggest a more muted treatment (e.g. a more desaturated/lower-
-  opacity amber background, or a neutral gray background with just the
-  text/icon carrying the amber accent) - a design taste call, needs a
-  decision before implementing.
 
 ---
 

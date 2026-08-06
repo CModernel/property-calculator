@@ -732,7 +732,7 @@ const PropertyInvestmentCalculator = () => {
         </button>
       </div>
 
-      <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-4">
+      <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg p-3 mb-4">
         <p className="text-xs text-amber-800 dark:text-amber-400">
           ⚠️ Personal project for illustrative purposes only — not financial advice. Always consult a licensed
           financial adviser before making property decisions.
@@ -1303,7 +1303,7 @@ const PropertyInvestmentCalculator = () => {
 
                         {newIncomeIsShared && (
                           <div>
-                            <label className="block text-xs font-medium mb-1">Number of People: {newIncomeNumPeople}</label>
+                            <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Number of People: {newIncomeNumPeople}</label>
                             <input
                               type="range" min="2" max="6"
                               value={newIncomeNumPeople}
@@ -1367,7 +1367,7 @@ const PropertyInvestmentCalculator = () => {
                     </label>
 
                     <div>
-                      <label className="block text-xs font-medium mb-1">
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
                         {newIncomeOneTime ? `Occurs at Month: ${newIncomeStartMonth}` : `Start Month: ${newIncomeStartMonth}`}
                       </label>
                       <input
@@ -1385,13 +1385,13 @@ const PropertyInvestmentCalculator = () => {
                             <button
                               key={option}
                               onClick={() => setNewIncomeRecurrence(option)}
-                              className={`flex-1 py-1 rounded border capitalize ${newIncomeRecurrence === option ? 'bg-emerald-200 dark:bg-emerald-900 border-emerald-400 dark:border-emerald-700 font-bold' : 'bg-white dark:bg-gray-800'}`}
+                              className={`flex-1 py-1 rounded border capitalize text-gray-800 dark:text-gray-100 ${newIncomeRecurrence === option ? 'bg-emerald-200 dark:bg-emerald-900 border-emerald-400 dark:border-emerald-700 font-bold' : 'bg-white dark:bg-gray-800'}`}
                             >{option}</button>
                           ))}
                         </div>
 
                         <div>
-                          <label className="block text-xs font-medium mb-1">
+                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
                             End Month: {newIncomeEndMonth === MAX_MONTH ? 'Forever' : newIncomeEndMonth}
                           </label>
                           <input
@@ -1509,13 +1509,13 @@ const PropertyInvestmentCalculator = () => {
                             <button
                               key={option}
                               onClick={() => setNewContribRecurrence(option)}
-                              className={`flex-1 py-1 rounded border capitalize ${newContribRecurrence === option ? 'bg-blue-200 dark:bg-blue-900 border-blue-400 dark:border-blue-700 font-bold' : 'bg-white dark:bg-gray-800'}`}
+                              className={`flex-1 py-1 rounded border capitalize text-gray-800 dark:text-gray-100 ${newContribRecurrence === option ? 'bg-blue-200 dark:bg-blue-900 border-blue-400 dark:border-blue-700 font-bold' : 'bg-white dark:bg-gray-800'}`}
                             >{option}</button>
                           ))}
                         </div>
 
                         <div>
-                          <label className="block text-xs font-medium mb-1">
+                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
                             End Month: {newContribEndMonth === MAX_MONTH ? 'Forever' : newContribEndMonth}
                           </label>
                           <input
@@ -1677,13 +1677,13 @@ const PropertyInvestmentCalculator = () => {
                               <button
                                 key={option}
                                 onClick={() => setNewExpRecurrence(option)}
-                                className={`flex-1 py-1 rounded border capitalize ${newExpRecurrence === option ? 'bg-orange-200 dark:bg-orange-900 border-orange-400 dark:border-orange-700 font-bold' : 'bg-white dark:bg-gray-800'}`}
+                                className={`flex-1 py-1 rounded border capitalize text-gray-800 dark:text-gray-100 ${newExpRecurrence === option ? 'bg-orange-200 dark:bg-orange-900 border-orange-400 dark:border-orange-700 font-bold' : 'bg-white dark:bg-gray-800'}`}
                               >{option}</button>
                             ))}
                           </div>
 
                           <div>
-                            <label className="block text-xs font-medium mb-1">
+                            <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
                               End Month: {newExpEndMonth === MAX_MONTH ? 'Forever' : newExpEndMonth}
                             </label>
                             <input
@@ -1803,13 +1803,13 @@ const PropertyInvestmentCalculator = () => {
                               <button
                                 key={option}
                                 onClick={() => setNewOtherExpenseRecurrence(option)}
-                                className={`flex-1 py-1 rounded border capitalize ${newOtherExpenseRecurrence === option ? 'bg-fuchsia-200 dark:bg-fuchsia-900 border-fuchsia-400 dark:border-fuchsia-700 font-bold' : 'bg-white dark:bg-gray-800'}`}
+                                className={`flex-1 py-1 rounded border capitalize text-gray-800 dark:text-gray-100 ${newOtherExpenseRecurrence === option ? 'bg-fuchsia-200 dark:bg-fuchsia-900 border-fuchsia-400 dark:border-fuchsia-700 font-bold' : 'bg-white dark:bg-gray-800'}`}
                               >{option}</button>
                             ))}
                           </div>
 
                           <div>
-                            <label className="block text-xs font-medium mb-1">
+                            <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
                               End Month: {newOtherExpenseEndMonth === MAX_MONTH ? 'Forever' : newOtherExpenseEndMonth}
                             </label>
                             <input

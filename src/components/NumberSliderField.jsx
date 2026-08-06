@@ -127,7 +127,7 @@ const NumberSliderField = ({
             className={`w-full h-2 mt-2 rounded-lg appearance-none cursor-pointer ${TRACK_CLASSES[color]}`}
           />
 
-          <div className="flex justify-between text-xs text-gray-400 dark:text-gray-500 mt-1 tabular-nums">
+          <div className="flex justify-between text-xs text-gray-400 mt-1 tabular-nums">
             <span className={belowRange ? 'text-amber-600 dark:text-amber-400 font-medium' : undefined}>
               {belowRange && '<'}{prefix}{showBound(sliderMin)}
             </span>
