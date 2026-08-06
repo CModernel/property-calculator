@@ -2245,6 +2245,31 @@ optionally reuse in the commit message when you implement it.
   week: $570" / "Per fortnight: $1140" and the "Income"/"Expenses" legend
   now render in light gray instead of near-black.
 
+- [x] **TODO-88: Grupo I - Replace "Your Current Age" 0-means-not-set with an explicit enable/disable checkbox**
+  Feedback on TODO-70's own implementation choice. `src/App.jsx`'s
+  "Your Current Age (optional)" field used to overload `0` as a
+  sentinel for "not provided" - replaced with a new `showMortgageFreeAge`
+  boolean (defaults to `false`), restructured the same way as the
+  "Foreign Purchaser"/"Pay LMI upfront in cash" checkboxes elsewhere in
+  the file: a checkbox that reveals a dependent field when checked.
+  Checked, it reveals "Your Current Age" (now a plain `NumberSliderField`,
+  `min`/`sliderMin` of 18, no more `formatValue`/`suffix` hacks since
+  the value no longer carries a special "not set" meaning) and gates the
+  Mortgage-Free Age row in the Purchase Health Check panel; unchecked,
+  both stay hidden regardless of whatever `currentAge` happens to hold.
+  `currentAge`'s own default changed from `0` to `30` so the field never
+  opens on a meaningless "0 years" - old saved scenarios with
+  `currentAge: 0` are unaffected since `showMortgageFreeAge` defaults to
+  `false` regardless.
+  `showMortgageFreeAge` added to `handleSaveScenario` - purely additive,
+  no `SCHEMA_VERSION` bump.
+  `npm test -- --run` (304/304), `npm run lint`, `npm run build` all
+  clean (no existing tests touched this field). Verified in the browser:
+  unchecked by default, no "Your Current Age" field and no Mortgage-Free
+  Age row; checking it reveals the age slider at 30 and the row appears
+  (🟢 41, matching 30 + ~11.6 years' loan simulation); unchecking hides
+  both again cleanly.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -2371,19 +2396,6 @@ optionally reuse in the commit message when you implement it.
   currently covering Other Expenses as its own section.
   (2) Relabel the "Amount ($)" field (both call sites, soon to be one)
   to make the monthly convention explicit, e.g. "Monthly Amount ($)".
-
-- [ ] **TODO-88: Replace "Your Current Age" 0-means-not-set with an explicit enable/disable checkbox**
-  Requested by the user (feedback on TODO-70's own implementation choice).
-  `src/App.jsx`'s "Your Current Age (optional)" `NumberSliderField`
-  currently overloads `0` as a sentinel for "not provided" (hides the
-  Mortgage-Free Age indicator when `currentAge <= 0`) - the user would
-  rather have an explicit checkbox to turn the whole thing on/off,
-  instead of having to drag a value back down to exactly 0 to "opt out"
-  again. Would need a new boolean (e.g. `showMortgageFreeAge`,
-  defaulting to `false`) gating both the age input's visibility and the
-  Mortgage-Free Age row, likely restructured similar to how "Pay LMI
-  upfront in cash" or "Foreign Purchaser" checkboxes reveal/hide a
-  dependent field elsewhere in `src/App.jsx`.
 
 ---
 

@@ -137,7 +137,8 @@ const PropertyInvestmentCalculator = () => {
   const [offsetAllocationPct, setOffsetAllocationPct] = useState(config.offsetAllocationPct ?? 100);
   // TODO-70: optional - 0 means "not provided", which hides the Mortgage-Free
   // Age indicator entirely rather than forcing anyone to disclose their age.
-  const [currentAge, setCurrentAge] = useState(config.currentAge ?? 0);
+  const [currentAge, setCurrentAge] = useState(config.currentAge ?? 30);
+  const [showMortgageFreeAge, setShowMortgageFreeAge] = useState(config.showMortgageFreeAge ?? false);
   const [payLmiUpfront, setPayLmiUpfront] = useState(false);
   // TODO-68/69/70: defaults open, unlike the "breakdown" toggles below -
   // this is a primary panel, not supplementary detail.
@@ -474,9 +475,9 @@ const PropertyInvestmentCalculator = () => {
   const rentalYield = calculateRentalYield(weeklyRentalIncome, propertyPrice);
   const rentalYieldClass = rentalYieldHasData ? classifyRentalYield(rentalYield) : null;
 
-  // TODO-70: Mortgage-Free Age - currentAge of 0 means "not provided", hiding
-  // this indicator entirely rather than forcing anyone to disclose their age.
-  const mortgageFreeAge = currentAge > 0 ? calculateMortgageFreeAge(currentAge, loanSimulation.years) : null;
+  // TODO-88: Mortgage-Free Age is opt-in via showMortgageFreeAge, rather than
+  // overloading currentAge itself as a "not provided" sentinel.
+  const mortgageFreeAge = showMortgageFreeAge ? calculateMortgageFreeAge(currentAge, loanSimulation.years) : null;
   const mortgageFreeAgeClass = mortgageFreeAge !== null ? classifyMortgageFreeAge(mortgageFreeAge) : null;
 
   const healthCheckHasCritical = fhbConcessionLost || [emergencyBufferClass, housingCostRatioClass, stressTestClass, upfrontCostRatioClass].some((c) => c.critical);
@@ -562,7 +563,7 @@ const PropertyInvestmentCalculator = () => {
       isInvestmentProperty,
       landTax: landTaxField.base, landTaxChanges: landTaxField.changes,
       propertyManagement: propertyManagementField.base, propertyManagementChanges: propertyManagementField.changes,
-      isFirstHomeBuyer, isForeignPurchaser, totalSavings, offsetAllocationPct, currentAge, payLmiUpfront,
+      isFirstHomeBuyer, isForeignPurchaser, totalSavings, offsetAllocationPct, currentAge, showMortgageFreeAge, payLmiUpfront,
       conveyancing, buildingInspection, pestInspection, registrationFees, searches,
       loanEstablishmentFee, propertyValuation, homeInsurance, rateAdjustments,
       incomeSources,
@@ -1013,21 +1014,37 @@ const PropertyInvestmentCalculator = () => {
                 % of your monthly surplus that goes to the loan offset - the rest builds your savings balance instead. 100% (default) matches the original "everything goes to offset" behavior.
               </NumberSliderField>
 
-              <NumberSliderField
-                label="Your Current Age (optional)"
-                value={currentAge}
-                onChange={setCurrentAge}
-                min={0}
-                max={100}
-                sliderMin={18}
-                sliderMax={80}
-                step={1}
-                color="indigo"
-                suffix={currentAge > 0 ? ' years' : ''}
-                formatValue={(v) => (v > 0 ? v : 'Not set')}
-              >
-                Only used to show your Mortgage-Free Age below - leave at 0 to hide that indicator entirely.
-              </NumberSliderField>
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+                  <input
+                    type="checkbox"
+                    checked={showMortgageFreeAge}
+                    onChange={(e) => setShowMortgageFreeAge(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-blue-500"
+                  />
+                  Show my Mortgage-Free Age
+                </label>
+                {!showMortgageFreeAge && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Enter your current age to see the age you'll be mortgage-free in the Purchase Health Check below.</p>
+                )}
+              </div>
+
+              {showMortgageFreeAge && (
+                <NumberSliderField
+                  label="Your Current Age"
+                  value={currentAge}
+                  onChange={setCurrentAge}
+                  min={18}
+                  max={100}
+                  sliderMin={18}
+                  sliderMax={80}
+                  step={1}
+                  color="indigo"
+                  suffix=" years"
+                >
+                  Used to show your Mortgage-Free Age in the Purchase Health Check below.
+                </NumberSliderField>
+              )}
 
               {/* min must stay above 0: a 0% rate makes calculateMonthlyPayment
                   divide 0 by 0, turning every figure on the page into NaN. */}
