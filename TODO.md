@@ -2216,6 +2216,35 @@ optionally reuse in the commit message when you implement it.
   the selected month (21.4% at month ~70); confirmed an `InfoTooltip`
   opens correctly showing the threshold summary.
 
+- [x] **TODO-86/87: Grupo H - two more "missing text-color class" dark-mode bugs, plus a sweep for others**
+  Same root cause as TODO-72/73: a text-bearing element with zero
+  `text-*` class at all, missed by TODO-47's regex-based sweep since
+  there was nothing for it to attach a `dark:` variant to. Fixed both
+  reported instances in `src/App.jsx`: the Total Summary donut's
+  "Income"/"Expenses" legend rows (now `text-gray-700 dark:text-gray-200`)
+  and the "TO OFFSET (automatic)" card's "Per week"/"Per fortnight" value
+  spans (same treatment, matching the sibling "Per year" line's own
+  color weight rather than reusing its green, to keep the two rows
+  visually distinct from the actual highlighted total).
+  Also did the requested broader sweep for any other remaining instances
+  (`font-semibold`/`font-bold` classNames without `text-`, bare
+  `flex items-center gap-1` divs) - every other candidate found (5
+  `font-bold` wrapper divs around lines 2019/2163/2187/2211/2252, the
+  Loan Simulation card's two `<p className="font-semibold">` elements,
+  and the Timeline Explorer's Loan/Offset/Savings spans) turned out to
+  be false positives on inspection: each one's children already carry
+  their own explicit color, or correctly inherit one from a colored
+  ancestor (e.g. the Timeline Explorer spans sit under a parent `div`
+  with `text-gray-500 dark:text-gray-400`). No further fixes needed.
+  Re-checked the donut's "65%" center label flagged in TODO-86's own
+  write-up - it already has `text-gray-500 dark:text-gray-400`, so this
+  was a false alarm (likely just looking dim next to the actually-broken
+  Income/Expenses text beside it before this fix).
+  `npm test -- --run` (304/304), `npm run lint`, `npm run build` all
+  clean. Verified both fixes visually in the browser in dark mode - "Per
+  week: $570" / "Per fortnight: $1140" and the "Income"/"Expenses" legend
+  now render in light gray instead of near-black.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -2343,38 +2372,18 @@ optionally reuse in the commit message when you implement it.
   (2) Relabel the "Amount ($)" field (both call sites, soon to be one)
   to make the monthly convention explicit, e.g. "Monthly Amount ($)".
 
-- [ ] **TODO-86: Fix Total Summary donut's "Income"/"Expenses" legend rendering black text in dark mode, and sweep for any other remaining instances**
-  Reported by the user. Same root cause as TODO-72/73: `src/App.jsx`'s
-  Total Summary section, the `<div className="flex items-center
-  gap-1">...Income</div>` / `...Expenses</div>` legend rows (~line
-  2138-2139) have no text-color class at all, so they inherit the
-  browser's default (near-black) text instead of picking up a `dark:`
-  variant - missed by TODO-47's regex-based sweep for the same reason as
-  TODO-72/73 (nothing for the sweep to attach a `dark:` variant to).
-  Fix: add `text-gray-700 dark:text-gray-200` (or similar) to both rows.
-  Also asked to sweep the rest of the codebase for any other remaining
-  instances of this exact pattern (a text-bearing element with zero
-  `text-*` class at all) - TODO-72/73/86 have each been found one at a
-  time via user reports; worth a deliberate pass through `src/App.jsx`
-  and `src/components/*.jsx` looking for any other bare `<div>`/`<span>`/
-  `<p>`/`<label>`/`<button>` wrapping visible text with no color class,
-  rather than waiting for more to surface individually.
-  The user also flagged the donut's "65%" center label specifically -
-  unlike the other instances, that span (`text-[10px] font-bold
-  text-gray-500 dark:text-gray-400`, ~line 2159) already HAS a `dark:`
-  class, so this one needs visual re-verification rather than the usual
-  add-a-missing-class fix - may be a genuine low-contrast case (worth
-  trying `dark:text-gray-300`) or a false alarm caused by looking at it
-  right next to the still-broken Income/Expenses legend text beside it.
-
-- [ ] **TODO-87: Fix "TO OFFSET" card's "Per week"/"Per fortnight" values rendering black text in dark mode**
-  Reported by the user. Same root cause as TODO-72/73/86:
-  `src/App.jsx`'s "TO OFFSET (automatic)" card, the `weeklyToOffset`/
-  `fortnightlyToOffset` value spans (`className="font-semibold"`, ~lines
-  2240/2244) have no text-color class at all. Fix: add an explicit color
-  (e.g. `text-gray-700 dark:text-gray-200`, matching the sibling "Per
-  year" line's own `text-green-700 dark:text-green-400`, or reuse that
-  same green treatment for consistency across all three rows).
+- [ ] **TODO-88: Replace "Your Current Age" 0-means-not-set with an explicit enable/disable checkbox**
+  Requested by the user (feedback on TODO-70's own implementation choice).
+  `src/App.jsx`'s "Your Current Age (optional)" `NumberSliderField`
+  currently overloads `0` as a sentinel for "not provided" (hides the
+  Mortgage-Free Age indicator when `currentAge <= 0`) - the user would
+  rather have an explicit checkbox to turn the whole thing on/off,
+  instead of having to drag a value back down to exactly 0 to "opt out"
+  again. Would need a new boolean (e.g. `showMortgageFreeAge`,
+  defaulting to `false`) gating both the age input's visibility and the
+  Mortgage-Free Age row, likely restructured similar to how "Pay LMI
+  upfront in cash" or "Foreign Purchaser" checkboxes reveal/hide a
+  dependent field elsewhere in `src/App.jsx`.
 
 ---
 

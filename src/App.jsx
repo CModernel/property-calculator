@@ -2235,8 +2235,8 @@ const PropertyInvestmentCalculator = () => {
                     </div>
                   </div>
                   <div className="text-xs space-y-1">
-                    <div className="flex items-center gap-1"><div className="w-2 h-2 bg-green-500 rounded-full"></div> Income</div>
-                    <div className="flex items-center gap-1"><div className="w-2 h-2 bg-red-500 rounded-full"></div> Expenses</div>
+                    <div className="flex items-center gap-1 text-gray-700 dark:text-gray-200"><div className="w-2 h-2 bg-green-500 rounded-full"></div> Income</div>
+                    <div className="flex items-center gap-1 text-gray-700 dark:text-gray-200"><div className="w-2 h-2 bg-red-500 rounded-full"></div> Expenses</div>
                   </div>
                 </div>
 
@@ -2433,11 +2433,11 @@ const PropertyInvestmentCalculator = () => {
             <div className="space-y-2 text-sm border-t pt-3">
               <div className="flex justify-between">
                 <span className="text-gray-600 dark:text-gray-300">Per week:</span>
-                <span className="font-semibold">${Math.round(weeklyToOffset)}</span>
+                <span className="font-semibold text-gray-700 dark:text-gray-200">${Math.round(weeklyToOffset)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600 dark:text-gray-300">Per fortnight:</span>
-                <span className="font-semibold">${Math.round(fortnightlyToOffset)}</span>
+                <span className="font-semibold text-gray-700 dark:text-gray-200">${Math.round(fortnightlyToOffset)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600 dark:text-gray-300">Per year:</span>
