@@ -4,7 +4,7 @@ import { safePercentage } from './safePercentage';
 // offsetSimulation.js's loop starts counting at month 1, so month 0 never
 // appears in monthlyData. Past the simulation's last recorded month, fall
 // back to that last month rather than returning nothing.
-export function getTimelineSnapshot(timelineMonth, monthlyData, loanAmount, monthZeroInterest, initialSavingsBalance = 0) {
+export function getTimelineSnapshot(timelineMonth, monthlyData, loanAmount, monthZeroInterest, initialSavingsBalance = 0, initialPropertyValue = 0) {
   if (timelineMonth === 0) {
     return {
       balance: loanAmount,
@@ -18,6 +18,9 @@ export function getTimelineSnapshot(timelineMonth, monthlyData, loanAmount, mont
       monthlyInterestPaid: Math.round(monthZeroInterest),
       totalInterestPaid: 0,
       totalPrincipalPaid: 0,
+      // TODO-89: mirrors offsetSimulation.js's own propertyValue - nothing
+      // has grown yet at month 0, so it's just the purchase price.
+      propertyValue: Math.round(initialPropertyValue),
     };
   }
   return monthlyData.find(d => d.month === timelineMonth) || monthlyData[monthlyData.length - 1];

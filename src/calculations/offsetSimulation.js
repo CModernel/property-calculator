@@ -10,6 +10,7 @@ import {
   calculateMonthlyLandTax,
   calculateMonthlyPropertyExpenses,
 } from './loan';
+import { calculateCompoundedValue } from './growthRate';
 
 export function calculateLoanWithOffset({
   contributions,
@@ -49,6 +50,13 @@ export function calculateLoanWithOffset({
   // 0 (the default) means every existing caller/test that omits this keeps
   // the old "savings never earns anything" behavior byte-for-byte.
   savingsInterestRate = 0,
+  // TODO-89: property value over time, for the Timeline Explorer's
+  // "Projected Equity" figure - a pure function of elapsed months, not an
+  // accumulator (see calculateCompoundedValue). 0/0 defaults mean every
+  // existing caller/test that omits these keeps working unchanged (no
+  // propertyValue field is read by anything that doesn't ask for it).
+  propertyPrice = 0,
+  propertyGrowthRate = 0,
   maxMonths = 30 * 12,
 }) {
   // Nothing to offset: no surplus, no scheduled contributions, and no income
@@ -215,7 +223,8 @@ export function calculateLoanWithOffset({
       effectiveBalance: Math.round(effectiveBalance),
       monthlyInterestPaid: Math.round(monthlyInterest),
       totalInterestPaid: Math.round(totalInterest),
-      totalPrincipalPaid: Math.round(loanAmount - balance)
+      totalPrincipalPaid: Math.round(loanAmount - balance),
+      propertyValue: Math.round(calculateCompoundedValue(propertyPrice, propertyGrowthRate, months))
     });
 
     // If offset >= remaining balance, we're done

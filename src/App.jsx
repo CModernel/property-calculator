@@ -98,6 +98,10 @@ const PropertyInvestmentCalculator = () => {
   const [isDarkMode, toggleDarkMode] = useDarkMode();
 
   const [propertyPrice, setPropertyPrice] = useState(config.propertyPrice);
+  // TODO-89: annual % change in property value, compounding monthly - 0
+  // (default) keeps propertyValue pinned at propertyPrice forever, same
+  // as every other purely-additive rate input this session.
+  const [propertyGrowthRate, setPropertyGrowthRate] = useState(config.propertyGrowthRate ?? 0);
   const [propertyType, setPropertyType] = useState(config.propertyType); // 'house' | 'unit'
   const [downPayment, setDownPayment] = useState(config.downPayment);
   // TODO-57: a stepped/scheduled rate, same "Schedule a rate change" pattern
@@ -430,6 +434,8 @@ const PropertyInvestmentCalculator = () => {
     offsetAllocationPct,
     initialSavingsBalance: cashRemaining,
     savingsInterestRate,
+    propertyPrice,
+    propertyGrowthRate,
     maxMonths: totalMonths,
   });
   const baselineSimulation = calculateLoanWithOffset({
@@ -445,6 +451,8 @@ const PropertyInvestmentCalculator = () => {
     offsetAllocationPct,
     initialSavingsBalance: cashRemaining,
     savingsInterestRate,
+    propertyPrice,
+    propertyGrowthRate,
     maxMonths: totalMonths,
   });
   const interestSaved = baselineSimulation.totalInterest - loanSimulation.totalInterest;
@@ -585,7 +593,7 @@ const PropertyInvestmentCalculator = () => {
   const handleSaveScenario = () => {
     const savedAt = Date.now();
     const scenario = {
-      propertyPrice, propertyType, downPayment, loanTermYears,
+      propertyPrice, propertyGrowthRate, propertyType, downPayment, loanTermYears,
       interestRate: interestRateField.base, interestRateChanges: interestRateField.changes,
       strataFees: strataFeesField.base, strataFeesChanges: strataFeesField.changes,
       utilities: utilitiesField.base, utilitiesChanges: utilitiesField.changes,
@@ -934,6 +942,21 @@ const PropertyInvestmentCalculator = () => {
                 suffix=" AUD"
                 formatBound={formatCompactMoney}
               />
+
+              <NumberSliderField
+                label="Property Growth Rate"
+                value={propertyGrowthRate}
+                onChange={setPropertyGrowthRate}
+                min={-10}
+                max={15}
+                sliderMin={-5}
+                sliderMax={10}
+                step={0.1}
+                color="blue"
+                suffix="% p.a."
+              >
+                Annual change in your property's value, compounding monthly - feeds the Timeline Explorer's Projected Equity figure below. 0% (default) keeps the property value fixed at the purchase price. Negative values model a downturn.
+              </NumberSliderField>
 
               <NumberSliderField
                 label="Deposit Contribution"
@@ -2650,7 +2673,7 @@ const PropertyInvestmentCalculator = () => {
             </div>
 
             {(() => {
-              const snapshot = getTimelineSnapshot(timelineMonth, loanSimulation.monthlyData, loanAmount, monthZeroInterest, cashRemaining);
+              const snapshot = getTimelineSnapshot(timelineMonth, loanSimulation.monthlyData, loanAmount, monthZeroInterest, cashRemaining, propertyPrice);
               if (!snapshot) return null;
 
               const effectiveProgress = calculateEffectiveProgress(loanAmount, snapshot.effectiveBalance);
@@ -2674,7 +2697,21 @@ const PropertyInvestmentCalculator = () => {
                           share of the surplus offsetAllocationPct doesn't
                           send to the offset (flat if the allocation is 100%). */}
                       <span className="flex items-center gap-1">🐖 Savings: ${snapshot.savings.toLocaleString()}</span>
+                      {/* TODO-89: only shown once the user opts in - at the
+                          0% default, propertyValue is flat and this row
+                          would just repeat the purchase price forever. */}
+                      {propertyGrowthRate !== 0 && (
+                        <>
+                          <span className="text-gray-300 dark:text-gray-600">|</span>
+                          <span className="flex items-center gap-1">🏠 Value: ${snapshot.propertyValue.toLocaleString()}</span>
+                        </>
+                      )}
                     </div>
+                    {propertyGrowthRate !== 0 && (
+                      <p className={`text-sm font-semibold mt-2 ${getBalanceColor(snapshot.propertyValue - snapshot.balance)}`}>
+                        🏠 Projected Equity: ${(snapshot.propertyValue - snapshot.balance).toLocaleString()}
+                      </p>
+                    )}
                   </div>
 
                   {/* TODO-70: tied to whichever month the slider above is on,

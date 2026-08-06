@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { calculateLoanWithOffset } from './offsetSimulation';
 import { calculateMonthlyRate, calculateMonthlyPayment } from './loan';
 import { MAX_MONTH } from './recurringAmount';
+import { calculateCompoundedValue } from './growthRate';
 
 describe('calculateLoanWithOffset', () => {
   it('returns the sentinel result when there is no surplus and no contributions', () => {
@@ -779,5 +780,68 @@ describe('savings interest accrual (savingsInterestRate, TODO-50)', () => {
     });
     expect(result.monthlyData).not.toEqual([]);
     expect(result.monthlyData.map(d => d.savings)).toEqual([10100, 10201, 10303]);
+  });
+});
+
+describe('property value over time (propertyPrice/propertyGrowthRate, TODO-89)', () => {
+  it('defaults to a flat propertyValue equal to propertyPrice when propertyGrowthRate is omitted/0', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      propertyPrice: 850000,
+      maxMonths: 3,
+    });
+    expect(result.monthlyData.map(d => d.propertyValue)).toEqual([850000, 850000, 850000]);
+  });
+
+  it('is 0 when propertyPrice is omitted, matching every existing caller/test that never set it', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 1,
+    });
+    expect(result.monthlyData[0].propertyValue).toBe(0);
+  });
+
+  it('compounds monthly at 1%/month (12% p.a.), matching calculateCompoundedValue directly', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      propertyPrice: 850000,
+      propertyGrowthRate: 12,
+      maxMonths: 3,
+    });
+    expect(result.monthlyData.map(d => d.propertyValue)).toEqual([
+      Math.round(calculateCompoundedValue(850000, 12, 1)),
+      Math.round(calculateCompoundedValue(850000, 12, 2)),
+      Math.round(calculateCompoundedValue(850000, 12, 3)),
+    ]);
+  });
+
+  it('shrinks propertyValue under negative growth', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      propertyPrice: 850000,
+      propertyGrowthRate: -5,
+      maxMonths: 12,
+    });
+    expect(result.monthlyData[11].propertyValue).toBeLessThan(850000);
   });
 });

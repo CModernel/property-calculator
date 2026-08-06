@@ -2567,25 +2567,74 @@ optionally reuse in the commit message when you implement it.
   simulation impact. Saved, reloaded, confirmed persistence; cleared the
   saved scenario, confirmed it reset cleanly to 0%.
 
+- [x] **TODO-89: Property Appreciation (Projected Value/Equity)**
+  Follow-up from TODO-54's split - the highest-value gap per both
+  analysis rounds. `propertyPrice` was confirmed (by exploration) to be
+  used everywhere exclusively as a static "at purchase" figure - it never
+  appeared in the monthly simulation loop or Timeline Explorer, and no
+  equity/net-worth figure existed anywhere. This built the foundational
+  piece the rest of the growth-rate family (TODO-90/91/92) will reuse.
+  New `propertyGrowthRate` (annual %, default **0** - `propertyValue`
+  stays pinned at `propertyPrice` forever until opted in), allows
+  **negative** values too (a downturn is a real, useful scenario, not
+  just growth) - new "Property Growth Rate" `NumberSliderField` in
+  Purchase Details, right after Property Price.
+  New shared `src/calculations/growthRate.js`:
+  `calculateCompoundedValue(baseValue, annualGrowthRate, month)` -
+  monthly compounding via the existing `calculateMonthlyRate` conversion,
+  same convention as every other rate in this app. Deliberately a **pure
+  function of elapsed time**, not a running accumulator like
+  `offsetBalance`/`savingsBalance` - property value doesn't depend on
+  monthly deposits, so `calculateLoanWithOffset`
+  (`src/calculations/offsetSimulation.js`) just calls it once per push
+  using the loop's own `months` counter, no new mutable state needed.
+  New `propertyValue` field in `monthlyData`; `getTimelineSnapshot`
+  (`src/calculations/timelineSnapshot.js`) gained a matching
+  `initialPropertyValue` param to seed it at month 0 (mirrors
+  `initialSavingsBalance`/`savings`). Both `loanSimulation`/
+  `baselineSimulation` calls in `App.jsx` pass the same `propertyPrice`/
+  `propertyGrowthRate`.
+  Timeline Explorer, gated on `propertyGrowthRate !== 0` (nothing changes
+  for anyone who hasn't opted in): a 4th item added to the existing
+  "🏦 Loan | 💰 Offset | 🐖 Savings" breakdown row ("🏠 Value: $X"), plus a
+  new line below it, "🏠 Projected Equity: $Y" where
+  `Y = propertyValue - balance` (textbook equity - deliberately **not**
+  including offset/savings, which are separate liquid money, not tied to
+  the property) - colored via the existing `getBalanceColor`/
+  `getBalanceBgColor` helpers (`src/calculations/ui.js`, already used for
+  Remaining Savings' sign-based green/red), so negative equity renders
+  correctly with zero new color logic.
+  `propertyGrowthRate` persisted via `handleSaveScenario` - purely
+  additive, no `SCHEMA_VERSION` bump.
+  **Deliberate scope trim, called out explicitly**: "Projected LVR over
+  time" (also named in the analysis) was cut from this task - Equity is
+  the more resonant number per both analysis rounds, and shipping value +
+  equity + LVR-over-time all at once risked a cluttered first cut. A fast
+  follow-up can reuse the same `propertyValue` series later.
+  Added 4 new tests to `growthRate.test.js` (clean compounding math, flat
+  at 0%, exact base value at month 0, shrinks under negative growth) and
+  4 to `offsetSimulation.test.js` (flat when rate is 0/omitted, 0 when
+  `propertyPrice` itself is omitted, compounds matching
+  `calculateCompoundedValue` directly, shrinks under negative growth) plus
+  a `timelineSnapshot.test.js` case for `initialPropertyValue`. Updated
+  one exact `toEqual` assertion on the month-0 sentinel shape for the new
+  `propertyValue: 0` field.
+  `npm test -- --run` (327/327), `npm run lint`, `npm run build` all
+  clean. Verified in the browser: at 0% (default) the breakdown row and
+  equity line are absent, byte-identical to before. Set to 5% - at month
+  125, Value $1,429,368 and Equity $1,102,413 ($1,429,368 − $326,955)
+  matched by hand, both in green. Set to -8% - Value dropped to $368,379
+  at the same month, Equity fell to $41,424 but stayed positive (this
+  scenario's offset paid the loan off too fast to push equity negative
+  before the term ended - the shrinking-value math itself is separately
+  confirmed correct via `growthRate.test.js`). Reset to 0%, confirmed the
+  row/line disappeared again. Saved at 3.5%, reloaded, confirmed
+  persistence; cleared the saved scenario, confirmed it reset to 0%.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
 
-
-- [ ] **TODO-89: Property Appreciation (annual %, tracks Projected Equity/Net Worth/LVR over time)**
-  Follow-up from TODO-54's split (analysis, done - see TODO-54's own
-  write-up in Completed). Highest-value gap per the second-opinion
-  analysis: `propertyPrice` is treated as fixed forever today - LVR only
-  ever improves via principal repayment, and no equity/net worth figure
-  exists at all. New annual growth-rate input; build the underlying
-  "compounds annually inside the monthly loop" mechanism **here first**
-  (a continuous-compounding sibling to the existing discrete-step
-  `getSteppedValue`/`useSteppedValue` pattern) and reuse it for TODO-90/
-  91/92 below rather than rebuilding it three more times. Feeds new
-  figures - Projected Property Value, Projected Equity (value - balance +
-  offset/savings), Projected LVR over time - needs a design pass on
-  presentation (a new stat vs. extending the Timeline Explorer's existing
-  "🏦 Loan | 💰 Offset | 🐖 Savings" line).
 
 - [ ] **TODO-90: Salary/Wage Growth (annual %, independent of any other growth rate)**
   Follow-up from TODO-54's split. Small once TODO-89's compounding

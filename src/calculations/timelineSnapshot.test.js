@@ -17,12 +17,18 @@ describe('getTimelineSnapshot', () => {
       monthlyInterestPaid: 2292,
       totalInterestPaid: 0,
       totalPrincipalPaid: 0,
+      propertyValue: 0,
     });
   });
 
   it('seeds the month-0 savings snapshot from initialSavingsBalance when given', () => {
     const snapshot = getTimelineSnapshot(0, monthlyData, 500000, 2291.67, 28453);
     expect(snapshot.savings).toBe(28453);
+  });
+
+  it('seeds the month-0 propertyValue snapshot from initialPropertyValue when given (TODO-89)', () => {
+    const snapshot = getTimelineSnapshot(0, monthlyData, 500000, 2291.67, 28453, 850000);
+    expect(snapshot.propertyValue).toBe(850000);
   });
 
   it('finds the exact month in monthlyData', () => {
