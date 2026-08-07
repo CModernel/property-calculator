@@ -20,10 +20,18 @@ export function isScheduleActive(schedule, month) {
   return (month - schedule.startMonth) % INTERVAL_MONTHS[schedule.recurrence] === 0;
 }
 
+// TODO-94: converts a Gross (pre-tax) item's amount to net via a flat
+// effective tax rate - a no-op for any item without isGross (Exceptional/
+// Personal Expense items never set it, so they're unaffected regardless of
+// effectiveTaxRate).
+function getNetAmount(item, effectiveTaxRate) {
+  return item.isGross ? item.amount * (1 - effectiveTaxRate / 100) : item.amount;
+}
+
 // Sums the `amount` of every item active in the given month. Shared by
 // Income Sources and Exceptional Expenses, which use the exact same shape.
-export function getActiveAmount(items, month) {
-  return items.reduce((sum, item) => (isScheduleActive(item, month) ? sum + item.amount : sum), 0);
+export function getActiveAmount(items, month, effectiveTaxRate = 0) {
+  return items.reduce((sum, item) => (isScheduleActive(item, month) ? sum + getNetAmount(item, effectiveTaxRate) : sum), 0);
 }
 
 // TODO-90: same as getActiveAmount, but each active item's amount grows by
@@ -31,9 +39,12 @@ export function getActiveAmount(items, month) {
 // item's own startMonth, a deliberate simplification (matches TODO-89's
 // Property Appreciation, which also grows from month 1 regardless of when
 // the mortgage itself started).
-export function getActiveAmountWithGrowth(items, month, annualGrowthRate) {
+export function getActiveAmountWithGrowth(items, month, annualGrowthRate, effectiveTaxRate = 0) {
   const growthMultiplier = calculateCompoundedValue(1, annualGrowthRate, month);
-  return items.reduce((sum, item) => (isScheduleActive(item, month) ? sum + item.amount * growthMultiplier : sum), 0);
+  return items.reduce(
+    (sum, item) => (isScheduleActive(item, month) ? sum + getNetAmount(item, effectiveTaxRate) * growthMultiplier : sum),
+    0
+  );
 }
 
 // How many times a schedule has fired by the given month (inclusive) -

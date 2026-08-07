@@ -1097,3 +1097,84 @@ describe('rental vacancy (vacancyWeeksPerYear, TODO-95)', () => {
     expect(result.monthlyData.map(d => d.offset)).toEqual(expectedOffsets);
   });
 });
+
+describe('gross income tax conversion (effectiveTaxRate, TODO-94)', () => {
+  it('matches the plain path exactly when effectiveTaxRate is 0/omitted, even with isGross items', () => {
+    const shared = {
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [{ id: 1, name: 'Salary/Wages', amount: 300, isGross: true, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 3,
+    };
+    const withDefault = calculateLoanWithOffset(shared);
+    const withExplicitZero = calculateLoanWithOffset({ ...shared, effectiveTaxRate: 0 });
+    expect(withExplicitZero).toEqual(withDefault);
+    expect(withDefault.monthlyData.map(d => d.offset)).toEqual([1300, 2600, 3900]);
+  });
+
+  it('shrinks a Gross salary item by the tax rate while a non-Gross item in the same simulation is untouched', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [
+        { id: 1, name: 'Salary/Wages', amount: 300, isGross: true, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH },
+        { id: 2, name: 'Dividends', amount: 100, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH },
+      ],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      effectiveTaxRate: 20,
+      maxMonths: 2,
+    });
+    let cumulative = 0;
+    const expectedOffsets = [1, 2].map(() => {
+      cumulative += calculateMonthlyFromWeekly(300 * 0.8 + 100); // salary net'd, Dividends untouched
+      return Math.round(cumulative);
+    });
+    expect(result.monthlyData.map(d => d.offset)).toEqual(expectedOffsets);
+  });
+
+  it('composes correctly with a Gross rental item, rentGrowthRate, and vacancyWeeksPerYear together', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [{ id: 1, name: 'House Rent', amount: 300, isGross: true, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      rentGrowthRate: 12,
+      vacancyWeeksPerYear: 2,
+      effectiveTaxRate: 25,
+      maxMonths: 2,
+    });
+    const vacancyFactor = 1 - (2 / 52);
+    let cumulative = 0;
+    const expectedOffsets = [1, 2].map((month) => {
+      const grownNetRent = calculateCompoundedValue(300 * 0.75, 12, month);
+      cumulative += calculateMonthlyFromWeekly(grownNetRent * vacancyFactor);
+      return Math.round(cumulative);
+    });
+    expect(result.monthlyData.map(d => d.offset)).toEqual(expectedOffsets);
+  });
+
+  it('converts a Gross item in the catch-all "other" income bucket too', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [{ id: 1, name: 'Dividends', amount: 400, isGross: true, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      effectiveTaxRate: 30,
+      maxMonths: 1,
+    });
+    expect(result.monthlyData[0].offset).toBe(Math.round(calculateMonthlyFromWeekly(400 * 0.7)));
+  });
+});

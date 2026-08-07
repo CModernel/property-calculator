@@ -2803,6 +2803,16 @@ optionally reuse in the commit message when you implement it.
   expected factor while other income stays untouched; a full 52-week
   edge case zeroes out rental income entirely; composes correctly with
   a nonzero `rentGrowthRate`).
+  `npm test -- --run` (341/341), `npm run lint`, `npm run build` all
+  clean. Verified in the browser: added a $500/week House Rent source
+  (dropping "Total interest paid" to $124,274 from the extra surplus),
+  then set Vacancy to 4 weeks/year and watched it rise to $127,891 -
+  while "Monthly Rental Income" stayed exactly $2,167/month, confirming
+  only the future simulation is affected. Reset to 0, confirmed it
+  matched the House-Rent-only baseline exactly. Saved at 3 weeks,
+  reloaded, confirmed persistence; cleared the saved scenario, confirmed
+  it reset to the original baseline (House Rent removed too, as
+  expected).
 
 - [x] **TODO-97: Opportunity Cost comparison (static, no dependency)**
   Resulting split from TODO-52's analysis (see TODO-52's own write-up for
@@ -2827,16 +2837,59 @@ optionally reuse in the commit message when you implement it.
   interest paid" stay byte-identical whether the checkbox is on or off,
   confirming zero simulation impact. Also verified save/reload
   persistence and reset-to-defaults (unchecked, hidden) behavior.
-  `npm test -- --run` (341/341), `npm run lint`, `npm run build` all
-  clean. Verified in the browser: added a $500/week House Rent source
-  (dropping "Total interest paid" to $124,274 from the extra surplus),
-  then set Vacancy to 4 weeks/year and watched it rise to $127,891 -
-  while "Monthly Rental Income" stayed exactly $2,167/month, confirming
-  only the future simulation is affected. Reset to 0, confirmed it
-  matched the House-Rent-only baseline exactly. Saved at 3 weeks,
+
+- [x] **TODO-94: Gross/Net income via a flat effective tax rate (not real AU tax brackets)**
+  Follow-up from TODO-54's split. Real progressive AU tax brackets +
+  Medicare Levy + HECS/HELP would need users to understand tax law to
+  trust the number - the same complexity-budget objection that killed
+  TODO-52's weighted "Overall Score." Instead, any income source can
+  optionally be marked "Gross (pre-tax)" and a single global **Effective
+  Tax Rate %** converts every item so marked into net, everywhere income
+  is read - covers salaried people who only know their gross figure AND
+  non-PAYG income (self-employment/dividends/bonus) via the same
+  mechanism, no tax-bracket data to source or maintain.
+  Income items have no edit capability at all (only add/remove), so
+  `isGross` is an add-time-only field, same limitation every other income
+  field already has.
+  Conversion choke point: `getActiveAmount`/`getActiveAmountWithGrowth`
+  (`src/calculations/recurringAmount.js`) gained a trailing optional
+  `effectiveTaxRate = 0` param - every consumer of income amounts (the
+  static "right now" figures in `App.jsx`, feeding Housing Cost Ratio,
+  Stress Test, Rental Yield, Gearing Cashflow; the Timeline Explorer's
+  Income Context column; and the `calculateLoanWithOffset` simulation
+  loop) goes through one of these two functions, so extending them was
+  the single place needed. A no-op for expense items (Exceptional/
+  Personal Expenses never set `isGross`) and for every income item
+  without `isGross` regardless of the rate.
+  New always-visible "Effective Tax Rate" `NumberSliderField` in the
+  Income section, right after Vacancy - not gated on any derived
+  condition, matching the `inflationRate`/`expenseGrowthRate` convention
+  of "0% default is an inert no-op." New "This is a gross (pre-tax)
+  amount" checkbox in the add-income form (any category, not just
+  Room/House Rent), with an inline "Net at X% tax: $Y/week" preview.
+  List rows show a "(Gross → net $Y/week)" marker.
+  `effectiveTaxRate` persisted via `handleSaveScenario` - purely
+  additive, no `SCHEMA_VERSION` bump. `isGross` needs no separate
+  persistence, it's part of the `incomeSources` array saved wholesale.
+  Now available for **TODO-96** to consume as its tax-rate input - the
+  original reason this task was split out from TODO-52's analysis.
+  Added tax-conversion tests to `recurringAmount.test.js` (Gross/non-Gross
+  items, 0% no-op, composes with the growth multiplier) and a new
+  describe block to `offsetSimulation.test.js` (0%/omitted matches the
+  plain path; a Gross salary item shrinks while a non-Gross item in the
+  same simulation is untouched; composes with `rentGrowthRate` and
+  `vacancyWeeksPerYear` together; converts a Gross item in the catch-all
+  "other" bucket too).
+  `npm test -- --run` (350/350), `npm run lint`, `npm run build` all
+  clean. Verified in the browser: added a $1000/week Gross Salary/Wages
+  item at 30% Effective Tax Rate - the list row showed "(Gross → net
+  $700/week)", the Income breakdown subtotal rose by exactly $700 (not
+  $1000), and "Time to pay off"/"Total interest paid" dropped from
+  10.8yrs/$196,743 to 6.2yrs/$108,332, confirming the net (not gross)
+  figure flows into the simulation. Removed the item and reset the rate,
+  confirmed an exact return to baseline. Saved at 15% with a Gross item,
   reloaded, confirmed persistence; cleared the saved scenario, confirmed
-  it reset to the original baseline (House Rent removed too, as
-  expected).
+  reset to 0% with no Gross items.
 
 - [x] **TODO-52 (Analysis only, no code): When does it make sense to invest in ETFs instead of paying down the offset?**
   Requested by the user - explicitly an analysis task. The question:
@@ -3083,25 +3136,35 @@ optionally reuse in the commit message when you implement it.
   into a structure decided before they existed. Redesigning twice (once
   now, once after the ETF work lands) would waste the first pass.
 
-- [ ] **TODO-94: Gross/Net income via a flat effective tax rate (not real AU tax brackets)**
-  Follow-up from TODO-54's split. Resolves the actual tension between the
-  two prior analysis rounds: real progressive tax brackets + Medicare
-  Levy + HECS/HELP would need users to understand tax law, which
-  contradicts the second opinion's own stated rule ("if the user has to
-  understand a tax law, don't build it"). Instead, let any income source
-  optionally be marked "Gross" with a single user-supplied **effective
-  tax rate %** to convert to net - covers both salaried people who only
-  know their gross figure AND non-PAYG income (self-employment/
-  dividends/bonus) via the same mechanism, no tax-bracket data to source
-  or maintain.
-  **New dependency noted (this session, from TODO-52's ongoing analysis)**:
-  the user's ETF-investing feature idea (TODO-52) should only become
-  visible/usable once this tax rate is set - comparing a pre-tax ETF
-  return against the offset's tax-free return would be a dishonest
-  comparison, so ETFs "make sense" specifically because of the tax
-  treatment difference. Not a reason to bundle the two into one toggle,
-  just a functional requirement: TODO-52's eventual feature reads this
-  tax rate as an input, it doesn't duplicate it.
+- [ ] **TODO-100: Master "Realistic Mode" enable/disable toggle**
+  Raised by the user mid-session, independently of TODO-99 above (they
+  hadn't seen TODO-99's write-up when they asked): expected a single
+  checkbox to turn "Realistic Mode" on/off as a whole - unlike TODO-99
+  (presentation-only, no state-model changes), the user's version is
+  explicitly **functional**, not just visual: switching it off should
+  force every factor in the family inert (0%/no-op) regardless of
+  whatever each individual slider is currently set to, not merely hide
+  them. Switching back on should restore each slider's own stored value
+  (don't reset them to 0 on toggle-off - that would be surprising and
+  lose the user's own inputs) - so the toggle short-circuits the
+  *effect* of the whole family without touching the underlying
+  independent state variables themselves.
+  **Scope of "the family"**: Property Growth Rate, Salary Growth Rate,
+  Rent Growth Rate, Expense Growth Rate, Vacancy (weeks/year), Inflation
+  Rate, and (once TODO-94 ships) Effective Tax Rate - the growth/
+  inflation assumptions from TODO-54's original split. Deliberately
+  **excludes** Credit Card Benefit, Compare Offset vs ETF Investing
+  (TODO-97), and Mortgage-Free Age - those are separate opt-in features
+  with their own checkboxes already, not part of this "realistic
+  assumptions" growth-rate family.
+  **Relationship to TODO-99**: complementary, not a duplicate - TODO-99
+  is the "what should the page look like" pass (collapsible grouping);
+  this is "does turning the group off need to be one click instead of
+  N," a smaller, purely additive toggle that could ship independently of
+  or alongside TODO-99's restructuring. Likely needs Plan Mode (touches
+  every `calculateLoanWithOffset` call site and the static "right now"
+  figures across `App.jsx`) - same sequencing question as TODO-99: worth
+  deciding together once TODO-96/TODO-98's new UI surface exists.
 
 - [ ] **TODO-96: ETF Simulation Core (foundational, gated behind TODO-94's tax rate)**
   Resulting split from TODO-52's analysis (4 rounds, done - see TODO-52's

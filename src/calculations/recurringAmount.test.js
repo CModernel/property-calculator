@@ -81,6 +81,39 @@ describe('getActiveAmountWithGrowth (TODO-90)', () => {
   });
 });
 
+describe('gross income tax conversion (effectiveTaxRate, TODO-94)', () => {
+  it('leaves an item without isGross unaffected by any effectiveTaxRate', () => {
+    const items = [{ amount: 1000, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }];
+    expect(getActiveAmount(items, 1, 0)).toBe(1000);
+    expect(getActiveAmount(items, 1, 20)).toBe(1000);
+    expect(getActiveAmount(items, 1, 100)).toBe(1000);
+  });
+
+  it('converts a Gross item to net at the given rate', () => {
+    const items = [{ amount: 1000, isGross: true, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }];
+    expect(getActiveAmount(items, 1, 20)).toBe(800);
+  });
+
+  it('matches the plain (untaxed) path exactly at 0%, even when isGross is true', () => {
+    const items = [{ amount: 1000, isGross: true, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }];
+    expect(getActiveAmount(items, 1, 0)).toBe(getActiveAmount(items, 1));
+  });
+
+  it('sums Gross and non-Gross items correctly in the same list', () => {
+    const items = [
+      { amount: 1000, isGross: true, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH },
+      { amount: 500, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH },
+    ];
+    expect(getActiveAmount(items, 1, 20)).toBe(1300); // 800 net + 500 untouched
+  });
+
+  it('composes correctly with getActiveAmountWithGrowth (tax applied before the growth multiplier)', () => {
+    const items = [{ amount: 1000, isGross: true, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }];
+    // 1000 * 0.8 (20% tax) * 1.01 (1%/month growth)
+    expect(getActiveAmountWithGrowth(items, 1, 12, 20)).toBeCloseTo(800 * 1.01, 6);
+  });
+});
+
 describe('countOccurrencesUpTo', () => {
   it('returns 0 before the schedule has started', () => {
     expect(countOccurrencesUpTo({ startMonth: 6, recurrence: 'none' }, 5)).toBe(0);

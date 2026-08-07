@@ -88,6 +88,12 @@ export function calculateLoanWithOffset({
   // keep this app's fully-deterministic design intact. 0 (default) means
   // every existing caller/test that omits this keeps working unchanged.
   vacancyWeeksPerYear = 0,
+  // TODO-94: flat % converting any income source marked "Gross" (isGross)
+  // to net, applied inside getActiveAmount/getActiveAmountWithGrowth
+  // before growth/vacancy. 0 (default) means every existing caller/test
+  // that omits this keeps working unchanged - isGross items only exist if
+  // a caller explicitly adds them.
+  effectiveTaxRate = 0,
   maxMonths = 30 * 12,
 }) {
   // Nothing to offset: no surplus, no scheduled contributions, and no income
@@ -188,9 +194,9 @@ export function calculateLoanWithOffset({
     // no-op split at 0%/0%/no-vacancy, since getActiveAmountWithGrowth
     // matches getActiveAmount exactly and vacancyFactor is 1 then).
     const monthlyIncomeThisMonth = calculateMonthlyFromWeekly(
-      getActiveAmountWithGrowth(salaryIncomeSources, months, salaryGrowthRate)
-        + getActiveAmountWithGrowth(rentalIncomeSources, months, rentGrowthRate) * vacancyFactor
-        + getActiveAmount(otherIncomeSources, months)
+      getActiveAmountWithGrowth(salaryIncomeSources, months, salaryGrowthRate, effectiveTaxRate)
+        + getActiveAmountWithGrowth(rentalIncomeSources, months, rentGrowthRate, effectiveTaxRate) * vacancyFactor
+        + getActiveAmount(otherIncomeSources, months, effectiveTaxRate)
     );
 
     // Property expenses for this month, each resolved to whichever scheduled

@@ -228,12 +228,19 @@ const PropertyInvestmentCalculator = () => {
   // deterministic design intact. 0 (default) means every existing
   // scenario behaves byte-for-byte identically.
   const [vacancyWeeksPerYear, setVacancyWeeksPerYear] = useState(config.vacancyWeeksPerYear ?? 0);
+  // TODO-94: flat % converting any income source marked "Gross" (below) to
+  // net, everywhere income is read - covers salaried people who only know
+  // their gross figure, and non-PAYG income (self-employment/dividends/
+  // bonus) via the same mechanism. 0 (default) means every existing
+  // scenario behaves byte-for-byte identically.
+  const [effectiveTaxRate, setEffectiveTaxRate] = useState(config.effectiveTaxRate ?? 0);
   const [showIncome, setShowIncome] = useState(config.showIncome ?? false);
   const [showAddIncome, setShowAddIncome] = useState(false);
   const [newIncomeCategory, setNewIncomeCategory] = useState('Salary/Wages'); // see INCOME_CATEGORIES (src/calculations/incomeCategories.js)
   const [newIncomeCustomName, setNewIncomeCustomName] = useState(''); // only used when category is 'Other'
   const [newIncomeAmount, setNewIncomeAmount] = useState(config.newIncomeAmount);
   const [newIncomeIsShared, setNewIncomeIsShared] = useState(false); // only used when category is 'Room Rent'
+  const [newIncomeIsGross, setNewIncomeIsGross] = useState(false); // TODO-94: pre-tax amount, needs effectiveTaxRate to convert to net
   const [newIncomeNumPeople, setNewIncomeNumPeople] = useState(2); // only used when category is 'Room Rent' and shared
   const [newIncomeOneTime, setNewIncomeOneTime] = useState(false);
   const [newIncomeStartMonth, setNewIncomeStartMonth] = useState(1);
@@ -407,8 +414,8 @@ const PropertyInvestmentCalculator = () => {
   // live inside incomeSources like any other entry - this just partitions
   // the same array into the two subtotals the rest of the app already
   // expects, instead of drawing from two separate arrays.
-  const weeklyIncome = getActiveAmount(incomeSources.filter(i => !RENTAL_INCOME_CATEGORIES.includes(i.name)), 1);
-  const weeklyRentalIncome = getActiveAmount(incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1);
+  const weeklyIncome = getActiveAmount(incomeSources.filter(i => !RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
+  const weeklyRentalIncome = getActiveAmount(incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
   const monthlyIncome = calculateMonthlyFromWeekly(weeklyIncome);
   const monthlyRentalIncome = calculateMonthlyFromWeekly(weeklyRentalIncome);
 
@@ -472,6 +479,7 @@ const PropertyInvestmentCalculator = () => {
     rentGrowthRate,
     vacancyWeeksPerYear,
     expenseGrowthRate,
+    effectiveTaxRate,
     maxMonths: totalMonths,
   });
   const baselineSimulation = calculateLoanWithOffset({
@@ -493,6 +501,7 @@ const PropertyInvestmentCalculator = () => {
     rentGrowthRate,
     vacancyWeeksPerYear,
     expenseGrowthRate,
+    effectiveTaxRate,
     maxMonths: totalMonths,
   });
   const interestSaved = baselineSimulation.totalInterest - loanSimulation.totalInterest;
@@ -654,6 +663,7 @@ const PropertyInvestmentCalculator = () => {
       salaryGrowthRate,
       rentGrowthRate,
       vacancyWeeksPerYear,
+      effectiveTaxRate,
       offsetContributions,
       personalExpenseItems,
       showPropertyExpenses, showMonthlyExpensesBreakdown, showClosingCostsBreakdown,
@@ -765,6 +775,7 @@ const PropertyInvestmentCalculator = () => {
       amount: isRoomRent ? newIncomeAmount * numPeople : newIncomeAmount,
       startMonth: newIncomeStartMonth,
       recurrence: newIncomeOneTime ? 'none' : newIncomeRecurrence,
+      isGross: newIncomeIsGross,
       ...(newIncomeOneTime ? {} : { endMonth: newIncomeEndMonth }),
       ...(isRoomRent ? { isShared: newIncomeIsShared, numPeople, amountPerPerson: newIncomeAmount } : {}),
     };
@@ -776,6 +787,7 @@ const PropertyInvestmentCalculator = () => {
     setNewIncomeAmount(config.newIncomeAmount);
     setNewIncomeIsShared(false);
     setNewIncomeNumPeople(2);
+    setNewIncomeIsGross(false);
     setNewIncomeOneTime(false);
     setNewIncomeStartMonth(1);
     setNewIncomeRecurrence('monthly');
@@ -1706,6 +1718,21 @@ const PropertyInvestmentCalculator = () => {
                 Applies a flat, deterministic average reduction to "House Rent"/"Room Rent" income every month (e.g. 2 weeks/year ≈ 3.8% less) - not a random event, just an expected average. 0 (default) assumes no vacancy.
               </NumberSliderField>
 
+              <NumberSliderField
+                label="Effective Tax Rate"
+                value={effectiveTaxRate}
+                onChange={setEffectiveTaxRate}
+                min={0}
+                max={90}
+                sliderMin={0}
+                sliderMax={47}
+                step={1}
+                color="purple"
+                suffix="%"
+              >
+                Only affects income sources checked "Gross (pre-tax)" below - converts them to net using this rate. Enter net figures for everything else and leave this at 0% (default, no-op).
+              </NumberSliderField>
+
               {/* Add income form */}
               {showAddIncome && (
                 <div className="mb-3 p-3 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800 text-sm">
@@ -1799,6 +1826,23 @@ const PropertyInvestmentCalculator = () => {
                       />
                     )}
 
+                    <div>
+                      <label className="flex items-center gap-2 text-xs font-medium text-gray-700 dark:text-gray-200">
+                        <input
+                          type="checkbox"
+                          checked={newIncomeIsGross}
+                          onChange={(e) => setNewIncomeIsGross(e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-purple-600 dark:text-purple-400 focus:ring-purple-500"
+                        />
+                        This is a gross (pre-tax) amount
+                      </label>
+                      {newIncomeIsGross && effectiveTaxRate > 0 && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          Net at {effectiveTaxRate}% tax: ${Math.round((newIncomeCategory === 'Room Rent' && newIncomeIsShared ? newIncomeAmount * newIncomeNumPeople : newIncomeAmount) * (1 - effectiveTaxRate / 100)).toLocaleString()}/week
+                        </p>
+                      )}
+                    </div>
+
                     <label className="flex items-center gap-2 text-xs font-medium text-gray-700 dark:text-gray-200">
                       <input
                         type="checkbox"
@@ -1869,7 +1913,9 @@ const PropertyInvestmentCalculator = () => {
                         {income.isShared !== undefined ? (income.isShared ? 'Shared Room' : 'Single Room') : income.name}
                       </p>
                       <p className="text-xs text-gray-600 dark:text-gray-300">
-                        ${income.amount}/week {income.isShared && <span className="text-blue-600 dark:text-blue-400 font-medium">({income.numPeople} × ${income.amountPerPerson} each) </span>}• {formatScheduleLabel(income)}
+                        ${income.amount}/week {income.isShared && <span className="text-blue-600 dark:text-blue-400 font-medium">({income.numPeople} × ${income.amountPerPerson} each) </span>}
+                        {income.isGross && <span className="text-purple-600 dark:text-purple-400 font-medium">(Gross{effectiveTaxRate > 0 && ` → net $${Math.round(income.amount * (1 - effectiveTaxRate / 100)).toLocaleString()}/week`}) </span>}
+                        • {formatScheduleLabel(income)}
                       </p>
                     </div>
                     <button onClick={() => removeIncomeSource(income.id)} className="text-red-500 font-bold px-2">✕</button>
@@ -2954,8 +3000,8 @@ const PropertyInvestmentCalculator = () => {
                         <div className="space-y-1 text-xs">
                           {(() => {
                             const houseRentActiveHere = incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name) && isScheduleActive(i, timelineMonth));
-                            const rentalIncomeHere = calculateMonthlyFromWeekly(getActiveAmount(incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), timelineMonth));
-                            const personalIncomeHere = calculateMonthlyFromWeekly(getActiveAmount(incomeSources.filter(i => !RENTAL_INCOME_CATEGORIES.includes(i.name)), timelineMonth));
+                            const rentalIncomeHere = calculateMonthlyFromWeekly(getActiveAmount(incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), timelineMonth, effectiveTaxRate));
+                            const personalIncomeHere = calculateMonthlyFromWeekly(getActiveAmount(incomeSources.filter(i => !RENTAL_INCOME_CATEGORIES.includes(i.name)), timelineMonth, effectiveTaxRate));
                             return (
                               <>
                                 <p className="flex justify-between">
