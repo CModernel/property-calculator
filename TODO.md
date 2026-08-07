@@ -2803,6 +2803,30 @@ optionally reuse in the commit message when you implement it.
   expected factor while other income stays untouched; a full 52-week
   edge case zeroes out rental income entirely; composes correctly with
   a nonzero `rentGrowthRate`).
+
+- [x] **TODO-97: Opportunity Cost comparison (static, no dependency)**
+  Resulting split from TODO-52's analysis (see TODO-52's own write-up for
+  the full history). Cheapest of the three ETF-related follow-ups - no
+  simulation logic touched, ships independently of TODO-96/TODO-98. New
+  checkbox "Compare Offset vs ETF Investing" (default unchecked, same
+  opt-in pattern as TODO-55's Credit Card Benefit) in Financial Position,
+  right after the Credit Card Benefit block. When checked, reveals a new
+  "Expected ETF Return" `NumberSliderField` (default 8% p.a., range
+  0-20%) and a static side-by-side card: "🏦 Offset: {mortgage rate}%
+  guaranteed, tax-free, no market risk" vs. "📈 ETF: {expected return}%
+  expected, taxable, market risk - not guaranteed" - reuses the
+  already-computed `interestRate` value directly, no new calculation
+  module needed. Explains the trade-off without requiring the user to
+  understand finance, per the same "if the user needs to understand it
+  to trust it, don't build it that way" rule used elsewhere in TODO-52's
+  analysis.
+  `showOpportunityCost`/`expectedEtfReturn` persisted via
+  `handleSaveScenario` - purely additive, no `SCHEMA_VERSION` bump.
+  No calculation-layer changes at all (341 existing tests pass
+  unchanged); verified in the browser that "Time to pay off" and "Total
+  interest paid" stay byte-identical whether the checkbox is on or off,
+  confirming zero simulation impact. Also verified save/reload
+  persistence and reset-to-defaults (unchecked, hidden) behavior.
   `npm test -- --run` (341/341), `npm run lint`, `npm run build` all
   clean. Verified in the browser: added a $500/week House Rent source
   (dropping "Total interest paid" to $124,274 from the extra surplus),
@@ -3025,6 +3049,40 @@ optionally reuse in the commit message when you implement it.
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
 
 
+- [ ] **TODO-99 (Analysis first, no code yet): Simplify the UI/information architecture**
+  Requested by the user - explicitly not about removing content, about
+  reducing how overwhelming the page feels, especially after this
+  session's own wave of additions (TODO-89 through TODO-95): Property
+  Growth Rate, Salary Growth Rate, Rent Growth Rate, Vacancy, Expense
+  Growth Rate, Savings Interest Rate, Inflation Rate, Credit Card usage
+  (+4 sub-fields), Mortgage-Free Age (+1 field) all landed as individual
+  sliders/checkboxes inside Financial Position, Purchase Details, and
+  Income - each one deliberately defaults to an inert value (0%/
+  unchecked) so it costs nothing functionally, but it still occupies
+  visual space and adds cognitive load for a user who never touches it.
+  **Worth naming the actual tension explicitly**: TODO-54's own analysis
+  concluded these should ship as independent toggles rather than one
+  monolithic "Realistic Mode" switch (easier to build, test, and adopt
+  partially) - that decision was right for the *architecture*, but its
+  side effect is exactly this UI crowding. The likely fix is a
+  **presentation-layer** change, not an architecture one: group these
+  same independent state variables visually (e.g. a collapsible
+  "Advanced assumptions" sub-section per card, or a single shared one),
+  without touching the underlying state model at all - same data, same
+  independent toggles, different visual grouping. Needs a design pass on
+  what counts as "basic" (Property Price, Deposit, Loan Amount, Interest
+  Rate, Loan Term, Available Savings, the Income/Expenses lists
+  themselves) vs. "advanced" (every growth/inflation rate, Credit Card
+  usage, Mortgage-Free Age) - not necessarily a strict binary, could be
+  per-card collapsible groups instead of one global mode.
+  **Timing question the user raised, and this session's recommendation**:
+  analyze now (cheap, no code) but defer the actual restructuring until
+  after TODO-96/TODO-98 ship - those add substantial new UI surface (an
+  ETF simulation card, a Pareto-front comparison table) that should
+  inform the final information architecture, rather than being retrofit
+  into a structure decided before they existed. Redesigning twice (once
+  now, once after the ETF work lands) would waste the first pass.
+
 - [ ] **TODO-94: Gross/Net income via a flat effective tax rate (not real AU tax brackets)**
   Follow-up from TODO-54's split. Resolves the actual tension between the
   two prior analysis rounds: real progressive tax brackets + Medicare
@@ -3062,15 +3120,6 @@ optionally reuse in the commit message when you implement it.
   savings + ETF balance - loan balance) distinct from TODO-89's existing
   Equity figure, which is deliberately narrower (property value - loan
   balance only).
-
-- [ ] **TODO-97: Opportunity Cost comparison (static, no dependency)**
-  Resulting split from TODO-52's analysis. Cheapest of the three - no
-  simulation needed, ships independently of TODO-96. A static "right
-  now" side-by-side: "one extra dollar → Offset: {mortgage rate}%
-  guaranteed, tax-free, no risk" vs. "one extra dollar → ETF: {expected
-  return}% expected, taxable, market risk, not guaranteed" - explains
-  the trade-off without requiring the user to understand finance. Same
-  shape/cost as the Credit Card Benefit's static card (TODO-55).
 
 - [ ] **TODO-98: Pareto Front Strategy Comparison**
   Resulting split from TODO-52's analysis. Depends on TODO-96. Runs the
