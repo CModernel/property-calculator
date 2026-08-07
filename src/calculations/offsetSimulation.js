@@ -1,6 +1,6 @@
 import { getSteppedValue } from './steppedValue';
 import { getActiveAmount, getActiveAmountWithGrowth } from './recurringAmount';
-import { SALARY_INCOME_CATEGORY } from './incomeCategories';
+import { SALARY_INCOME_CATEGORY, RENTAL_INCOME_CATEGORIES } from './incomeCategories';
 import {
   calculateMonthlyFromWeekly,
   calculateMonthlyRate,
@@ -65,6 +65,12 @@ export function calculateLoanWithOffset({
   // property/savings returns. 0 (default) means every existing caller/test
   // that omits this keeps working unchanged.
   salaryGrowthRate = 0,
+  // TODO-91: annual % growth applied only to rental income sources
+  // (House Rent/Room Rent, RENTAL_INCOME_CATEGORIES), same convention as
+  // salaryGrowthRate above - independent of it, since rent and wages move
+  // on their own schedules. 0 (default) means every existing caller/test
+  // that omits this keeps working unchanged.
+  rentGrowthRate = 0,
   // TODO-92: annual % growth applied to BOTH Personal Expenses and
   // Property Expenses together, compounding monthly from simulation
   // month 1 (same convention as propertyGrowthRate/salaryGrowthRate) - a
@@ -76,6 +82,12 @@ export function calculateLoanWithOffset({
   // changes payoff time and total interest, since it grows the
   // surplus-reducing expenses inside the loop itself.
   expenseGrowthRate = 0,
+  // TODO-95: weeks/year a rental property sits vacant, modeled as a flat
+  // deterministic average haircut on rental income every month (e.g.
+  // 2/52 weeks -> ~3.8% reduction) - not a random/stochastic event, to
+  // keep this app's fully-deterministic design intact. 0 (default) means
+  // every existing caller/test that omits this keeps working unchanged.
+  vacancyWeeksPerYear = 0,
   maxMonths = 30 * 12,
 }) {
   // Nothing to offset: no surplus, no scheduled contributions, and no income
@@ -98,11 +110,19 @@ export function calculateLoanWithOffset({
     return { years: 999, months: maxMonths, totalInterest: 999999, totalSavingsInterest: 0, monthlyData: [] };
   }
 
-  // TODO-90: split once outside the loop (incomeSources itself never
+  // TODO-90/91: split once outside the loop (incomeSources itself never
   // changes during the simulation) rather than filtering on every
-  // iteration.
+  // iteration. Three-way: Salary/Wages grows at salaryGrowthRate, rental
+  // (House Rent/Room Rent) grows at rentGrowthRate independently, and
+  // everything else (Dividends, Bonus, etc.) resolves plain as before.
   const salaryIncomeSources = incomeSources.filter(i => i.name === SALARY_INCOME_CATEGORY);
-  const otherIncomeSources = incomeSources.filter(i => i.name !== SALARY_INCOME_CATEGORY);
+  const rentalIncomeSources = incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name));
+  // TODO-95: a flat multiplier for the whole simulation - not a per-month
+  // accumulator, just applied to rental income below.
+  const vacancyFactor = 1 - (vacancyWeeksPerYear / 52);
+  const otherIncomeSources = incomeSources.filter(
+    i => i.name !== SALARY_INCOME_CATEGORY && !RENTAL_INCOME_CATEGORIES.includes(i.name)
+  );
 
   let balance = loanAmount;
   let offsetBalance = 0;
@@ -162,12 +182,15 @@ export function calculateLoanWithOffset({
     // date-ranged or one-time source) can't be pre-collapsed into a single
     // constant outside the loop, unlike the old single fortnightlyIncome
     // scalar this replaced.
-    // TODO-90: Salary/Wages sources grow at salaryGrowthRate; everything
-    // else resolves the same way as before (a no-op split at the 0%
-    // default, since getActiveAmountWithGrowth matches getActiveAmount
-    // exactly then).
+    // TODO-90/91/95: Salary/Wages sources grow at salaryGrowthRate, rental
+    // sources grow at rentGrowthRate independently and are haircut by
+    // vacancyFactor; everything else resolves the same way as before (a
+    // no-op split at 0%/0%/no-vacancy, since getActiveAmountWithGrowth
+    // matches getActiveAmount exactly and vacancyFactor is 1 then).
     const monthlyIncomeThisMonth = calculateMonthlyFromWeekly(
-      getActiveAmountWithGrowth(salaryIncomeSources, months, salaryGrowthRate) + getActiveAmount(otherIncomeSources, months)
+      getActiveAmountWithGrowth(salaryIncomeSources, months, salaryGrowthRate)
+        + getActiveAmountWithGrowth(rentalIncomeSources, months, rentGrowthRate) * vacancyFactor
+        + getActiveAmount(otherIncomeSources, months)
     );
 
     // Property expenses for this month, each resolved to whichever scheduled

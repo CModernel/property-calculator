@@ -207,6 +207,17 @@ const PropertyInvestmentCalculator = () => {
   // growth rate in this app (inflation, savings, property). 0 (default)
   // means every existing scenario behaves byte-for-byte identically.
   const [salaryGrowthRate, setSalaryGrowthRate] = useState(config.salaryGrowthRate ?? 0);
+  // TODO-91: annual % growth applied only to rental income sources (House
+  // Rent/Room Rent), independent of salaryGrowthRate - rent and wages move
+  // on their own schedules. 0 (default) means every existing scenario
+  // behaves byte-for-byte identically.
+  const [rentGrowthRate, setRentGrowthRate] = useState(config.rentGrowthRate ?? 0);
+  // TODO-95: weeks/year a rental property sits vacant, applied as a flat
+  // deterministic average haircut on rental income (e.g. 2 weeks -> ~3.8%
+  // reduction) - not a random/stochastic event, keeps this app's fully
+  // deterministic design intact. 0 (default) means every existing
+  // scenario behaves byte-for-byte identically.
+  const [vacancyWeeksPerYear, setVacancyWeeksPerYear] = useState(config.vacancyWeeksPerYear ?? 0);
   const [showIncome, setShowIncome] = useState(config.showIncome ?? false);
   const [showAddIncome, setShowAddIncome] = useState(false);
   const [newIncomeCategory, setNewIncomeCategory] = useState('Salary/Wages'); // see INCOME_CATEGORIES (src/calculations/incomeCategories.js)
@@ -448,6 +459,8 @@ const PropertyInvestmentCalculator = () => {
     propertyPrice,
     propertyGrowthRate,
     salaryGrowthRate,
+    rentGrowthRate,
+    vacancyWeeksPerYear,
     expenseGrowthRate,
     maxMonths: totalMonths,
   });
@@ -467,6 +480,8 @@ const PropertyInvestmentCalculator = () => {
     propertyPrice,
     propertyGrowthRate,
     salaryGrowthRate,
+    rentGrowthRate,
+    vacancyWeeksPerYear,
     expenseGrowthRate,
     maxMonths: totalMonths,
   });
@@ -626,6 +641,8 @@ const PropertyInvestmentCalculator = () => {
       loanEstablishmentFee, propertyValuation, homeInsurance, rateAdjustments, miscUpfrontCost,
       incomeSources,
       salaryGrowthRate,
+      rentGrowthRate,
+      vacancyWeeksPerYear,
       offsetContributions,
       personalExpenseItems,
       showPropertyExpenses, showMonthlyExpensesBreakdown, showClosingCostsBreakdown,
@@ -1590,6 +1607,36 @@ const PropertyInvestmentCalculator = () => {
                 suffix="% p.a."
               >
                 Annual growth applied only to "Salary/Wages" income sources, compounding monthly - independent of inflation, savings, or property growth (real wage growth moves on its own, via promotions or job changes). 0% (default) keeps salary income flat.
+              </NumberSliderField>
+
+              <NumberSliderField
+                label="Rent Growth Rate"
+                value={rentGrowthRate}
+                onChange={setRentGrowthRate}
+                min={-5}
+                max={15}
+                sliderMin={0}
+                sliderMax={8}
+                step={0.1}
+                color="green"
+                suffix="% p.a."
+              >
+                Annual growth applied only to "House Rent"/"Room Rent" income sources, compounding monthly - independent of Salary Growth Rate above, since rent and wages move on their own schedules. 0% (default) keeps rental income flat.
+              </NumberSliderField>
+
+              <NumberSliderField
+                label="Vacancy (weeks/year)"
+                value={vacancyWeeksPerYear}
+                onChange={setVacancyWeeksPerYear}
+                min={0}
+                max={52}
+                sliderMin={0}
+                sliderMax={12}
+                step={1}
+                color="green"
+                suffix=" weeks"
+              >
+                Applies a flat, deterministic average reduction to "House Rent"/"Room Rent" income every month (e.g. 2 weeks/year ≈ 3.8% less) - not a random event, just an expected average. 0 (default) assumes no vacancy.
               </NumberSliderField>
 
               {/* Add income form */}

@@ -2739,15 +2739,291 @@ optionally reuse in the commit message when you implement it.
   exactly. Saved at 2.5%, reloaded, confirmed persistence; cleared the
   saved scenario, confirmed it reset to 0%.
 
+- [x] **TODO-91: Rent Growth**
+  Follow-up from TODO-54's split - a near-exact copy of TODO-90's own
+  template, as anticipated when it was scoped. Extended the existing
+  Salary/Wages split in `calculateLoanWithOffset`
+  (`src/calculations/offsetSimulation.js`) from a two-way split to a
+  three-way one: Salary/Wages sources grow at `salaryGrowthRate`, rental
+  sources (`RENTAL_INCOME_CATEGORIES` - House Rent/Room Rent) grow at a
+  new `rentGrowthRate = 0` independently, and everything else (Dividends,
+  Bonus, etc.) resolves plain as before - each still via
+  `getActiveAmountWithGrowth` (TODO-90), just filtered differently.
+  New "Rent Growth Rate" `NumberSliderField` in the Income section, right
+  after Salary Growth Rate - shown unconditionally (not gated on
+  `isInvestmentProperty`), since Income Sources already allows House
+  Rent/Room Rent regardless of that flag (e.g. renting out a spare room
+  while owner-occupying). Same small-negative-range allowance as every
+  other growth rate this session.
+  `rentGrowthRate` persisted via `handleSaveScenario` - purely additive,
+  no `SCHEMA_VERSION` bump.
+  Added 2 new tests to `offsetSimulation.test.js` (0%/omitted matches the
+  plain path exactly; House Rent + Room Rent grow together while
+  Salary/Wages and Dividends stay flat, proving independence from
+  `salaryGrowthRate`), computed against `calculateCompoundedValue`
+  directly.
+  `npm test -- --run` (337/337), `npm run lint`, `npm run build` all
+  clean. Verified in the browser: added a $500/week House Rent income
+  source (dropping "Total interest paid" to $124,274 from the extra
+  surplus alone), then set Rent Growth Rate to 6% and watched it drop
+  further to $118,017 - while the static "Monthly Rental Income" figure
+  stayed exactly $2,167/month (500 × 52/12), confirming only the future
+  simulation is affected. Reset to 0%, confirmed it matched the
+  House-Rent-only baseline exactly. Saved at 4%, reloaded, confirmed
+  persistence; cleared the saved scenario, confirmed it reset to 0% (and
+  the added House Rent source was gone too, as expected).
+
+- [x] **TODO-95: Investment Vacancy Rate**
+  Follow-up from TODO-54's split. Modeled as a flat, deterministic
+  average haircut on rental income - **not** a random/stochastic event,
+  keeping the app's fully-deterministic design intact (per TODO-54's own
+  rejection of stochastic modeling for "unexpected repairs," same
+  reasoning). New `vacancyWeeksPerYear = 0` param in
+  `calculateLoanWithOffset` (`src/calculations/offsetSimulation.js`);
+  `vacancyFactor = 1 - (vacancyWeeksPerYear / 52)` computed once for the
+  whole simulation (a flat ratio, not a per-month accumulator or a
+  compounding rate like every other growth param this session), then
+  multiplied directly onto the already-grown rental income figure
+  (`getActiveAmountWithGrowth(rentalIncomeSources, months, rentGrowthRate) * vacancyFactor`) -
+  composes correctly with TODO-91's Rent Growth Rate (grow first, then
+  apply the vacancy haircut).
+  New "Vacancy (weeks/year)" `NumberSliderField` in the Income section,
+  right after Rent Growth Rate - shown unconditionally (not gated on
+  `isInvestmentProperty`), same reasoning as Rent Growth Rate: Income
+  Sources already allows House Rent/Room Rent regardless of that flag.
+  Range 0-52 weeks, default 0 (no vacancy modeled).
+  Explicitly distinct from the Purchase Health Check's existing
+  "Vacancy Buffer" indicator (a static "how many months could you
+  survive a vacancy right now" snapshot) - this is the first feature to
+  actually simulate a vacancy's effect over time.
+  `vacancyWeeksPerYear` persisted via `handleSaveScenario` - purely
+  additive, no `SCHEMA_VERSION` bump.
+  Added 4 new tests to `offsetSimulation.test.js` (0%/omitted matches
+  the plain path exactly; a 2-week haircut reduces rental income by the
+  expected factor while other income stays untouched; a full 52-week
+  edge case zeroes out rental income entirely; composes correctly with
+  a nonzero `rentGrowthRate`).
+  `npm test -- --run` (341/341), `npm run lint`, `npm run build` all
+  clean. Verified in the browser: added a $500/week House Rent source
+  (dropping "Total interest paid" to $124,274 from the extra surplus),
+  then set Vacancy to 4 weeks/year and watched it rise to $127,891 -
+  while "Monthly Rental Income" stayed exactly $2,167/month, confirming
+  only the future simulation is affected. Reset to 0, confirmed it
+  matched the House-Rent-only baseline exactly. Saved at 3 weeks,
+  reloaded, confirmed persistence; cleared the saved scenario, confirmed
+  it reset to the original baseline (House Rent removed too, as
+  expected).
+
+- [x] **TODO-52 (Analysis only, no code): When does it make sense to invest in ETFs instead of paying down the offset?**
+  Requested by the user - explicitly an analysis task. The question:
+  at what point (if any) does investing the surplus in ETFs (dividend-
+  paying or growth) out-earn the guaranteed, tax-free "return" of
+  reducing loan interest via the offset account? This is a genuine
+  personal-finance modeling question (comparing a risk-free guaranteed
+  rate - the loan's interest rate - against a variable, taxable
+  investment return) - needs research/modeling before any code, and
+  should be explicit that this app does not and should not give
+  personalized financial advice (see the existing disclaimer, TODO-25) -
+  any output here would need to stay clearly illustrative/educational.
+  Moved here at the user's request - deprioritized, and excluded by
+  default the next time TODOs are listed (ask before including it).
+  **Follow-up context added by the user, still analysis-only - intended
+  to be handed to another model for a second opinion before any design
+  work, same pattern as TODO-54's split**: the core argument is that the
+  offset's "return" is exactly the mortgage rate (6.13% in the shipped
+  scenario), guaranteed and tax-free - not because it earns interest, but
+  because the bank simply stops charging interest on that portion of the
+  loan. Matching that guaranteed, tax-free rate with an ETF or savings
+  account would require an even higher *pre-tax* return, since capital
+  gains/dividends are taxable. A diversified ETF has historically
+  returned ~7-10%/year long-term, but with real volatility (a single year
+  might be +25%, -18%, +5%, -10%, etc.) - no certainty, unlike the
+  offset.
+  Proposed a **4-stage framework** for when ETFs start making sense: (1)
+  buying the house - everything to the offset, liquidity matters most;
+  (2) building a buffer (6-12 months of expenses) - keep prioritizing the
+  offset; (3) the offset is already "large" relative to the loan (e.g.
+  $300k offset against a $500k loan, so interest is only charged on
+  $200k) - the debate starts here; (4) the offset is fully funded (offset
+  balance ≈ loan balance, interest ≈ $0) - every extra dollar stops
+  improving the offset, so investing starts to make more sense. Also
+  noted many people don't choose one or the other - they split (e.g.
+  first $200k to the offset, all new savings to ETFs after; or a fixed
+  70/30 split of monthly surplus).
+  Personal rule of thumb offered: mortgage rate ≥6% → almost always
+  prioritize the offset; 4-5% → start considering a mixed strategy;
+  ≤3-4% → lean more toward ETFs (assuming a solid emergency fund already
+  exists) - not because ETFs are "better," just because the offset's
+  guaranteed return stops being competitive once the cost of debt is low.
+  **Concrete feature idea proposed** (still just an idea, not a design):
+  an "Offset vs Investing" comparison - inputs: mortgage rate, expected
+  ETF return, investment horizon, tax rate (optional), monthly surplus;
+  output: three side-by-side strategies (100% Offset / 50% Offset+50%
+  ETF / 100% ETF) comparing projected outcomes AND risk, explicitly
+  **not** a single absolute recommendation - matches this app's own
+  "illustrative, not advice" philosophy (TODO-25's disclaimer). Noted as
+  a natural extension of what's already shipped (Offset simulation,
+  Savings Interest, Credit Card Benefit) and as a genuinely differentiated
+  feature most mortgage calculators don't offer.
+  Still needs: a second-opinion consultation (per the user's own plan)
+  before any design/implementation - open questions likely include how
+  to model ETF volatility/risk without turning this into a Monte Carlo
+  feature (see TODO-55's own rejection of stochastic modeling for
+  "unexpected repairs," for the same reasoning), and how to keep the
+  three-strategy comparison honest without implying a "right answer."
+  **Round 2 (this session), reframing the question**: the user explicitly
+  rejected arbitrary rule-of-thumb thresholds (e.g. "switch at 50% of the
+  loan paid off") in favor of finding a mathematically-grounded optimum
+  via simulation - "what variables actually drive this decision, ranked
+  by importance, which ones the calculator already tracks vs. needs to
+  add, which should be user inputs vs. sensible defaults, and finally a
+  strategy for the calculator to search for the best switch-over point
+  itself rather than asking the user to guess a percentage."
+  User's own candidate variable list (mortgage rate, expected ETF return,
+  marginal tax rate, investment horizon, remaining loan balance, current
+  offset balance, emergency buffer, monthly surplus available to invest,
+  risk tolerance - flagged as maybe omittable). Candidate switch-trigger
+  metrics to evaluate instead of "% of loan paid off": offset as % of
+  loan balance, LVR, and the spread between mortgage rate and expected
+  ETF return. Also asked whether the optimizer should maximize final net
+  worth alone, or a risk-adjusted score combining final net worth,
+  interest saved, available liquidity (offset), and portfolio volatility -
+  and proposed the optimizer mechanically brute-force many fixed
+  switch-over thresholds (offset reaches 10%, 20%, ... 100% of the loan)
+  and report which one wins.
+  **Cross-checked against the actual codebase** (corrects a few of the
+  user's own "already have this" assumptions): `monthlyData` already
+  tracks loan balance, offset balance, savings, property value (TODO-89),
+  and (via `interestRateField`, TODO-57) a variable rate schedule -
+  confirmed. **But LVR and Emergency Buffer are NOT tracked over time** -
+  both are static, month-1/settlement-only figures today (`lvr` in
+  `App.jsx`, `calculateEmergencyBufferMonths` in the Purchase Health
+  Check) - a genuine gap if either becomes the chosen switch-trigger
+  metric. **Equity (TODO-89) is deliberately narrow** - `propertyValue -
+  balance` only, excluding offset/savings by design - so "final net
+  worth" as the optimizer's objective would need a new, broader aggregate
+  (equity + offset + savings), not a reuse of the existing Equity figure
+  as-is. **Marginal Tax Rate and Expected ETF Return don't exist
+  anywhere** - the closest existing thing is TODO-94 (still unimplemented,
+  a flat effective tax rate on income, not specifically an ETF-gains
+  rate). **The most relevant existing mechanism is `offsetAllocationPct`**
+  (TODO-49) - it already splits monthly surplus between the offset and a
+  separately-tracked `savingsBalance`; an ETF-investing strategy is
+  architecturally the same shape (split surplus between offset and a
+  second growing balance), so this may be extendable rather than needing
+  a wholly parallel system.
+  **Sequencing, per the user's own explicit request**: produce a
+  consultation prompt for a second opinion FIRST; only break this down
+  into concrete implementation TODOs AFTER that second opinion comes
+  back - do not skip ahead to a task split yet (unlike TODO-54, which
+  went through this same two-round pattern before splitting into
+  TODO-89-95).
+  **Round 3 (user + second opinion + this session's synthesis)**: the
+  user refined their own consultation prompt before sending it, adding
+  two requirements the first draft lacked - explicitly define what
+  "better" means, and request formulas/numeric examples, not just
+  concepts. Also introduced a new dependency: ETFs should only be
+  visible once tax modeling is enabled (see the cross-reference added to
+  TODO-94 above), plus a broader idea that "Realistic Mode" might want
+  more such optional pieces beyond what's already shipped (not yet
+  enumerated by the user beyond taxes+ETFs).
+  **Second opinion's answer**: "better" isn't one answer - two people
+  with the same numbers can rationally choose different strategies based
+  on different goals (debt-free ASAP vs. maximize net worth at 60).
+  Proposed the app answer "what's optimal *for the goal you pick*"
+  instead of deciding for the user - via four **Optimization Goal**
+  profiles (Conservative/Balanced/Growth/Aggressive), each a different
+  weighted blend of five metrics (Final Net Worth = property + ETF
+  portfolio + cash - loan; Mortgage Freedom date; Total Interest Paid;
+  Investment Value; Offset Balance/liquidity), plus a "Worst Market
+  Crash" stress test (what if ETFs fall 30%?) mirroring the app's
+  existing rate-stress-test pattern. Proposed two more-intuitive metrics
+  than raw %/LVR: an "Investment Risk Score" (0-100, Offset=0/ETF=100)
+  and "Debt Dependency" (loan vs. offset, in plain dollars). For the
+  optimizer: search **two** variables, not one - when to start (offset
+  reaches 10/20/.../100% of the loan) × how much to invest (0/25/50/75/
+  100% of surplus) - a few dozen fully-deterministic simulations, trivial
+  for this app's architecture. Its own strongest idea, offered almost as
+  an aside at the end: instead of one recommended strategy, show a
+  **simplified Pareto front** (3-5 non-dominated strategies - e.g.
+  "Offset First: $2.55M net worth, 2048 payoff, risk 10/100" vs.
+  "Growth: $2.91M, 2055, risk 72/100") so the user sees the actual
+  trade-off instead of a single number that could read as advice.
+  **This session's synthesis - one clear disagreement**: agree with the
+  goal-dependent framing and the two-variable grid search. Disagree with
+  the weighted-composite-score mechanism itself - 4 profiles × 5 weights
+  each is ~20 arbitrary numbers a user can't audit or explain, the same
+  complexity-budget problem already rejected for real AU tax brackets in
+  TODO-94 ("if the user needs to understand it to trust it, don't build
+  it that way"). The model's own Pareto-front idea already makes the
+  weighted score largely redundant - if 3-5 non-dominated strategies are
+  shown side-by-side, the user can read the risk/return trade-off
+  directly without the app collapsing 5 metrics into one opaque number.
+  Recommend: **Pareto front as the primary/only output**; the "Risk
+  Score" (0-100) becomes a simple slider used to *highlight* the nearest
+  row in that table, not the input to a weighted formula. Keep the
+  "Worst Market Crash" stress test - cheap, reuses an existing pattern,
+  genuinely clarifies risk.
+  **Growing scope, flagged explicitly**: between the optimizer, the
+  Pareto table, the two new intuitive metrics, and the stress test, this
+  has grown well past a single feature - expect TODO-52 to need its own
+  split into several implementation TODOs later, the same way TODO-54
+  split into TODO-89-95, once analysis concludes.
+  **Round 4 (final second-opinion response, per the user)**: fully
+  agreed with dropping the weighted Overall Score, for the same reason
+  raised in this session's own synthesis - "why 40% net worth, why 25%
+  risk, who decided" reads as the app making a financial decision rather
+  than presenting a simulation. Confirmed the Pareto front as the
+  primary output, and clarified Risk Score should be purely descriptive
+  (market exposure, e.g. "28/100 - Low Risk"), never an input to a
+  formula - a user-facing slider can pick a preferred risk level and the
+  UI highlights the nearest Pareto row, but the score itself never
+  decides anything. Two genuinely new ideas: (1) an **Opportunity Cost**
+  comparison - "one extra dollar → Offset: 6.13% guaranteed, tax-free,
+  no risk" vs. "one extra dollar → ETF: 8.2% expected, taxable, market
+  risk, not guaranteed" - a static, no-simulation-needed side-by-side
+  that explains the trade-off without requiring the user to understand
+  finance; (2) don't assume the trigger is "offset as % of loan" -
+  let several candidate trigger types compete (offset %, LVR, remaining
+  balance, rate-vs-ETF-return spread, years remaining, emergency buffer)
+  and have the optimizer report which one actually produces the best
+  outcomes, potentially surfacing a more meaningful rule like "start
+  investing once your offset covers 12 months of expenses" instead of an
+  arbitrary percentage. Also widened the suggested grid resolution to
+  ~2,100 simulations (0-100% trigger × 0-100% allocation, in fine steps)
+  rather than a coarse few dozen.
+  **Final synthesis before splitting into implementation TODOs**: agree
+  with dropping the score and keeping the Pareto front + descriptive Risk
+  Score - this is now settled across two independent second opinions and
+  this session's own analysis, no further consultation needed on that
+  point. Agree the Opportunity Cost comparison is worth building - it's
+  cheap (no simulation, just two rates displayed side by side) and high
+  clarity, the same shape as the Credit Card Benefit's static card.
+  **Pushing back on two things to keep the first version shippable**:
+  (a) ~2,100 simulations at 1% granularity is finer than this illustrative
+  tool needs - a 5% grid (21 × 21 = 441 runs) already produces a smooth
+  enough Pareto front and stays comfortably fast; start there, finer
+  resolution is a cheap dial to turn up later if it's ever not enough.
+  (b) multi-trigger-type competition is the single most ambitious piece
+  discussed across all 4 rounds - it multiplies the grid search by the
+  number of trigger types AND reintroduces its own "how do we decide
+  which trigger wins" question one level up. Recommend shipping with
+  ONE trigger type first (offset as % of loan - the most intuitive, and
+  the one every round of analysis kept returning to), and treating
+  multi-trigger competition as a named-but-deferred enhancement, not
+  part of the first build - also note LVR and Emergency Buffer would
+  need to become real time-series (they're static snapshots today) before
+  they could ever be candidate triggers, a real prerequisite this defers.
+  **Resulting split**: TODO-96 (ETF Simulation Core - the foundational
+  parallel balance + Net Worth aggregate, gated behind TODO-94's tax
+  rate), TODO-97 (Opportunity Cost comparison - cheapest, no dependency,
+  ships independently of TODO-96), TODO-98 (Pareto Front Strategy
+  Comparison - the grid search + non-dominated filtering + comparison
+  table, depends on TODO-96).
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
 
-
-- [ ] **TODO-91: Rent Growth (annual %, investment properties only)**
-  Follow-up from TODO-54's split. Small once TODO-89's mechanism exists -
-  same shape as TODO-90, applied to rental income sources
-  (`RENTAL_INCOME_CATEGORIES`) instead of personal income.
 
 - [ ] **TODO-94: Gross/Net income via a flat effective tax rate (not real AU tax brackets)**
   Follow-up from TODO-54's split. Resolves the actual tension between the
@@ -2760,16 +3036,63 @@ optionally reuse in the commit message when you implement it.
   know their gross figure AND non-PAYG income (self-employment/
   dividends/bonus) via the same mechanism, no tax-bracket data to source
   or maintain.
+  **New dependency noted (this session, from TODO-52's ongoing analysis)**:
+  the user's ETF-investing feature idea (TODO-52) should only become
+  visible/usable once this tax rate is set - comparing a pre-tax ETF
+  return against the offset's tax-free return would be a dishonest
+  comparison, so ETFs "make sense" specifically because of the tax
+  treatment difference. Not a reason to bundle the two into one toggle,
+  just a functional requirement: TODO-52's eventual feature reads this
+  tax rate as an input, it doesn't duplicate it.
 
-- [ ] **TODO-95: Investment Vacancy Rate (weeks/year vacant, investment properties only)**
-  Follow-up from TODO-54's split. Small. Model as a deterministic average
-  haircut on simulated rental income (e.g. 2/52 weeks vacant → ~3.8%
-  reduction applied every month) - **not** a random/stochastic event, to
-  keep the app's fully-deterministic design intact (see TODO-54's own
-  write-up for why a literal random-event model was rejected). Distinct
-  from the Purchase Health Check's existing "Vacancy Buffer" indicator,
-  which only answers "how many months could you survive a vacancy right
-  now" - this would be the first feature to actually simulate one.
+- [ ] **TODO-96: ETF Simulation Core (foundational, gated behind TODO-94's tax rate)**
+  Resulting split from TODO-52's analysis (4 rounds, done - see TODO-52's
+  own write-up in Completed for the full history). The foundational
+  piece everything else here depends on. New parallel "ETF balance"
+  accumulator inside `calculateLoanWithOffset`, growing at a new
+  "Expected ETF Return" annual % (reuse `calculateCompoundedValue`,
+  same as every other growth rate this session), fed by whatever share
+  of the monthly surplus a single fixed strategy sends to it instead of
+  the offset - one manually-configured strategy at a time, no search
+  yet (TODO-98 builds the search on top of this). **Must require
+  TODO-94's tax rate to be set before this becomes visible/usable** -
+  comparing a pre-tax ETF return against the offset's tax-free return
+  would be a dishonest comparison (see the dependency noted on TODO-94).
+  Needs a new, broader "Net Worth" aggregate (property equity + offset +
+  savings + ETF balance - loan balance) distinct from TODO-89's existing
+  Equity figure, which is deliberately narrower (property value - loan
+  balance only).
+
+- [ ] **TODO-97: Opportunity Cost comparison (static, no dependency)**
+  Resulting split from TODO-52's analysis. Cheapest of the three - no
+  simulation needed, ships independently of TODO-96. A static "right
+  now" side-by-side: "one extra dollar → Offset: {mortgage rate}%
+  guaranteed, tax-free, no risk" vs. "one extra dollar → ETF: {expected
+  return}% expected, taxable, market risk, not guaranteed" - explains
+  the trade-off without requiring the user to understand finance. Same
+  shape/cost as the Credit Card Benefit's static card (TODO-55).
+
+- [ ] **TODO-98: Pareto Front Strategy Comparison**
+  Resulting split from TODO-52's analysis. Depends on TODO-96. Runs the
+  single-strategy simulation from TODO-96 many times over a grid (switch
+  trigger × allocation %) and returns the non-dominated (Pareto-optimal)
+  strategies as a comparison table - explicitly **no** weighted "Overall
+  Score" and **no** single "best" recommendation (rejected across two
+  independent second opinions and this session's own analysis - see
+  TODO-52's write-up for why). Ship with **one** trigger type first
+  (offset as % of remaining loan balance - the one every round of
+  analysis kept returning to as most intuitive); treat "let multiple
+  trigger types compete" as a named-but-deferred enhancement, since it
+  multiplies the grid search and reintroduces its own "which trigger
+  wins" question. Start with a 5% grid (21 × 21 = 441 simulations, not
+  the ~2,100 the second opinion suggested) - plenty smooth for an
+  illustrative tool, finer resolution is a cheap dial to turn up later.
+  Risk Score (0-100, Offset=0/ETF=100 exposure) shown per strategy as a
+  purely descriptive metric - never an input to a formula; a
+  user-facing slider can highlight the nearest Pareto row by preferred
+  risk level, but never decides anything itself. Also add the "Worst
+  Market Crash" stress test (what if ETFs fall 30%?) - cheap, mirrors
+  the existing Interest Rate Stress Test pattern (`purchaseHealthCheck.js`).
 
 - [x] **TODO-43: Add NSW Foreign Purchaser Additional Duty Surcharge (8% extra)**
   Requested by the user, explicitly flagged as **not urgent**, with the
@@ -2800,21 +3123,4 @@ optionally reuse in the commit message when you implement it.
 ---
 
 ## ⚪ LOW PRIORITY (Deprioritized - excluded from default TODO listings)
-
-- [ ] **TODO-52 (Analysis only, no code): When does it make sense to invest in ETFs instead of paying down the offset?**
-  Requested by the user - explicitly an analysis task. The question:
-  at what point (if any) does investing the surplus in ETFs (dividend-
-  paying or growth) out-earn the guaranteed, tax-free "return" of
-  reducing loan interest via the offset account? This is a genuine
-  personal-finance modeling question (comparing a risk-free guaranteed
-  rate - the loan's interest rate - against a variable, taxable
-  investment return) - needs research/modeling before any code, and
-  should be explicit that this app does not and should not give
-  personalized financial advice (see the existing disclaimer, TODO-25) -
-  any output here would need to stay clearly illustrative/educational.
-  Moved here at the user's request - deprioritized, and excluded by
-  default the next time TODOs are listed (ask before including it).
-
-
-
 

@@ -890,6 +890,52 @@ describe('Salary/Wages income growth (salaryGrowthRate, TODO-90)', () => {
   });
 });
 
+describe('rental income growth (rentGrowthRate, TODO-91)', () => {
+  it('matches getActiveAmount exactly (no growth) when rentGrowthRate is 0/omitted', () => {
+    const shared = {
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [{ id: 1, name: 'House Rent', amount: 300, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 3,
+    };
+    const withDefault = calculateLoanWithOffset(shared);
+    const withExplicitZero = calculateLoanWithOffset({ ...shared, rentGrowthRate: 0 });
+    expect(withExplicitZero).toEqual(withDefault);
+    expect(withDefault.monthlyData.map(d => d.offset)).toEqual([1300, 2600, 3900]);
+  });
+
+  it('grows House Rent and Room Rent income independently of salaryGrowthRate and other income', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [
+        { id: 1, name: 'Salary/Wages', amount: 200, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH },
+        { id: 2, name: 'House Rent', amount: 300, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH },
+        { id: 3, name: 'Room Rent', amount: 50, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH },
+        { id: 4, name: 'Dividends', amount: 100, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH },
+      ],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      salaryGrowthRate: 0,
+      rentGrowthRate: 12, // -> exactly 1%/month via calculateMonthlyRate
+      maxMonths: 3,
+    });
+    let cumulative = 0;
+    const expectedOffsets = [1, 2, 3].map((month) => {
+      const grownRent = calculateCompoundedValue(300 + 50, 12, month);
+      cumulative += calculateMonthlyFromWeekly(200 + grownRent + 100); // Salary/Dividends stay flat
+      return Math.round(cumulative);
+    });
+    expect(result.monthlyData.map(d => d.offset)).toEqual(expectedOffsets);
+  });
+});
+
 describe('expense growth (expenseGrowthRate, TODO-92)', () => {
   it('matches the plain path exactly when expenseGrowthRate is 0/omitted', () => {
     const emptyField = { base: 0, changes: [] };
@@ -964,6 +1010,88 @@ describe('expense growth (expenseGrowthRate, TODO-92)', () => {
     const expectedOffsets = [1, 2].map((month) => {
       const grownPersonalExpense = calculateCompoundedValue(300, 12, month);
       cumulative += 1000 - grownPersonalExpense;
+      return Math.round(cumulative);
+    });
+    expect(result.monthlyData.map(d => d.offset)).toEqual(expectedOffsets);
+  });
+});
+
+describe('rental vacancy (vacancyWeeksPerYear, TODO-95)', () => {
+  it('matches the plain path exactly when vacancyWeeksPerYear is 0/omitted', () => {
+    const shared = {
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [{ id: 1, name: 'House Rent', amount: 300, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 3,
+    };
+    const withDefault = calculateLoanWithOffset(shared);
+    const withExplicitZero = calculateLoanWithOffset({ ...shared, vacancyWeeksPerYear: 0 });
+    expect(withExplicitZero).toEqual(withDefault);
+    expect(withDefault.monthlyData.map(d => d.offset)).toEqual([1300, 2600, 3900]);
+  });
+
+  it('applies a flat deterministic haircut to rental income only, leaving other income untouched', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [
+        { id: 1, name: 'Salary/Wages', amount: 200, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH },
+        { id: 2, name: 'House Rent', amount: 300, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH },
+      ],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      vacancyWeeksPerYear: 2, // -> 1 - 2/52 ≈ 0.96154
+      maxMonths: 2,
+    });
+    const vacancyFactor = 1 - (2 / 52);
+    let cumulative = 0;
+    const expectedOffsets = [1, 2].map(() => {
+      cumulative += calculateMonthlyFromWeekly(200 + 300 * vacancyFactor);
+      return Math.round(cumulative);
+    });
+    expect(result.monthlyData.map(d => d.offset)).toEqual(expectedOffsets);
+  });
+
+  it('is a full 52-week vacancy edge case that zeroes out rental income entirely', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [{ id: 1, name: 'House Rent', amount: 300, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      vacancyWeeksPerYear: 52,
+      maxMonths: 1,
+    });
+    // Rental income fully offset by vacancy - only the base surplus reaches the offset.
+    expect(result.monthlyData[0].offset).toBe(1000);
+  });
+
+  it('composes correctly with rentGrowthRate (grow first, then apply the vacancy haircut)', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [{ id: 1, name: 'House Rent', amount: 300, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      rentGrowthRate: 12,
+      vacancyWeeksPerYear: 2,
+      maxMonths: 2,
+    });
+    const vacancyFactor = 1 - (2 / 52);
+    let cumulative = 0;
+    const expectedOffsets = [1, 2].map((month) => {
+      const grownRent = calculateCompoundedValue(300, 12, month);
+      cumulative += calculateMonthlyFromWeekly(grownRent * vacancyFactor);
       return Math.round(cumulative);
     });
     expect(result.monthlyData.map(d => d.offset)).toEqual(expectedOffsets);
