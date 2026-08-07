@@ -94,6 +94,18 @@ export function calculateLoanWithOffset({
   // that omits this keeps working unchanged - isGross items only exist if
   // a caller explicitly adds them.
   effectiveTaxRate = 0,
+  // TODO-96: what share of the surplus NOT sent to the offset (i.e. the
+  // same pool offsetAllocationPct's remainder would otherwise send wholly
+  // to savings) instead goes to a growing ETF balance. 0 (default) means
+  // every existing caller/test that omits this keeps working unchanged -
+  // the remainder still goes 100% to savings, byte-for-byte.
+  etfAllocationPct = 0,
+  // TODO-96: annual % expected ETF return, taxed by effectiveTaxRate
+  // before being applied (an untaxed ETF return compared against the
+  // offset's tax-free return would be a dishonest comparison - see
+  // TODO-94). 0 (default) means every existing caller/test that omits
+  // this keeps working unchanged.
+  expectedEtfReturn = 0,
   maxMonths = 30 * 12,
 }) {
   // Nothing to offset: no surplus, no scheduled contributions, and no income
@@ -133,11 +145,17 @@ export function calculateLoanWithOffset({
   let balance = loanAmount;
   let offsetBalance = 0;
   let savingsBalance = initialSavingsBalance;
+  // TODO-96: no initialEtfBalance param - there's no "current ETF
+  // holdings" input anywhere in the app, so 0 is the only sensible seed.
+  let etfBalance = 0;
   let totalInterest = 0;
   let totalSavingsInterest = 0;
   let months = 0;
   const monthlyData = [];
   const savingsMonthlyRate = calculateMonthlyRate(savingsInterestRate);
+  // TODO-96: taxed by effectiveTaxRate before being applied - see the
+  // param comment above for why this isn't just expectedEtfReturn as-is.
+  const etfMonthlyRate = calculateMonthlyRate(expectedEtfReturn * (1 - effectiveTaxRate / 100));
 
   // The caller's monthlyToOffset already has the ORIGINAL (month-1)
   // monthlyPayment baked in (see App.jsx's baseMonthlySurplus) - a rate
@@ -262,12 +280,22 @@ export function calculateLoanWithOffset({
     const savingsInterestThisMonth = savingsBalance * savingsMonthlyRate;
     savingsBalance += savingsInterestThisMonth;
     totalSavingsInterest += savingsInterestThisMonth;
+    // TODO-96: same "grows on last month's balance before this month's
+    // deposit" convention as savings above - a no-op at the 0% default.
+    etfBalance += etfBalance * etfMonthlyRate;
 
     // TODO-49: only offsetAllocationPct of the surplus reaches the offset -
     // the rest builds the separately-tracked savings balance instead.
     const offsetShare = netMonthlyDeposit * (offsetAllocationPct / 100);
-    offsetBalance += offsetShare;
     savingsBalance += netMonthlyDeposit - offsetShare;
+    // TODO-96: etfAllocationPct diverts a share of the OFFSET's OWN portion
+    // into the ETF balance instead - this is the actual "offset vs ETF"
+    // trade-off TODO-52's analysis was about (slower payoff, potentially
+    // higher return), not a further split of the savings side. 0% (default)
+    // means offsetBalance gets offsetShare in full, byte-for-byte unchanged.
+    const etfShare = offsetShare * (etfAllocationPct / 100);
+    offsetBalance += offsetShare - etfShare;
+    etfBalance += etfShare;
 
     // Offset cannot exceed loan balance
     const effectiveOffset = Math.min(offsetBalance, balance);
@@ -289,6 +317,7 @@ export function calculateLoanWithOffset({
       balance: Math.round(balance),
       offset: Math.round(effectiveOffset),
       savings: Math.round(savingsBalance),
+      etf: Math.round(etfBalance),
       effectiveBalance: Math.round(effectiveBalance),
       monthlyInterestPaid: Math.round(monthlyInterest),
       totalInterestPaid: Math.round(totalInterest),

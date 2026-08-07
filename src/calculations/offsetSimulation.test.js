@@ -1178,3 +1178,98 @@ describe('gross income tax conversion (effectiveTaxRate, TODO-94)', () => {
     expect(result.monthlyData[0].offset).toBe(Math.round(calculateMonthlyFromWeekly(400 * 0.7)));
   });
 });
+
+describe('ETF investing (etfAllocationPct/expectedEtfReturn, TODO-96)', () => {
+  it('matches the plain path exactly when etfAllocationPct/expectedEtfReturn are 0/omitted', () => {
+    const shared = {
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      offsetAllocationPct: 70,
+      maxMonths: 3,
+    };
+    const withDefault = calculateLoanWithOffset(shared);
+    const withExplicitZero = calculateLoanWithOffset({ ...shared, etfAllocationPct: 0, expectedEtfReturn: 0 });
+    expect(withExplicitZero).toEqual(withDefault);
+    expect(withDefault.monthlyData.map(d => d.etf)).toEqual([0, 0, 0]);
+  });
+
+  it("diverts etfAllocationPct out of the offset's own share, leaving the savings share untouched - the actual offset-vs-ETF trade-off", () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      offsetAllocationPct: 50,
+      etfAllocationPct: 40,
+      maxMonths: 2,
+    });
+    // offsetShare = 500/mo; etfShare = 500*0.4 = 200; offset gets 500-200=300.
+    // savings is entirely unaffected by etfAllocationPct - it still gets the
+    // full non-offset half (500/mo) exactly as offsetAllocationPct alone
+    // would produce.
+    expect(result.monthlyData.map(d => d.offset)).toEqual([300, 600]);
+    expect(result.monthlyData.map(d => d.savings)).toEqual([500, 1000]);
+    expect(result.monthlyData.map(d => d.etf)).toEqual([200, 400]);
+  });
+
+  it("grows the ETF balance at expectedEtfReturn net of effectiveTaxRate, compounding on the running balance before each month's deposit", () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      offsetAllocationPct: 100, // the entire surplus would otherwise go to offset
+      etfAllocationPct: 100, // ...all of which instead goes to ETF
+      expectedEtfReturn: 24,
+      effectiveTaxRate: 50, // net rate: 24 * (1 - 0.5) = 12% p.a. -> exactly 1%/month
+      maxMonths: 3,
+    });
+    expect(result.monthlyData.map(d => d.etf)).toEqual([1000, 2010, 3030]);
+    expect(result.monthlyData.map(d => d.offset)).toEqual([0, 0, 0]);
+  });
+
+  it('applies the full pre-tax rate when effectiveTaxRate is 0/omitted - the calc layer does not block this, the UI gates it', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      offsetAllocationPct: 100,
+      etfAllocationPct: 100,
+      expectedEtfReturn: 12, // effectiveTaxRate omitted -> full 12% p.a. -> 1%/month
+      maxMonths: 2,
+    });
+    expect(result.monthlyData.map(d => d.etf)).toEqual([1000, 2010]);
+  });
+
+  it('composes correctly with offsetAllocationPct - offset + savings + etf sums back to the full surplus', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      offsetAllocationPct: 50,
+      etfAllocationPct: 25,
+      maxMonths: 1,
+    });
+    // offsetShare = 500; etfShare = 500*0.25 = 125; offset gets 500-125=375;
+    // savings gets the untouched non-offset half (500).
+    const { offset, savings, etf } = result.monthlyData[0];
+    expect(offset).toBe(375);
+    expect(savings).toBe(500);
+    expect(etf).toBe(125);
+    expect(offset + savings + etf).toBe(1000);
+  });
+});

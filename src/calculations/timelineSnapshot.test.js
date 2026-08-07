@@ -13,6 +13,7 @@ describe('getTimelineSnapshot', () => {
       balance: 500000,
       offset: 0,
       savings: 0,
+      etf: 0,
       effectiveBalance: 500000,
       monthlyInterestPaid: 2292,
       totalInterestPaid: 0,

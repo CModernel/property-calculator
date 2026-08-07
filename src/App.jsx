@@ -166,15 +166,28 @@ const PropertyInvestmentCalculator = () => {
   const [cashbackPct, setCashbackPct] = useState(config.cashbackPct ?? 0);
   const [annualCardFee, setAnnualCardFee] = useState(config.annualCardFee ?? 0);
   // TODO-97: a static "right now" comparison (offset return vs. an ETF's
-  // expected return), deliberately NOT wired into the simulation and with
-  // no dependency on TODO-94/96 - just two rates shown side by side. Off
-  // by default, so it costs nothing for anyone who doesn't opt in.
+  // expected return), deliberately NOT wired into the simulation on its
+  // own - just two rates shown side by side. Off by default, so it costs
+  // nothing for anyone who doesn't opt in. TODO-96 below reuses
+  // expectedEtfReturn as the actual simulation's growth rate too, so
+  // there's a single source of truth for "what ETF return am I assuming."
   const [showOpportunityCost, setShowOpportunityCost] = useState(config.showOpportunityCost ?? false);
   // Defaults to a plausible long-term diversified-ETF figure (per this
   // session's own ETF analysis rounds) rather than 0, since this value is
   // only ever seen once the user has explicitly opted in above - a 0%
   // "expected return" would just look broken.
   const [expectedEtfReturn, setExpectedEtfReturn] = useState(config.expectedEtfReturn ?? 8);
+  // TODO-96: diverts part of what would otherwise go to the offset into a
+  // growing ETF balance instead - the actual offset-vs-ETF trade-off (slower
+  // payoff, potentially higher return), not a further split of savings.
+  // Gated on effectiveTaxRate being set (see the checkbox below) - an
+  // untaxed ETF return compared against the offset's tax-free return would
+  // be a dishonest comparison. Off by default, so it costs nothing for
+  // anyone who doesn't opt in.
+  const [useEtfInvesting, setUseEtfInvesting] = useState(config.useEtfInvesting ?? false);
+  // 20% (not 0) so checking the box above has a visible effect immediately,
+  // same reasoning as expectedEtfReturn's non-zero default.
+  const [etfAllocationPct, setEtfAllocationPct] = useState(config.etfAllocationPct ?? 20);
   // TODO-93: annual % - a pure display-layer conversion of "Total interest
   // paid" into today's dollars, no simulation changes. 0 (default) means
   // no inflation is modeled, matching every other purely-additive rate
@@ -456,6 +469,13 @@ const PropertyInvestmentCalculator = () => {
     miscPropertyExpense: miscPropertyExpenseField,
   };
 
+  // TODO-96: the checkbox itself is disabled at effectiveTaxRate === 0 (see
+  // the JSX below), but if a user un-sets the tax rate AFTER already
+  // enabling ETF investing, this re-derived flag - not the raw
+  // useEtfInvesting state - is what actually zeroes the effect, so
+  // unchecking-by-disabling stays honest regardless of how it happened.
+  const etfInvestingActive = useEtfInvesting && effectiveTaxRate > 0;
+
   // Complete loan simulation with offset. maxMonths must match the chosen
   // term explicitly - otherwise the loop would keep the old 30-year cap
   // baked into offsetSimulation.js's default, inconsistent with a shorter
@@ -480,6 +500,8 @@ const PropertyInvestmentCalculator = () => {
     vacancyWeeksPerYear,
     expenseGrowthRate,
     effectiveTaxRate,
+    etfAllocationPct: etfInvestingActive ? etfAllocationPct : 0,
+    expectedEtfReturn,
     maxMonths: totalMonths,
   });
   const baselineSimulation = calculateLoanWithOffset({
@@ -502,6 +524,8 @@ const PropertyInvestmentCalculator = () => {
     vacancyWeeksPerYear,
     expenseGrowthRate,
     effectiveTaxRate,
+    etfAllocationPct: etfInvestingActive ? etfAllocationPct : 0,
+    expectedEtfReturn,
     maxMonths: totalMonths,
   });
   const interestSaved = baselineSimulation.totalInterest - loanSimulation.totalInterest;
@@ -656,7 +680,7 @@ const PropertyInvestmentCalculator = () => {
       miscPropertyExpense: miscPropertyExpenseField.base, miscPropertyExpenseChanges: miscPropertyExpenseField.changes,
       isFirstHomeBuyer, isForeignPurchaser, totalSavings, offsetAllocationPct, savingsInterestRate, expenseGrowthRate, currentAge, showMortgageFreeAge, payLmiUpfront,
       useCreditCard, monthlyCardSpend, avgExtraDaysHeld, cashbackPct, annualCardFee, inflationRate,
-      showOpportunityCost, expectedEtfReturn,
+      showOpportunityCost, expectedEtfReturn, useEtfInvesting, etfAllocationPct,
       conveyancing, buildingInspection, pestInspection, registrationFees, searches,
       loanEstablishmentFee, propertyValuation, homeInsurance, rateAdjustments, miscUpfrontCost,
       incomeSources,
@@ -1243,41 +1267,80 @@ const PropertyInvestmentCalculator = () => {
                 )}
               </div>
 
-              {showOpportunityCost && (
-                <>
-                  <NumberSliderField
-                    label="Expected ETF Return"
-                    value={expectedEtfReturn}
-                    onChange={setExpectedEtfReturn}
-                    min={0}
-                    max={20}
-                    sliderMin={0}
-                    sliderMax={12}
-                    step={0.1}
-                    color="blue"
-                    suffix="% p.a."
-                  >
-                    A diversified ETF has historically returned roughly this much per year over the long term - but unlike the offset, it's not guaranteed and can fall in any given year.
-                  </NumberSliderField>
+              <div>
+                <label className={`flex items-center gap-2 text-sm font-medium ${effectiveTaxRate === 0 ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-200'}`}>
+                  <input
+                    type="checkbox"
+                    checked={useEtfInvesting}
+                    disabled={effectiveTaxRate === 0}
+                    onChange={(e) => setUseEtfInvesting(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-blue-500 disabled:cursor-not-allowed"
+                  />
+                  Invest in ETFs
+                  <InfoTooltip label="What does this do?">
+                    <p>Diverts part of what would otherwise go to your offset into a growing ETF balance instead - a single, manually-set strategy, simulated deterministically like everything else in this app. Slower offset payoff, potentially higher return.</p>
+                    <p className="mt-2">This is illustrative only, not a recommendation - always consult a licensed financial adviser before making investment decisions.</p>
+                  </InfoTooltip>
+                </label>
+                {effectiveTaxRate === 0 ? (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Set an Effective Tax Rate above (in the Income section) first - otherwise this compares a pre-tax ETF return against the offset's tax-free return, which isn't a fair comparison.</p>
+                ) : !useEtfInvesting && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Diverts part of your offset contribution into a growing ETF balance instead.</p>
+                )}
+              </div>
 
-                  <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-sm space-y-3">
-                    <p className="font-semibold text-gray-700 dark:text-gray-200">One extra dollar goes to...</p>
-                    <div className="flex justify-between items-start gap-3">
-                      <div>
-                        <p className="text-gray-700 dark:text-gray-200 font-medium">🏦 Offset</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">Guaranteed, tax-free, no market risk</p>
-                      </div>
-                      <p className="text-lg font-bold text-green-600 dark:text-green-400 whitespace-nowrap">{interestRate.toFixed(2)}%</p>
+              {(showOpportunityCost || useEtfInvesting) && (
+                <NumberSliderField
+                  label="Expected ETF Return"
+                  value={expectedEtfReturn}
+                  onChange={setExpectedEtfReturn}
+                  min={0}
+                  max={20}
+                  sliderMin={0}
+                  sliderMax={12}
+                  step={0.1}
+                  color="blue"
+                  suffix="% p.a."
+                >
+                  A diversified ETF has historically returned roughly this much per year over the long term - but unlike the offset, it's not guaranteed and can fall in any given year.
+                </NumberSliderField>
+              )}
+
+              {showOpportunityCost && (
+                <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-sm space-y-3">
+                  <p className="font-semibold text-gray-700 dark:text-gray-200">One extra dollar goes to...</p>
+                  <div className="flex justify-between items-start gap-3">
+                    <div>
+                      <p className="text-gray-700 dark:text-gray-200 font-medium">🏦 Offset</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Guaranteed, tax-free, no market risk</p>
                     </div>
-                    <div className="flex justify-between items-start gap-3">
-                      <div>
-                        <p className="text-gray-700 dark:text-gray-200 font-medium">📈 ETF</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">Expected, taxable, market risk - not guaranteed</p>
-                      </div>
-                      <p className="text-lg font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">{expectedEtfReturn.toFixed(2)}%</p>
-                    </div>
+                    <p className="text-lg font-bold text-green-600 dark:text-green-400 whitespace-nowrap">{interestRate.toFixed(2)}%</p>
                   </div>
-                </>
+                  <div className="flex justify-between items-start gap-3">
+                    <div>
+                      <p className="text-gray-700 dark:text-gray-200 font-medium">📈 ETF</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Expected, taxable, market risk - not guaranteed</p>
+                    </div>
+                    <p className="text-lg font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">{expectedEtfReturn.toFixed(2)}%</p>
+                  </div>
+                </div>
+              )}
+
+              {etfInvestingActive && (
+                <NumberSliderField
+                  label="ETF Allocation"
+                  value={etfAllocationPct}
+                  onChange={setEtfAllocationPct}
+                  min={0}
+                  max={100}
+                  sliderMin={0}
+                  sliderMax={100}
+                  step={5}
+                  color="indigo"
+                  suffix="%"
+                >
+                  % of what would go to your offset that instead goes to ETF investing - your savings share (via Offset Allocation above) is untouched. 0% (default) sends everything to the offset, same as before.
+                </NumberSliderField>
               )}
 
               <div>
@@ -2912,10 +2975,30 @@ const PropertyInvestmentCalculator = () => {
                           <span className="flex items-center gap-1">🏠 Value: ${snapshot.propertyValue.toLocaleString()}</span>
                         </>
                       )}
+                      {/* TODO-96: only shown once ETF investing is actually
+                          active - at 0% allocation this would just be a
+                          repeating $0 row. */}
+                      {etfInvestingActive && (
+                        <>
+                          <span className="text-gray-300 dark:text-gray-600">|</span>
+                          <span className="flex items-center gap-1">📈 ETF: ${snapshot.etf.toLocaleString()}</span>
+                        </>
+                      )}
                     </div>
                     {propertyGrowthRate !== 0 && (
                       <p className={`text-sm font-semibold mt-2 ${getBalanceColor(snapshot.propertyValue - snapshot.balance)}`}>
                         🏠 Projected Equity: ${(snapshot.propertyValue - snapshot.balance).toLocaleString()}
+                      </p>
+                    )}
+                    {/* TODO-96: broader than Projected Equity above (which
+                        deliberately excludes offset/savings/ETF) - everything
+                        owned (property equity + all liquid balances) minus
+                        what's owed (already netted into equity). Gated on
+                        ETF investing being active, not propertyGrowthRate,
+                        since it's meaningful even with a flat property value. */}
+                    {etfInvestingActive && (
+                      <p className={`text-sm font-semibold mt-1 ${getBalanceColor(snapshot.propertyValue - snapshot.balance + snapshot.offset + snapshot.savings + snapshot.etf)}`}>
+                        💎 Net Worth: ${(snapshot.propertyValue - snapshot.balance + snapshot.offset + snapshot.savings + snapshot.etf).toLocaleString()}
                       </p>
                     )}
                   </div>

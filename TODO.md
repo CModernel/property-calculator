@@ -2891,6 +2891,77 @@ optionally reuse in the commit message when you implement it.
   reloaded, confirmed persistence; cleared the saved scenario, confirmed
   reset to 0% with no Gross items.
 
+- [x] **TODO-96: ETF Simulation Core (foundational, gated behind TODO-94's tax rate)**
+  Resulting split from TODO-52's analysis (4 rounds, done - see TODO-52's
+  own write-up below for the full history). The foundational piece
+  TODO-98's search will build on top of - a single, manually-set
+  allocation strategy, simulated deterministically, no search yet.
+  **Important correction made mid-implementation**: the first pass
+  carved the ETF share out of the "non-offset" (savings) portion of the
+  surplus, reasoning it would leave `offsetAllocationPct`'s existing
+  semantics untouched. That was wrong - it meant "Invest in ETFs" had
+  zero effect on payoff time whenever `offsetAllocationPct` was 100%
+  (the app's own default), silently defeating the actual point of
+  TODO-52's analysis (offset-repayment-speed vs. ETF-growth, not
+  savings-vs-ETF). Caught by browser-testing at the default 100%
+  allocation and seeing "Total interest paid" not move at all. Fixed:
+  `etfAllocationPct` now diverts a share of the **offset's own** portion
+  into the ETF balance instead (`etfShare = offsetShare *
+  (etfAllocationPct / 100); offsetBalance += offsetShare - etfShare`) -
+  matches TODO.md's own original wording ("instead of the offset") and
+  now genuinely trades slower payoff for potential ETF growth regardless
+  of `offsetAllocationPct`'s value. 0% (default) stays byte-for-byte
+  unchanged either way.
+  ETF growth is taxed by `effectiveTaxRate` before being applied
+  (`calculateMonthlyRate(expectedEtfReturn * (1 - effectiveTaxRate / 100))`)
+  - not just gating UX, mathematically load-bearing: TODO-94 only taxes
+  income sources, not investment gains, so without this the ETF would
+  grow at its full pre-tax rate, exactly the dishonest comparison
+  TODO-94 exists to prevent.
+  New "Invest in ETFs" checkbox in Financial Position, right after
+  "Compare Offset vs ETF Investing" - **disabled** (dimmed, `disabled`
+  attr) at `effectiveTaxRate === 0`, reusing the exact First Home
+  Buyer/Investment Property disabled-checkbox pattern (`App.jsx`) rather
+  than hiding it outright, with an explanatory line for why. The
+  existing `expectedEtfReturn` slider (TODO-97) is now shared - its
+  reveal condition changed from `showOpportunityCost` alone to
+  `showOpportunityCost || useEtfInvesting`, a single source of truth for
+  "what ETF return am I assuming," rather than a duplicate second input.
+  New "ETF Allocation" slider (0-100%, default 20% for a visible effect
+  once checked) only rendered when ETF investing is actually active.
+  A derived `etfInvestingActive = useEtfInvesting && effectiveTaxRate > 0`
+  (not the raw checkbox state) is what's actually passed into both
+  `calculateLoanWithOffset` calls - so un-setting the tax rate after
+  enabling ETF investing zeroes its effect immediately, not just its
+  visibility.
+  New "Net Worth" aggregate (`propertyValue - balance + offset + savings
+  + etf`) - deliberately broader than TODO-89's own "Projected Equity"
+  (which excludes offset/savings/ETF by design) - and a new "📈 ETF"
+  breakdown item, both added to the Timeline Explorer's "Net Effective
+  Balance" card, gated on `etfInvestingActive` rather than
+  `propertyGrowthRate !== 0` (Net Worth is meaningful even with a flat
+  property value).
+  `etfAllocationPct`/`useEtfInvesting` persisted via `handleSaveScenario`
+  - purely additive, no `SCHEMA_VERSION` bump.
+  Added 5 tests to `offsetSimulation.test.js` (0%/omitted matches the
+  plain path; diverts the correct share out of the offset's own portion
+  while the savings share stays untouched; ETF balance compounds at the
+  tax-adjusted rate on the running balance before each month's deposit;
+  the calc layer doesn't itself block `effectiveTaxRate: 0` - the UI
+  gates it; offset + savings + etf sums back to the full surplus).
+  `npm test -- --run` (355/355), `npm run lint`, `npm run build` all
+  clean. Verified in the browser at the default 100% Offset Allocation:
+  the checkbox was disabled with an explanatory line until Effective Tax
+  Rate was set to 30%; checking it at 20% ETF Allocation moved "Time to
+  pay off"/"Total interest paid" from 10.8yrs/$196,743 to
+  12.2yrs/$227,170 (the real trade-off); the Timeline Explorer's ETF and
+  Net Worth figures matched the hand-computed math exactly at two
+  different months (e.g. Net Worth = $850,000 − $383,243 + $223,326 +
+  $28,453 + $73,301 = $791,837). Unchecked it and confirmed an exact
+  return to the $196,743 baseline. Saved, reloaded, confirmed
+  persistence; cleared the saved scenario, confirmed the checkbox reset
+  to unchecked/disabled and figures returned to baseline.
+
 - [x] **TODO-52 (Analysis only, no code): When does it make sense to invest in ETFs instead of paying down the offset?**
   Requested by the user - explicitly an analysis task. The question:
   at what point (if any) does investing the surplus in ETFs (dividend-
@@ -3166,23 +3237,21 @@ optionally reuse in the commit message when you implement it.
   figures across `App.jsx`) - same sequencing question as TODO-99: worth
   deciding together once TODO-96/TODO-98's new UI surface exists.
 
-- [ ] **TODO-96: ETF Simulation Core (foundational, gated behind TODO-94's tax rate)**
-  Resulting split from TODO-52's analysis (4 rounds, done - see TODO-52's
-  own write-up in Completed for the full history). The foundational
-  piece everything else here depends on. New parallel "ETF balance"
-  accumulator inside `calculateLoanWithOffset`, growing at a new
-  "Expected ETF Return" annual % (reuse `calculateCompoundedValue`,
-  same as every other growth rate this session), fed by whatever share
-  of the monthly surplus a single fixed strategy sends to it instead of
-  the offset - one manually-configured strategy at a time, no search
-  yet (TODO-98 builds the search on top of this). **Must require
-  TODO-94's tax rate to be set before this becomes visible/usable** -
-  comparing a pre-tax ETF return against the offset's tax-free return
-  would be a dishonest comparison (see the dependency noted on TODO-94).
-  Needs a new, broader "Net Worth" aggregate (property equity + offset +
-  savings + ETF balance - loan balance) distinct from TODO-89's existing
-  Equity figure, which is deliberately narrower (property value - loan
-  balance only).
+- [ ] **TODO-101: Light mode styling bug - inner cards showing solid backgrounds instead of transparent**
+  Raised by the user mid-session (two follow-up messages, likely the same
+  root cause): in light mode, nested/inner cards - the example given is
+  the Loan Simulation card's inner stat boxes - render with a solid white
+  background instead of transparent, unlike dark mode which handles this
+  correctly. The user also has a general, less certain impression that
+  light-mode colors look "more washed out" than before, which may or may
+  not be the same underlying issue - worth checking broadly across cards
+  once the specific Loan Simulation case is fixed, not just that one
+  spot. No code changes made yet (queued per the user's "TODO-" prefix
+  convention) - needs a look at the relevant Tailwind classes (likely a
+  `dark:bg-*`/`bg-*` pair where the light-mode `bg-*` value was left as
+  an opaque white instead of a transparent/lighter variant matching the
+  card's own background, or a missing `dark:` variant that happens to
+  look fine by accident in dark mode).
 
 - [ ] **TODO-98: Pareto Front Strategy Comparison**
   Resulting split from TODO-52's analysis. Depends on TODO-96. Runs the

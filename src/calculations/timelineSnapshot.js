@@ -14,6 +14,9 @@ export function getTimelineSnapshot(timelineMonth, monthlyData, loanAmount, mont
       // monthly surplus has been split, same "nothing has happened yet"
       // convention as the rest of this synthetic snapshot.
       savings: Math.round(initialSavingsBalance),
+      // TODO-96: no seed input exists for this - the ETF balance always
+      // starts at 0.
+      etf: 0,
       effectiveBalance: loanAmount,
       monthlyInterestPaid: Math.round(monthZeroInterest),
       totalInterestPaid: 0,
