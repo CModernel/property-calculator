@@ -2983,7 +2983,7 @@ const PropertyInvestmentCalculator = () => {
             <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg p-5 shadow-lg text-white">
               <h3 className="font-bold mb-3 text-lg">⏱️ Loan Simulation</h3>
               <div className="space-y-3">
-                <div className="bg-white dark:bg-gray-800/20 backdrop-blur rounded-lg p-3">
+                <div className="bg-white/60 dark:bg-black/20 backdrop-blur rounded-lg p-3">
                   <p className="text-sm opacity-90 mb-1">Time to pay off:</p>
                   <p className="text-3xl font-bold">
                     {loanSimulation.years < 100 ? loanSimulation.years.toFixed(1) : '30+'} years
@@ -3000,7 +3000,7 @@ const PropertyInvestmentCalculator = () => {
                   )}
                 </div>
 
-                <div className="bg-white dark:bg-gray-800/20 backdrop-blur rounded-lg p-3">
+                <div className="bg-white/60 dark:bg-black/20 backdrop-blur rounded-lg p-3">
                   <p className="text-sm opacity-90">Total interest paid:</p>
                   <p className="text-2xl font-bold">
                     ${Math.round(loanSimulation.totalInterest).toLocaleString()}
@@ -3013,7 +3013,7 @@ const PropertyInvestmentCalculator = () => {
                 </div>
 
                 {savingsInterestRate > 0 && (
-                  <div className="bg-white dark:bg-gray-800/20 backdrop-blur rounded-lg p-3">
+                  <div className="bg-white/60 dark:bg-black/20 backdrop-blur rounded-lg p-3">
                     <p className="text-sm opacity-90">Savings interest earned:</p>
                     <p className="text-2xl font-bold">
                       ${Math.round(loanSimulation.totalSavingsInterest).toLocaleString()}
@@ -3033,7 +3033,7 @@ const PropertyInvestmentCalculator = () => {
                   </div>
                 )}
 
-                <div className="bg-white dark:bg-gray-800/20 backdrop-blur rounded-lg p-3 text-xs">
+                <div className="bg-white/60 dark:bg-black/20 backdrop-blur rounded-lg p-3 text-xs">
                   <p className="font-semibold mb-1">💰 Savings vs no offset:</p>
                   <p>Without offset ({loanTermYears} years): ~${Math.round(noOffsetTotalInterest).toLocaleString()}</p>
                   <p className="text-yellow-300 font-bold">

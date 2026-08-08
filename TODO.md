@@ -3148,6 +3148,40 @@ optionally reuse in the commit message when you implement it.
   reloaded, confirmed persistence; cleared the saved scenario, confirmed
   reset to enabled/default.
 
+- [x] **TODO-101: Light mode styling bug - inner cards showing solid backgrounds instead of transparent**
+  Raised by the user mid-session (two follow-up messages, likely the same
+  root cause): in light mode, nested/inner cards - the example given was
+  the Loan Simulation card's inner stat boxes - rendered with a solid
+  white background instead of transparent, unlike dark mode.
+  Root cause confirmed and isolated to exactly one card: the outer Loan
+  Simulation card (`App.jsx`) has a vivid `bg-gradient-to-br
+  from-indigo-500 to-purple-600` background, but its four inner boxes
+  ("Time to pay off", "Total interest paid", "Savings interest earned",
+  "Savings vs no offset") all used `bg-white dark:bg-gray-800/20` -
+  `bg-white` is fully opaque, painting a solid white rectangle over the
+  gradient in light mode; `dark:bg-gray-800/20` is 20%-opacity, so it
+  blends into the dark gradient by coincidence, which is why this went
+  unnoticed until now.
+  A codebase-wide audit found this was NOT systemic: every other
+  gradient/colored card (e.g. the green "TO OFFSET" card) already used
+  the correct pattern, `bg-white/60 dark:bg-black/20` - semi-transparent
+  in both themes. Fixed by applying that exact same proven pattern to
+  the four Loan Simulation boxes, rather than inventing a new one. The
+  user's separate, vaguer "colors look washed out" impression wasn't a
+  second issue - the audit found no other `bg-white` without a matching
+  `dark:` variant anywhere in `src/`, so this one fix is the full
+  explanation.
+  A very minor, unrelated cosmetic mismatch was noticed but left out of
+  scope (the Total Summary donut chart's center "hole" uses a slightly
+  different tone than its parent card - barely perceptible, not what was
+  reported).
+  No calculation-layer changes - `npm test -- --run` (369/369) unaffected
+  by design; `npm run lint`/`npm run build` clean.
+  Verified in the browser in both themes: light mode now shows the
+  purple gradient softly through all four boxes instead of solid white
+  rectangles; switched back to dark mode and confirmed no visual
+  regression (identical to before the fix).
+
 - [x] **TODO-52 (Analysis only, no code): When does it make sense to invest in ETFs instead of paying down the offset?**
   Requested by the user - explicitly an analysis task. The question:
   at what point (if any) does investing the surplus in ETFs (dividend-
@@ -3358,22 +3392,6 @@ optionally reuse in the commit message when you implement it.
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
 
-
-- [ ] **TODO-101: Light mode styling bug - inner cards showing solid backgrounds instead of transparent**
-  Raised by the user mid-session (two follow-up messages, likely the same
-  root cause): in light mode, nested/inner cards - the example given is
-  the Loan Simulation card's inner stat boxes - render with a solid white
-  background instead of transparent, unlike dark mode which handles this
-  correctly. The user also has a general, less certain impression that
-  light-mode colors look "more washed out" than before, which may or may
-  not be the same underlying issue - worth checking broadly across cards
-  once the specific Loan Simulation case is fixed, not just that one
-  spot. No code changes made yet (queued per the user's "TODO-" prefix
-  convention) - needs a look at the relevant Tailwind classes (likely a
-  `dark:bg-*`/`bg-*` pair where the light-mode `bg-*` value was left as
-  an opaque white instead of a transparent/lighter variant matching the
-  card's own background, or a missing `dark:` variant that happens to
-  look fine by accident in dark mode).
 
 - [ ] **TODO-102: Build the Advanced Assumptions collapsible restructuring**
   Implementation follow-up from TODO-99's analysis (done - see Completed
