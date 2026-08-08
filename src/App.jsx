@@ -30,6 +30,7 @@ import {
   calculateTotalScheduledOffset,
 } from './calculations/loan';
 import { calculateLoanWithOffset } from './calculations/offsetSimulation';
+import { runStrategyGrid, selectParetoFront, calculateEtfCrashSurvivedPct, classifyEtfCrash } from './calculations/strategyComparison';
 import { calculateOffsetTimingBenefit, calculateCardCashback } from './calculations/creditCardBenefit';
 import { calculatePresentValueOfInterest } from './calculations/inflation';
 import { clampToRange } from './calculations/clampToRange';
@@ -98,6 +99,17 @@ const PropertyInvestmentCalculator = () => {
   const [isDarkMode, toggleDarkMode] = useDarkMode();
 
   const [propertyPrice, setPropertyPrice] = useState(config.propertyPrice);
+  // TODO-100: master switch for the growth/inflation-rate "family" below
+  // (Property/Salary/Rent/Expense Growth, Vacancy, Inflation Rate,
+  // Effective Tax Rate) - true (default) means every existing scenario
+  // behaves byte-for-byte identically, since disabling is the NEW
+  // behavior. Turning it off doesn't reset any slider's own stored
+  // value, it just holds each one's EFFECT at 0 - see the
+  // `realistic*`-prefixed derived consts below the state declarations.
+  // Deliberately excludes Credit Card/Compare Offset vs ETF/Invest in
+  // ETFs/Mortgage-Free Age - those are separate opt-in features with
+  // their own checkboxes already, not part of this family.
+  const [realisticModeEnabled, setRealisticModeEnabled] = useState(config.realisticModeEnabled ?? true);
   // TODO-89: annual % change in property value, compounding monthly - 0
   // (default) keeps propertyValue pinned at propertyPrice forever, same
   // as every other purely-additive rate input this session.
@@ -188,6 +200,10 @@ const PropertyInvestmentCalculator = () => {
   // 20% (not 0) so checking the box above has a visible effect immediately,
   // same reasoning as expectedEtfReturn's non-zero default.
   const [etfAllocationPct, setEtfAllocationPct] = useState(config.etfAllocationPct ?? 20);
+  // TODO-98: 0 (default) means etfAllocationPct is active from month 1,
+  // exactly matching TODO-96's original behavior - every existing
+  // scenario behaves byte-for-byte identically until raised above 0.
+  const [switchThresholdPct, setSwitchThresholdPct] = useState(config.switchThresholdPct ?? 0);
   // TODO-93: annual % - a pure display-layer conversion of "Total interest
   // paid" into today's dollars, no simulation changes. 0 (default) means
   // no inflation is modeled, matching every other purely-additive rate
@@ -259,6 +275,20 @@ const PropertyInvestmentCalculator = () => {
   const [newIncomeStartMonth, setNewIncomeStartMonth] = useState(1);
   const [newIncomeRecurrence, setNewIncomeRecurrence] = useState('monthly'); // monthly | quarterly | yearly
   const [newIncomeEndMonth, setNewIncomeEndMonth] = useState(MAX_MONTH);
+
+  // TODO-100: the actual gating - every calculation/display read of these
+  // 7 values (never the sliders' own value=/onChange= bindings, which
+  // must keep editing the raw state so the user's input isn't lost while
+  // Realistic Mode is off) goes through these `realistic*` consts
+  // instead. realisticModeEnabled: true (default) makes every one of
+  // these a no-op passthrough.
+  const realisticPropertyGrowthRate = realisticModeEnabled ? propertyGrowthRate : 0;
+  const realisticSalaryGrowthRate = realisticModeEnabled ? salaryGrowthRate : 0;
+  const realisticRentGrowthRate = realisticModeEnabled ? rentGrowthRate : 0;
+  const realisticExpenseGrowthRate = realisticModeEnabled ? expenseGrowthRate : 0;
+  const realisticVacancyWeeksPerYear = realisticModeEnabled ? vacancyWeeksPerYear : 0;
+  const realisticInflationRate = realisticModeEnabled ? inflationRate : 0;
+  const realisticEffectiveTaxRate = realisticModeEnabled ? effectiveTaxRate : 0;
 
   // Your personal expenses
   const [showPersonalExpenses, setShowPersonalExpenses] = useState(config.showPersonalExpenses ?? false);
@@ -427,8 +457,8 @@ const PropertyInvestmentCalculator = () => {
   // live inside incomeSources like any other entry - this just partitions
   // the same array into the two subtotals the rest of the app already
   // expects, instead of drawing from two separate arrays.
-  const weeklyIncome = getActiveAmount(incomeSources.filter(i => !RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
-  const weeklyRentalIncome = getActiveAmount(incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
+  const weeklyIncome = getActiveAmount(incomeSources.filter(i => !RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, realisticEffectiveTaxRate);
+  const weeklyRentalIncome = getActiveAmount(incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, realisticEffectiveTaxRate);
   const monthlyIncome = calculateMonthlyFromWeekly(weeklyIncome);
   const monthlyRentalIncome = calculateMonthlyFromWeekly(weeklyRentalIncome);
 
@@ -469,12 +499,16 @@ const PropertyInvestmentCalculator = () => {
     miscPropertyExpense: miscPropertyExpenseField,
   };
 
-  // TODO-96: the checkbox itself is disabled at effectiveTaxRate === 0 (see
-  // the JSX below), but if a user un-sets the tax rate AFTER already
-  // enabling ETF investing, this re-derived flag - not the raw
-  // useEtfInvesting state - is what actually zeroes the effect, so
-  // unchecking-by-disabling stays honest regardless of how it happened.
-  const etfInvestingActive = useEtfInvesting && effectiveTaxRate > 0;
+  // TODO-96: the checkbox itself is disabled at realisticEffectiveTaxRate
+  // === 0 (see the JSX below), but if a user un-sets the tax rate, or
+  // turns Realistic Mode off (TODO-100), AFTER already enabling ETF
+  // investing, this re-derived flag - not the raw useEtfInvesting state -
+  // is what actually zeroes the effect, so unchecking-by-disabling stays
+  // honest regardless of how it happened. Deliberately reads the GATED
+  // rate: comparing a pre-tax ETF return against the offset's tax-free
+  // return is dishonest either way, whether the tax rate itself is 0 or
+  // Realistic Mode is just holding it at 0 for now.
+  const etfInvestingActive = useEtfInvesting && realisticEffectiveTaxRate > 0;
 
   // Complete loan simulation with offset. maxMonths must match the chosen
   // term explicitly - otherwise the loop would keep the old 30-year cap
@@ -494,14 +528,15 @@ const PropertyInvestmentCalculator = () => {
     initialSavingsBalance: cashRemaining,
     savingsInterestRate,
     propertyPrice,
-    propertyGrowthRate,
-    salaryGrowthRate,
-    rentGrowthRate,
-    vacancyWeeksPerYear,
-    expenseGrowthRate,
-    effectiveTaxRate,
+    propertyGrowthRate: realisticPropertyGrowthRate,
+    salaryGrowthRate: realisticSalaryGrowthRate,
+    rentGrowthRate: realisticRentGrowthRate,
+    vacancyWeeksPerYear: realisticVacancyWeeksPerYear,
+    expenseGrowthRate: realisticExpenseGrowthRate,
+    effectiveTaxRate: realisticEffectiveTaxRate,
     etfAllocationPct: etfInvestingActive ? etfAllocationPct : 0,
     expectedEtfReturn,
+    switchThresholdPct,
     maxMonths: totalMonths,
   });
   const baselineSimulation = calculateLoanWithOffset({
@@ -518,14 +553,15 @@ const PropertyInvestmentCalculator = () => {
     initialSavingsBalance: cashRemaining,
     savingsInterestRate,
     propertyPrice,
-    propertyGrowthRate,
-    salaryGrowthRate,
-    rentGrowthRate,
-    vacancyWeeksPerYear,
-    expenseGrowthRate,
-    effectiveTaxRate,
+    propertyGrowthRate: realisticPropertyGrowthRate,
+    salaryGrowthRate: realisticSalaryGrowthRate,
+    rentGrowthRate: realisticRentGrowthRate,
+    vacancyWeeksPerYear: realisticVacancyWeeksPerYear,
+    expenseGrowthRate: realisticExpenseGrowthRate,
+    effectiveTaxRate: realisticEffectiveTaxRate,
     etfAllocationPct: etfInvestingActive ? etfAllocationPct : 0,
     expectedEtfReturn,
+    switchThresholdPct,
     maxMonths: totalMonths,
   });
   const interestSaved = baselineSimulation.totalInterest - loanSimulation.totalInterest;
@@ -535,7 +571,7 @@ const PropertyInvestmentCalculator = () => {
   // actual interest payment individually rather than the aggregate by a
   // single power-of-years factor (interest is paid gradually, not as one
   // lump sum at the end). Nothing about the simulation itself changes.
-  const totalInterestInTodaysDollars = calculatePresentValueOfInterest(loanSimulation.monthlyData, inflationRate);
+  const totalInterestInTodaysDollars = calculatePresentValueOfInterest(loanSimulation.monthlyData, realisticInflationRate);
 
   // First month of the simulation. Taken from the simulation itself so it accounts for
   // everything the loop does in month 1: any scheduled lump sum, the recurring monthly
@@ -666,6 +702,7 @@ const PropertyInvestmentCalculator = () => {
   const handleSaveScenario = () => {
     const savedAt = Date.now();
     const scenario = {
+      realisticModeEnabled,
       propertyPrice, propertyGrowthRate, propertyType, downPayment, loanTermYears,
       interestRate: interestRateField.base, interestRateChanges: interestRateField.changes,
       strataFees: strataFeesField.base, strataFeesChanges: strataFeesField.changes,
@@ -680,7 +717,7 @@ const PropertyInvestmentCalculator = () => {
       miscPropertyExpense: miscPropertyExpenseField.base, miscPropertyExpenseChanges: miscPropertyExpenseField.changes,
       isFirstHomeBuyer, isForeignPurchaser, totalSavings, offsetAllocationPct, savingsInterestRate, expenseGrowthRate, currentAge, showMortgageFreeAge, payLmiUpfront,
       useCreditCard, monthlyCardSpend, avgExtraDaysHeld, cashbackPct, annualCardFee, inflationRate,
-      showOpportunityCost, expectedEtfReturn, useEtfInvesting, etfAllocationPct,
+      showOpportunityCost, expectedEtfReturn, useEtfInvesting, etfAllocationPct, switchThresholdPct,
       conveyancing, buildingInspection, pestInspection, registrationFees, searches,
       loanEstablishmentFee, propertyValuation, homeInsurance, rateAdjustments, miscUpfrontCost,
       incomeSources,
@@ -1083,6 +1120,25 @@ const PropertyInvestmentCalculator = () => {
             </h2>
 
             <div className="space-y-4">
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+                  <input
+                    type="checkbox"
+                    checked={realisticModeEnabled}
+                    onChange={(e) => setRealisticModeEnabled(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-blue-500"
+                  />
+                  Realistic Mode
+                  <InfoTooltip label="What does this control?">
+                    <p>A master switch for every growth/inflation-rate assumption in this calculator: Property Growth Rate, Salary/Rent Growth Rate, Vacancy, Expense Growth Rate, Inflation Rate, and Effective Tax Rate. Turning it off holds all of them at 0% - without changing any of their own slider values, so turning it back on restores exactly what you had.</p>
+                    <p className="mt-2">Doesn't affect Credit Card, Compare Offset vs ETF, Invest in ETFs, or Mortgage-Free Age - those already have their own individual checkboxes.</p>
+                  </InfoTooltip>
+                </label>
+                {!realisticModeEnabled && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Off - every growth/inflation-rate assumption below is held at 0% for now, regardless of what each slider shows.</p>
+                )}
+              </div>
+
               <NumberSliderField
                 label="Available Savings"
                 value={totalSavings}
@@ -1268,11 +1324,11 @@ const PropertyInvestmentCalculator = () => {
               </div>
 
               <div>
-                <label className={`flex items-center gap-2 text-sm font-medium ${effectiveTaxRate === 0 ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-200'}`}>
+                <label className={`flex items-center gap-2 text-sm font-medium ${realisticEffectiveTaxRate === 0 ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-200'}`}>
                   <input
                     type="checkbox"
                     checked={useEtfInvesting}
-                    disabled={effectiveTaxRate === 0}
+                    disabled={realisticEffectiveTaxRate === 0}
                     onChange={(e) => setUseEtfInvesting(e.target.checked)}
                     className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-blue-500 disabled:cursor-not-allowed"
                   />
@@ -1282,7 +1338,9 @@ const PropertyInvestmentCalculator = () => {
                     <p className="mt-2">This is illustrative only, not a recommendation - always consult a licensed financial adviser before making investment decisions.</p>
                   </InfoTooltip>
                 </label>
-                {effectiveTaxRate === 0 ? (
+                {!realisticModeEnabled ? (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Realistic Mode is off (see the toggle above), which holds Effective Tax Rate at 0% - turn it back on to use this.</p>
+                ) : effectiveTaxRate === 0 ? (
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Set an Effective Tax Rate above (in the Income section) first - otherwise this compares a pre-tax ETF return against the offset's tax-free return, which isn't a fair comparison.</p>
                 ) : !useEtfInvesting && (
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Diverts part of your offset contribution into a growing ETF balance instead.</p>
@@ -1342,6 +1400,118 @@ const PropertyInvestmentCalculator = () => {
                   % of what would go to your offset that instead goes to ETF investing - your savings share (via Offset Allocation above) is untouched. 0% (default) sends everything to the offset, same as before.
                 </NumberSliderField>
               )}
+
+              {etfInvestingActive && (
+                <NumberSliderField
+                  label="Switch Trigger"
+                  value={switchThresholdPct}
+                  onChange={setSwitchThresholdPct}
+                  min={0}
+                  max={100}
+                  sliderMin={0}
+                  sliderMax={100}
+                  step={5}
+                  color="purple"
+                  suffix="%"
+                >
+                  Once your offset balance reaches this % of your remaining loan balance, ETF Allocation (above) turns on for the rest of the simulation - a one-time switch. 0% (default) means it's active from month 1.
+                </NumberSliderField>
+              )}
+
+              {etfInvestingActive && (() => {
+                // TODO-98: no useMemo - 441 sims x a few hundred iterations
+                // each is trivial for JS (sub-100ms), and this file has no
+                // existing memoization pattern to extend. Revisit only if
+                // profiling ever shows real jank.
+                const gridBaseParams = {
+                  contributions: offsetContributions,
+                  personalExpenseItems,
+                  incomeSources,
+                  expenseFields,
+                  monthlyToOffset: baseMonthlySurplus,
+                  loanAmount,
+                  monthlyRate,
+                  monthlyPayment,
+                  interestRateField,
+                  offsetAllocationPct,
+                  initialSavingsBalance: cashRemaining,
+                  savingsInterestRate,
+                  propertyPrice,
+                  propertyGrowthRate: realisticPropertyGrowthRate,
+                  salaryGrowthRate: realisticSalaryGrowthRate,
+                  rentGrowthRate: realisticRentGrowthRate,
+                  vacancyWeeksPerYear: realisticVacancyWeeksPerYear,
+                  expenseGrowthRate: realisticExpenseGrowthRate,
+                  effectiveTaxRate: realisticEffectiveTaxRate,
+                  expectedEtfReturn,
+                  maxMonths: totalMonths,
+                };
+                const gridResults = runStrategyGrid(gridBaseParams);
+                const paretoFront = selectParetoFront(gridResults);
+                const baselineRow = gridResults.find((r) => r.etfAllocationPct === 0);
+                const baselineInterest = baselineRow ? baselineRow.totalInterestPaid : 0;
+
+                return (
+                  <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-sm space-y-3">
+                    <p className="font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-2">
+                      🔍 Strategy Comparison
+                      <InfoTooltip label="What is this searching?">
+                        <p>Searches 441 combinations of when to start investing (Switch Trigger) and how much to divert (ETF Allocation) once switched on, in 5% steps - holding everything else the same. Shows the non-dominated (Pareto-optimal) strategies below: for each, no other strategy has both a lower total interest paid AND a higher ETF balance.</p>
+                        <p className="mt-2">There's no single "best" - which one to pick depends on how you personally weigh certainty (offset) against expected but risky growth (ETF). "Apply" sets the sliders above to that row's values.</p>
+                      </InfoTooltip>
+                    </p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="text-gray-500 dark:text-gray-400">
+                            <th className="pr-2 pb-1 font-medium whitespace-nowrap">Switch</th>
+                            <th className="pr-2 pb-1 font-medium whitespace-nowrap">Allocation</th>
+                            <th className="pr-2 pb-1 font-medium whitespace-nowrap">Interest Paid</th>
+                            <th className="pr-2 pb-1 font-medium whitespace-nowrap">
+                              <span className="flex items-center gap-1">
+                                ETF Balance
+                                <InfoTooltip label="Why isn't this perfectly fair?">
+                                  <p>Measured at whichever month THIS strategy's own simulation stops (loan payoff, or the end of your loan term). Strategies that pay off faster aren't credited for investing the freed-up repayment afterward, so this slightly understates low-risk strategies' true long-run wealth.</p>
+                                  <p className="mt-2">Total Interest Paid isn't affected by this and is always a fair comparison.</p>
+                                </InfoTooltip>
+                              </span>
+                            </th>
+                            <th className="pr-2 pb-1 font-medium whitespace-nowrap">Risk</th>
+                            <th className="pr-2 pb-1 font-medium whitespace-nowrap">Crash Test</th>
+                            <th className="pb-1 font-medium" />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paretoFront.map((row) => {
+                            const isApplied = row.switchThresholdPct === switchThresholdPct && row.etfAllocationPct === etfAllocationPct;
+                            const crashSurvived = calculateEtfCrashSurvivedPct(row.etfBalance, row.totalInterestPaid - baselineInterest);
+                            const crashClass = classifyEtfCrash(crashSurvived);
+                            return (
+                              <tr key={`${row.switchThresholdPct}-${row.etfAllocationPct}`} className={isApplied ? 'bg-gray-100 dark:bg-gray-800' : undefined}>
+                                <td className="pr-2 py-1 whitespace-nowrap text-gray-700 dark:text-gray-200">{row.switchThresholdPct}%</td>
+                                <td className="pr-2 py-1 whitespace-nowrap text-gray-700 dark:text-gray-200">{row.etfAllocationPct}%</td>
+                                <td className="pr-2 py-1 whitespace-nowrap text-gray-700 dark:text-gray-200">${row.totalInterestPaid.toLocaleString()}</td>
+                                <td className="pr-2 py-1 whitespace-nowrap text-gray-700 dark:text-gray-200">${row.etfBalance.toLocaleString()}</td>
+                                <td className="pr-2 py-1 whitespace-nowrap text-gray-700 dark:text-gray-200">{row.riskScore}</td>
+                                <td className={`pr-2 py-1 whitespace-nowrap font-medium ${crashClass.textClass}`}>{crashClass.symbol} {crashSurvived}%</td>
+                                <td className="py-1 whitespace-nowrap">
+                                  <button
+                                    onClick={() => { setSwitchThresholdPct(row.switchThresholdPct); setEtfAllocationPct(row.etfAllocationPct); }}
+                                    disabled={isApplied}
+                                    className="text-xs px-2 py-1 rounded bg-blue-600 text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-blue-700"
+                                  >
+                                    {isApplied ? 'Applied' : 'Apply'}
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div>
                 <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
@@ -1899,9 +2069,9 @@ const PropertyInvestmentCalculator = () => {
                         />
                         This is a gross (pre-tax) amount
                       </label>
-                      {newIncomeIsGross && effectiveTaxRate > 0 && (
+                      {newIncomeIsGross && realisticEffectiveTaxRate > 0 && (
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          Net at {effectiveTaxRate}% tax: ${Math.round((newIncomeCategory === 'Room Rent' && newIncomeIsShared ? newIncomeAmount * newIncomeNumPeople : newIncomeAmount) * (1 - effectiveTaxRate / 100)).toLocaleString()}/week
+                          Net at {realisticEffectiveTaxRate}% tax: ${Math.round((newIncomeCategory === 'Room Rent' && newIncomeIsShared ? newIncomeAmount * newIncomeNumPeople : newIncomeAmount) * (1 - realisticEffectiveTaxRate / 100)).toLocaleString()}/week
                         </p>
                       )}
                     </div>
@@ -1977,7 +2147,7 @@ const PropertyInvestmentCalculator = () => {
                       </p>
                       <p className="text-xs text-gray-600 dark:text-gray-300">
                         ${income.amount}/week {income.isShared && <span className="text-blue-600 dark:text-blue-400 font-medium">({income.numPeople} × ${income.amountPerPerson} each) </span>}
-                        {income.isGross && <span className="text-purple-600 dark:text-purple-400 font-medium">(Gross{effectiveTaxRate > 0 && ` → net $${Math.round(income.amount * (1 - effectiveTaxRate / 100)).toLocaleString()}/week`}) </span>}
+                        {income.isGross && <span className="text-purple-600 dark:text-purple-400 font-medium">(Gross{realisticEffectiveTaxRate > 0 && ` → net $${Math.round(income.amount * (1 - realisticEffectiveTaxRate / 100)).toLocaleString()}/week`}) </span>}
                         • {formatScheduleLabel(income)}
                       </p>
                     </div>
@@ -2835,9 +3005,9 @@ const PropertyInvestmentCalculator = () => {
                   <p className="text-2xl font-bold">
                     ${Math.round(loanSimulation.totalInterest).toLocaleString()}
                   </p>
-                  {inflationRate > 0 && (
+                  {realisticInflationRate > 0 && (
                     <p className="text-xs opacity-75 mt-1">
-                      ≈ ${Math.round(totalInterestInTodaysDollars).toLocaleString()} in today's dollars (at {inflationRate}% inflation)
+                      ≈ ${Math.round(totalInterestInTodaysDollars).toLocaleString()} in today's dollars (at {realisticInflationRate}% inflation)
                     </p>
                   )}
                 </div>
@@ -2969,7 +3139,7 @@ const PropertyInvestmentCalculator = () => {
                       {/* TODO-89: only shown once the user opts in - at the
                           0% default, propertyValue is flat and this row
                           would just repeat the purchase price forever. */}
-                      {propertyGrowthRate !== 0 && (
+                      {realisticPropertyGrowthRate !== 0 && (
                         <>
                           <span className="text-gray-300 dark:text-gray-600">|</span>
                           <span className="flex items-center gap-1">🏠 Value: ${snapshot.propertyValue.toLocaleString()}</span>
@@ -2985,7 +3155,7 @@ const PropertyInvestmentCalculator = () => {
                         </>
                       )}
                     </div>
-                    {propertyGrowthRate !== 0 && (
+                    {realisticPropertyGrowthRate !== 0 && (
                       <p className={`text-sm font-semibold mt-2 ${getBalanceColor(snapshot.propertyValue - snapshot.balance)}`}>
                         🏠 Projected Equity: ${(snapshot.propertyValue - snapshot.balance).toLocaleString()}
                       </p>
@@ -3083,8 +3253,8 @@ const PropertyInvestmentCalculator = () => {
                         <div className="space-y-1 text-xs">
                           {(() => {
                             const houseRentActiveHere = incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name) && isScheduleActive(i, timelineMonth));
-                            const rentalIncomeHere = calculateMonthlyFromWeekly(getActiveAmount(incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), timelineMonth, effectiveTaxRate));
-                            const personalIncomeHere = calculateMonthlyFromWeekly(getActiveAmount(incomeSources.filter(i => !RENTAL_INCOME_CATEGORIES.includes(i.name)), timelineMonth, effectiveTaxRate));
+                            const rentalIncomeHere = calculateMonthlyFromWeekly(getActiveAmount(incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), timelineMonth, realisticEffectiveTaxRate));
+                            const personalIncomeHere = calculateMonthlyFromWeekly(getActiveAmount(incomeSources.filter(i => !RENTAL_INCOME_CATEGORIES.includes(i.name)), timelineMonth, realisticEffectiveTaxRate));
                             return (
                               <>
                                 <p className="flex justify-between">

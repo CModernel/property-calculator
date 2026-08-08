@@ -94,11 +94,12 @@ export function calculateLoanWithOffset({
   // that omits this keeps working unchanged - isGross items only exist if
   // a caller explicitly adds them.
   effectiveTaxRate = 0,
-  // TODO-96: what share of the surplus NOT sent to the offset (i.e. the
-  // same pool offsetAllocationPct's remainder would otherwise send wholly
-  // to savings) instead goes to a growing ETF balance. 0 (default) means
-  // every existing caller/test that omits this keeps working unchanged -
-  // the remainder still goes 100% to savings, byte-for-byte.
+  // TODO-96: what share of the OFFSET's OWN portion of the surplus
+  // instead goes to a growing ETF balance (the savings share, via
+  // offsetAllocationPct's remainder, is untouched) - the actual
+  // offset-vs-ETF trade-off, not a further split of savings. 0 (default)
+  // means every existing caller/test that omits this keeps working
+  // unchanged - the offset gets its full share, byte-for-byte.
   etfAllocationPct = 0,
   // TODO-96: annual % expected ETF return, taxed by effectiveTaxRate
   // before being applied (an untaxed ETF return compared against the
@@ -106,6 +107,13 @@ export function calculateLoanWithOffset({
   // TODO-94). 0 (default) means every existing caller/test that omits
   // this keeps working unchanged.
   expectedEtfReturn = 0,
+  // TODO-98: gates when etfAllocationPct actually kicks in - it's a no-op
+  // until offsetBalance reaches this % of the REMAINING loan balance,
+  // then switches on for good (see the stateless check below - the
+  // ratio never decreases, so this can't un-trigger). 0 (default) means
+  // active from month 1, exactly matching TODO-96's original behavior -
+  // every existing caller/test that omits this keeps working unchanged.
+  switchThresholdPct = 0,
   maxMonths = 30 * 12,
 }) {
   // Nothing to offset: no surplus, no scheduled contributions, and no income
@@ -288,12 +296,19 @@ export function calculateLoanWithOffset({
     // the rest builds the separately-tracked savings balance instead.
     const offsetShare = netMonthlyDeposit * (offsetAllocationPct / 100);
     savingsBalance += netMonthlyDeposit - offsetShare;
-    // TODO-96: etfAllocationPct diverts a share of the OFFSET's OWN portion
-    // into the ETF balance instead - this is the actual "offset vs ETF"
-    // trade-off TODO-52's analysis was about (slower payoff, potentially
-    // higher return), not a further split of the savings side. 0% (default)
-    // means offsetBalance gets offsetShare in full, byte-for-byte unchanged.
-    const etfShare = offsetShare * (etfAllocationPct / 100);
+    // TODO-98: switchThresholdPct gates when etfAllocationPct actually
+    // kicks in - a stateless check using THIS month's offsetBalance
+    // (already includes any contributions above) against last month's
+    // ending balance is enough, since the ratio only ever grows.
+    const etfSwitchActive = (offsetBalance / balance) * 100 >= switchThresholdPct;
+    const effectiveEtfAllocationPct = etfSwitchActive ? etfAllocationPct : 0;
+    // TODO-96: effectiveEtfAllocationPct diverts a share of the OFFSET's
+    // OWN portion into the ETF balance instead - this is the actual
+    // "offset vs ETF" trade-off TODO-52's analysis was about (slower
+    // payoff, potentially higher return), not a further split of the
+    // savings side. 0% (default) means offsetBalance gets offsetShare in
+    // full, byte-for-byte unchanged.
+    const etfShare = offsetShare * (effectiveEtfAllocationPct / 100);
     offsetBalance += offsetShare - etfShare;
     etfBalance += etfShare;
 

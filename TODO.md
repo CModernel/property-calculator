@@ -2962,6 +2962,192 @@ optionally reuse in the commit message when you implement it.
   persistence; cleared the saved scenario, confirmed the checkbox reset
   to unchecked/disabled and figures returned to baseline.
 
+- [x] **TODO-98: Pareto Front Strategy Comparison**
+  Resulting split from TODO-52's analysis, depending on TODO-96 (done).
+  Generalizes TODO-96's single constant allocation into a search over
+  many (switch-trigger, allocation) combinations - explicitly **no**
+  weighted "Overall Score" and **no** single "best" recommendation, per
+  two independent second opinions and this session's own analysis.
+  **Resolved with the user before implementing**: strategies that pay
+  off faster stop simulating the instant the loan hits $0 - nothing
+  continues accumulating savings/ETF for the remaining months, so
+  comparing "final ETF balance" across strategies isn't perfectly
+  apples-to-apples (a fast-payoff strategy doesn't get credit for
+  investing the freed-up repayment afterward). Chose to keep this
+  simple rather than extend the core loop to a shared post-payoff
+  horizon: compare on **Total Interest Paid** (already fully fair -
+  unaffected by when the loop stops) and **ETF Balance at each
+  strategy's own stopping point**, with an explicit caveat tooltip.
+  **Key insight**: TODO-96's existing behavior (constant `etfAllocationPct`
+  from month 1) is mathematically identical to a new `switchThresholdPct
+  = 0` ("switch on immediately") - so this generalizes TODO-96 rather
+  than replacing it, with a default that reproduces its exact behavior.
+  New `switchThresholdPct` param (`offsetSimulation.js`) - since
+  `offsetBalance` only grows and `balance` only shrinks each month
+  (standard amortization), the ratio between them is monotonically
+  non-decreasing, so "once triggered, stays triggered" needed **no
+  persistent state**, just a stateless per-month check:
+  `etfSwitchActive = (offsetBalance / balance) * 100 >= switchThresholdPct`.
+  New `src/calculations/strategyComparison.js`: `runStrategyGrid` runs
+  a 21×21 (5% step) grid = 441 simulations, holding every other input
+  fixed, reading only `totalInterest` and the last `monthlyData` entry
+  per cell (never retains 441 full `monthlyData` arrays). No `useMemo`
+  - 441 sims × ~360 iterations is trivial for JS (sub-100ms), and this
+  file has no existing memoization pattern to extend; computed via a
+  plain IIFE inside the `etfInvestingActive`-gated JSX, same pattern as
+  the Timeline Explorer's own snapshot IIFE. `selectParetoFront` finds
+  the non-dominated set (no other strategy has both ≤ interest AND ≥ ETF
+  balance), dedupes identical outcomes (every `etfAllocationPct: 0` cell
+  is equivalent regardless of threshold), and samples down to 5
+  evenly-spaced-by-risk rows if the front is larger - "show the spread,"
+  not "pick a winner." A purely descriptive `riskScore` (0-100,
+  Offset=0/ETF=100 realized exposure) is computed per row but never fed
+  back into the search. New "Worst Market Crash" stress test
+  (`calculateEtfCrashSurvivedPct`/`ETF_CRASH_BANDS`) mirrors
+  `purchaseHealthCheck.js`'s Interest Rate Stress Test pattern exactly -
+  "survived" means the crashed ETF balance still covers the extra
+  interest that strategy cost versus the offset-only baseline.
+  New "Switch Trigger" slider added to the existing "Invest in ETFs"
+  block (`switchThresholdPct`, default 0 - byte-identical to TODO-96's
+  original behavior). New "🔍 Strategy Comparison" card - this app's
+  first table over *computed* results rather than static reference data
+  or raw input rows - with an "Apply" button per row that sets
+  `switchThresholdPct`/`etfAllocationPct` to that row's values, updating
+  the whole app immediately; the currently-applied row is highlighted
+  (same convention as `LvrBadge`'s reference table).
+  `switchThresholdPct` persisted via `handleSaveScenario` - purely
+  additive, no `SCHEMA_VERSION` bump.
+  Added 2 tests to `offsetSimulation.test.js` (omitted/0% matches every
+  existing TODO-96 result exactly - no regression; a nonzero threshold
+  with hand-computed round numbers confirms the switch fires at the
+  exact month the ratio crosses it and stays triggered afterward) and a
+  new `strategyComparison.test.js` (441 rows; Pareto front is
+  non-dominated, deduplicated, ≤5 rows, always anchored by the
+  `etfAllocationPct: 0` baseline; crash-survival ladder matches the
+  stress-test pattern).
+  `npm test -- --run` (369/369), `npm run lint`, `npm run build` all
+  clean. Verified in the browser: with the default 100% Offset
+  Allocation and Effective Tax Rate set to 30%, the Strategy Comparison
+  table rendered 5 rows from $0/0-risk (the baseline) to $2,299,940/
+  100-risk; clicked "Apply" on an 80%-switch/100%-allocation row,
+  confirmed the sliders updated and "Total interest paid" moved to
+  exactly $198,631 matching the row, with that row now highlighted.
+  Scrubbed the Timeline Explorer and confirmed ETF stayed exactly $0
+  while the offset/balance ratio was below 80% (e.g. 51.8% at month 89),
+  then started growing once it crossed 80% (82.9% at month 119, ETF
+  $7,446, Net Worth $826,713 - matched the hand-computed sum exactly).
+  Unchecked "Invest in ETFs" and confirmed the whole Strategy Comparison
+  card disappeared with figures back at the $196,743 baseline. Saved,
+  reloaded, confirmed persistence; cleared the saved scenario, confirmed
+  reset to unchecked/0%.
+
+- [x] **TODO-99 (Analysis only, no code): Simplify the UI/information architecture**
+  Requested by the user - explicitly not about removing content, about
+  reducing how overwhelming the page feels. Deliberately deferred until
+  TODO-96/TODO-98 shipped (both now done) so the analysis could be based
+  on the real, final UI surface rather than a guess - and that surface
+  turned out to be the single biggest contributor: "Invest in ETFs" now
+  brings 3 sliders plus a 5-row Strategy Comparison table with its own
+  header/tooltips, easily the heaviest block on the page.
+  **Finalized basic/advanced split, per card**:
+  - Purchase Details: basic = Property Type, First Home Buyer/Investment
+    Property/Foreign Purchaser, Property Price, Deposit Contribution,
+    Loan Amount. Property Growth Rate is the one exception left inline,
+    not worth its own collapsible for a single slider.
+  - Financial Position: basic = Available Savings, Offset Allocation
+    (core mechanic, not an "assumption"), Interest Rate, Loan Term.
+    Advanced = Savings Interest Rate, Expense Growth Rate, Inflation
+    Rate, Model Credit Card usage, Compare Offset vs ETF Investing,
+    Invest in ETFs (its whole sub-tree including Strategy Comparison),
+    Show my Mortgage-Free Age.
+  - Income: basic = the Income Sources list itself (add/remove). Advanced
+    = Salary Growth Rate, Rent Growth Rate, Vacancy, Effective Tax Rate.
+  **Recommended mechanism**: a per-card collapsible "⚙️ Advanced
+  Assumptions" sub-section, reusing the exact `showX`/`▸`/`▾` toggle
+  pattern already used throughout this file (Income breakdown, Property
+  expenses breakdown, etc.) - purely a presentation change, no state
+  model changes. Defaults collapsed UNLESS any value inside has already
+  been customized away from its inert default (e.g. loading a saved
+  scenario with a nonzero growth rate) - so returning users never lose
+  visibility into settings they've actually set.
+  **Resolves cleanly with TODO-100** (built next, see below): the master
+  "Realistic Mode" toggle naturally lives at the top of Financial
+  Position's Advanced Assumptions collapsible, since that's exactly
+  where a user would look for it and exactly the set of items it
+  controls (the growth/inflation-rate family). It doesn't add a SEPARATE
+  gate over Credit Card/Compare Offset vs ETF/Mortgage-Free Age - those
+  keep their own individual checkboxes untouched. **Correction made
+  during TODO-100's implementation**: Invest in ETFs turned out to be a
+  genuine exception, not a clean exclusion - its own honesty requirement
+  (TODO-96) already depends on Effective Tax Rate being nonzero, and
+  Effective Tax Rate IS part of the family, so turning Realistic Mode off
+  necessarily neutralizes ETF investing too as a side effect (the
+  checkbox stays checked, but goes disabled/inert - see TODO-100's own
+  write-up for the exact mechanism and the smart disabled-message that
+  explains why).
+  **Split into a new implementation ticket, TODO-102**, rather than
+  built here - this ticket's own title is "analysis only, no code," and
+  the actual restructuring (touching rendering across three cards) is a
+  real enough change to deserve its own review/test pass, same reasoning
+  TODO-52's analysis used when splitting into TODO-96/97/98.
+
+- [x] **TODO-100: Master "Realistic Mode" enable/disable toggle**
+  Raised by the user mid-session, independently of TODO-99 (analysis
+  done - see above): expected a single checkbox to turn "Realistic Mode"
+  on/off as a whole - explicitly **functional**, not just visual:
+  switching it off forces every factor in the family inert (0%/no-op)
+  regardless of whatever each individual slider is currently set to, not
+  merely hiding them. Switching back on restores each slider's own
+  stored value (never resets them to 0 on toggle-off - that would be
+  surprising and lose the user's own inputs).
+  **Scope of "the family"**: Property Growth Rate, Salary Growth Rate,
+  Rent Growth Rate, Expense Growth Rate, Vacancy (weeks/year), Inflation
+  Rate, Effective Tax Rate - the growth/inflation assumptions from
+  TODO-54's original split.
+  Judged mechanical enough (a direct extension of the
+  `etfInvestingActive`-style derived-gating pattern already used 3 times
+  this session) to build directly without Plan Mode.
+  New `realisticModeEnabled` state (default `true` - every existing
+  scenario behaves byte-for-byte identically, since disabling is the NEW
+  behavior). Seven `realistic*`-prefixed derived consts
+  (`realisticPropertyGrowthRate`, `realisticSalaryGrowthRate`, etc.), each
+  `realisticModeEnabled ? rawValue : 0` - every calculation/display READ
+  of the family (both `calculateLoanWithOffset` calls, the Strategy
+  Comparison grid's base params, static income figures, the Gross-income
+  preview/marker, the Timeline Explorer's property-value gate and income
+  context, the inflation-adjusted display) was rethreaded to read the
+  `realistic*` version instead of the raw state - the sliders' own
+  `value=`/`onChange=` bindings still read/write the RAW state
+  unchanged, so nothing is lost while the mode is off.
+  **Correction made during implementation** (see TODO-99's own write-up
+  for the full reasoning): "Invest in ETFs" (TODO-96) turned out to be a
+  genuine exception, not cleanly excludable - its own honesty requirement
+  already depends on Effective Tax Rate being nonzero, and Effective Tax
+  Rate is part of the family, so `etfInvestingActive` now reads
+  `realisticEffectiveTaxRate` too. This means turning Realistic Mode off
+  also disables ETF investing as a side effect (checkbox stays checked,
+  goes disabled/dimmed) - a smart 3-way disabled message distinguishes
+  "Realistic Mode is off" from "no tax rate set" from "already enabled,"
+  so the reason is never ambiguous.
+  `realisticModeEnabled` persisted via `handleSaveScenario` - purely
+  additive, no `SCHEMA_VERSION` bump.
+  No calculation-layer changes at all (369 existing tests pass
+  unchanged, since the gating lives entirely in `App.jsx`).
+  `npm test -- --run` (369/369), `npm run lint`, `npm run build` all
+  clean. Verified in the browser: set Property Growth Rate to 5%,
+  confirmed the Timeline Explorer's Value/Projected Equity rows appeared
+  ($1,429,368/$1,102,413 at month 125); toggled Realistic Mode off,
+  confirmed those rows disappeared entirely (propertyValue held flat)
+  while the slider still showed 5% untouched; toggled back on, confirmed
+  an exact restoration ($1,429,368/$1,102,413 again). Separately, set
+  Effective Tax Rate to 30% and enabled "Invest in ETFs" at 20%
+  allocation (Total interest paid: $227,170); toggled Realistic Mode
+  off, confirmed the checkbox stayed checked but went disabled with
+  "Realistic Mode is off... turn it back on to use this," and "Total
+  interest paid" reverted exactly to the $196,743 baseline. Saved,
+  reloaded, confirmed persistence; cleared the saved scenario, confirmed
+  reset to enabled/default.
+
 - [x] **TODO-52 (Analysis only, no code): When does it make sense to invest in ETFs instead of paying down the offset?**
   Requested by the user - explicitly an analysis task. The question:
   at what point (if any) does investing the surplus in ETFs (dividend-
@@ -3173,70 +3359,6 @@ optionally reuse in the commit message when you implement it.
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
 
 
-- [ ] **TODO-99 (Analysis first, no code yet): Simplify the UI/information architecture**
-  Requested by the user - explicitly not about removing content, about
-  reducing how overwhelming the page feels, especially after this
-  session's own wave of additions (TODO-89 through TODO-95): Property
-  Growth Rate, Salary Growth Rate, Rent Growth Rate, Vacancy, Expense
-  Growth Rate, Savings Interest Rate, Inflation Rate, Credit Card usage
-  (+4 sub-fields), Mortgage-Free Age (+1 field) all landed as individual
-  sliders/checkboxes inside Financial Position, Purchase Details, and
-  Income - each one deliberately defaults to an inert value (0%/
-  unchecked) so it costs nothing functionally, but it still occupies
-  visual space and adds cognitive load for a user who never touches it.
-  **Worth naming the actual tension explicitly**: TODO-54's own analysis
-  concluded these should ship as independent toggles rather than one
-  monolithic "Realistic Mode" switch (easier to build, test, and adopt
-  partially) - that decision was right for the *architecture*, but its
-  side effect is exactly this UI crowding. The likely fix is a
-  **presentation-layer** change, not an architecture one: group these
-  same independent state variables visually (e.g. a collapsible
-  "Advanced assumptions" sub-section per card, or a single shared one),
-  without touching the underlying state model at all - same data, same
-  independent toggles, different visual grouping. Needs a design pass on
-  what counts as "basic" (Property Price, Deposit, Loan Amount, Interest
-  Rate, Loan Term, Available Savings, the Income/Expenses lists
-  themselves) vs. "advanced" (every growth/inflation rate, Credit Card
-  usage, Mortgage-Free Age) - not necessarily a strict binary, could be
-  per-card collapsible groups instead of one global mode.
-  **Timing question the user raised, and this session's recommendation**:
-  analyze now (cheap, no code) but defer the actual restructuring until
-  after TODO-96/TODO-98 ship - those add substantial new UI surface (an
-  ETF simulation card, a Pareto-front comparison table) that should
-  inform the final information architecture, rather than being retrofit
-  into a structure decided before they existed. Redesigning twice (once
-  now, once after the ETF work lands) would waste the first pass.
-
-- [ ] **TODO-100: Master "Realistic Mode" enable/disable toggle**
-  Raised by the user mid-session, independently of TODO-99 above (they
-  hadn't seen TODO-99's write-up when they asked): expected a single
-  checkbox to turn "Realistic Mode" on/off as a whole - unlike TODO-99
-  (presentation-only, no state-model changes), the user's version is
-  explicitly **functional**, not just visual: switching it off should
-  force every factor in the family inert (0%/no-op) regardless of
-  whatever each individual slider is currently set to, not merely hide
-  them. Switching back on should restore each slider's own stored value
-  (don't reset them to 0 on toggle-off - that would be surprising and
-  lose the user's own inputs) - so the toggle short-circuits the
-  *effect* of the whole family without touching the underlying
-  independent state variables themselves.
-  **Scope of "the family"**: Property Growth Rate, Salary Growth Rate,
-  Rent Growth Rate, Expense Growth Rate, Vacancy (weeks/year), Inflation
-  Rate, and (once TODO-94 ships) Effective Tax Rate - the growth/
-  inflation assumptions from TODO-54's original split. Deliberately
-  **excludes** Credit Card Benefit, Compare Offset vs ETF Investing
-  (TODO-97), and Mortgage-Free Age - those are separate opt-in features
-  with their own checkboxes already, not part of this "realistic
-  assumptions" growth-rate family.
-  **Relationship to TODO-99**: complementary, not a duplicate - TODO-99
-  is the "what should the page look like" pass (collapsible grouping);
-  this is "does turning the group off need to be one click instead of
-  N," a smaller, purely additive toggle that could ship independently of
-  or alongside TODO-99's restructuring. Likely needs Plan Mode (touches
-  every `calculateLoanWithOffset` call site and the static "right now"
-  figures across `App.jsx`) - same sequencing question as TODO-99: worth
-  deciding together once TODO-96/TODO-98's new UI surface exists.
-
 - [ ] **TODO-101: Light mode styling bug - inner cards showing solid backgrounds instead of transparent**
   Raised by the user mid-session (two follow-up messages, likely the same
   root cause): in light mode, nested/inner cards - the example given is
@@ -3253,27 +3375,19 @@ optionally reuse in the commit message when you implement it.
   card's own background, or a missing `dark:` variant that happens to
   look fine by accident in dark mode).
 
-- [ ] **TODO-98: Pareto Front Strategy Comparison**
-  Resulting split from TODO-52's analysis. Depends on TODO-96. Runs the
-  single-strategy simulation from TODO-96 many times over a grid (switch
-  trigger × allocation %) and returns the non-dominated (Pareto-optimal)
-  strategies as a comparison table - explicitly **no** weighted "Overall
-  Score" and **no** single "best" recommendation (rejected across two
-  independent second opinions and this session's own analysis - see
-  TODO-52's write-up for why). Ship with **one** trigger type first
-  (offset as % of remaining loan balance - the one every round of
-  analysis kept returning to as most intuitive); treat "let multiple
-  trigger types compete" as a named-but-deferred enhancement, since it
-  multiplies the grid search and reintroduces its own "which trigger
-  wins" question. Start with a 5% grid (21 × 21 = 441 simulations, not
-  the ~2,100 the second opinion suggested) - plenty smooth for an
-  illustrative tool, finer resolution is a cheap dial to turn up later.
-  Risk Score (0-100, Offset=0/ETF=100 exposure) shown per strategy as a
-  purely descriptive metric - never an input to a formula; a
-  user-facing slider can highlight the nearest Pareto row by preferred
-  risk level, but never decides anything itself. Also add the "Worst
-  Market Crash" stress test (what if ETFs fall 30%?) - cheap, mirrors
-  the existing Interest Rate Stress Test pattern (`purchaseHealthCheck.js`).
+- [ ] **TODO-102: Build the Advanced Assumptions collapsible restructuring**
+  Implementation follow-up from TODO-99's analysis (done - see Completed
+  for the full basic/advanced split and card-by-card breakdown). Add a
+  per-card collapsible "⚙️ Advanced Assumptions" sub-section to Financial
+  Position and Income (Purchase Details' single Property Growth Rate
+  stays inline, not worth its own collapsible), reusing the existing
+  `showX`/`▸`/`▾` toggle pattern already used throughout `App.jsx` -
+  purely presentational, no state-model changes. Defaults collapsed
+  unless something inside has already been customized away from its
+  inert default. TODO-100's master "Realistic Mode" toggle (once built)
+  belongs at the top of Financial Position's collapsible. A real enough
+  UI change (touches rendering across two cards) to warrant Plan Mode
+  and its own test/review pass.
 
 - [x] **TODO-43: Add NSW Foreign Purchaser Additional Duty Surcharge (8% extra)**
   Requested by the user, explicitly flagged as **not urgent**, with the

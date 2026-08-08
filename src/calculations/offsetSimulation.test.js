@@ -1273,3 +1273,53 @@ describe('ETF investing (etfAllocationPct/expectedEtfReturn, TODO-96)', () => {
     expect(offset + savings + etf).toBe(1000);
   });
 });
+
+describe('ETF switch trigger (switchThresholdPct, TODO-98)', () => {
+  it('matches the plain path exactly when switchThresholdPct is 0/omitted - no regression to TODO-96', () => {
+    const shared = {
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      offsetAllocationPct: 100,
+      etfAllocationPct: 100,
+      expectedEtfReturn: 24,
+      effectiveTaxRate: 50,
+      maxMonths: 3,
+    };
+    const withDefault = calculateLoanWithOffset(shared);
+    const withExplicitZero = calculateLoanWithOffset({ ...shared, switchThresholdPct: 0 });
+    expect(withExplicitZero).toEqual(withDefault);
+    // Same numbers as the TODO-96 "grows the ETF balance" test - a 0%
+    // threshold triggers immediately, exactly like having no threshold at all.
+    expect(withDefault.monthlyData.map(d => d.etf)).toEqual([1000, 2010, 3030]);
+  });
+
+  it('holds the ETF share at 0 until offsetBalance crosses switchThresholdPct of the remaining balance, then switches on for good', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      offsetAllocationPct: 100,
+      etfAllocationPct: 100,
+      switchThresholdPct: 10,
+      maxMonths: 3,
+    });
+    // Month 1: offsetBalance (0) / balance (10000) = 0% < 10% -> not yet
+    // triggered, the full $1000 offsetShare goes to the offset.
+    // Month 2: ratio is now checked against last month's offsetBalance
+    // (1000) / balance (9900) ~= 10.10% >= 10% -> triggers this month, so
+    // the entire offsetShare (1000) reroutes to ETF instead, freezing
+    // offset at 1000 for the rest of the simulation.
+    // Month 3: ratio (1000/9800) is still >= 10% - stays triggered
+    // (monotonic, no un-triggering).
+    expect(result.monthlyData.map(d => d.offset)).toEqual([1000, 1000, 1000]);
+    expect(result.monthlyData.map(d => d.etf)).toEqual([0, 1000, 2000]);
+    expect(result.monthlyData.map(d => d.balance)).toEqual([9900, 9800, 9700]);
+  });
+});
