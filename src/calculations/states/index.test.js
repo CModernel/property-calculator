@@ -12,6 +12,14 @@ describe('getStateModule', () => {
     expect(getStateModule(undefined)).toBe(nsw);
   });
 
+  it('falls back to NSW for a lowercase/mismatched-case code - the lookup is case-sensitive', () => {
+    expect(getStateModule('nsw')).toBe(nsw);
+  });
+
+  it('falls back to NSW for an empty string', () => {
+    expect(getStateModule('')).toBe(nsw);
+  });
+
   it('STATES contains exactly the currently-supported states', () => {
     expect(Object.keys(STATES)).toEqual(['NSW']);
   });

@@ -13,4 +13,12 @@ describe('getNextSuggestion', () => {
   it('suggests element.startMonth + 1 for a single-element list', () => {
     expect(getNextSuggestion([{ startMonth: 7 }])).toBe(8);
   });
+
+  it('handles negative startMonth values', () => {
+    expect(getNextSuggestion([{ startMonth: -5 }, { startMonth: -1 }])).toBe(0);
+  });
+
+  it('handles multiple items tied for the max startMonth', () => {
+    expect(getNextSuggestion([{ startMonth: 5 }, { startMonth: 5 }])).toBe(6);
+  });
 });

@@ -41,4 +41,13 @@ describe('clampToRange', () => {
   it('falls back to 0 for a non-finite value with no minimum', () => {
     expect(clampToRange(NaN, undefined, 100)).toBe(0);
   });
+
+  it('checks min before max, so inverted bounds (min > max) clamp a low value up to min, not down to max', () => {
+    expect(clampToRange(10, 100, 50)).toBe(100);
+  });
+
+  it('clamps everything to a single point when min equals max', () => {
+    expect(clampToRange(10, 50, 50)).toBe(50);
+    expect(clampToRange(999, 50, 50)).toBe(50);
+  });
 });

@@ -25,6 +25,14 @@ describe('formatCompactMoney', () => {
   it('handles negatives', () => {
     expect(formatCompactMoney(-5000)).toBe('-5k');
   });
+
+  it('does not abbreviate a value just under 1,000', () => {
+    expect(formatCompactMoney(999)).toBe('999');
+  });
+
+  it('documents the current rounding quirk just under 1,000,000 - toFixed(1) rounds 999.999k up to "1000k" rather than switching to the M format', () => {
+    expect(formatCompactMoney(999999)).toBe('1000k');
+  });
 });
 
 describe('formatMonthsDetailed', () => {
@@ -66,5 +74,20 @@ describe('formatMonthsDetailed', () => {
       technical: 13,
       human: '1 year 1 month'
     });
+  });
+
+  it('formats a "0 whole years + plural remainder months" case', () => {
+    expect(formatMonthsDetailed(6)).toEqual({
+      decimal: '0.5',
+      technical: 6,
+      human: '0 years 6 months'
+    });
+  });
+
+  it('handles a non-integer months value', () => {
+    const result = formatMonthsDetailed(18.5);
+    expect(result.decimal).toBe('1.5');
+    expect(result.technical).toBe(18.5);
+    expect(result.human).toBe('1 year 6.5 months');
   });
 });

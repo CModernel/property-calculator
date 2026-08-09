@@ -29,4 +29,25 @@ describe('estimateLmi', () => {
   it('scales with loan amount at a fixed LVR', () => {
     expect(estimateLmi(900000, 90)).toBeCloseTo(900000 * 0.0275, 5);
   });
+
+  it('applies the 85% band rate for a value strictly between 80 and 85, not just at the boundary', () => {
+    expect(estimateLmi(400000, 82)).toBeCloseTo(400000 * 0.014, 5);
+  });
+
+  it('applies the 90% band rate for a value strictly between 85 and 90, not just at the boundary', () => {
+    expect(estimateLmi(400000, 89)).toBeCloseTo(400000 * 0.0275, 5);
+  });
+
+  it('applies the 95% band rate for a value strictly between 90 and 95, not just at the boundary', () => {
+    expect(estimateLmi(400000, 92)).toBeCloseTo(400000 * 0.045, 5);
+  });
+
+  it('applies the 85% band rate just above 80 (80.01), not the 0% band leaking past its exclusive boundary', () => {
+    expect(estimateLmi(400000, 80.01)).toBeCloseTo(400000 * 0.014, 5);
+  });
+
+  it('is $0 for a zero or negative LVR (defensive/degenerate input)', () => {
+    expect(estimateLmi(400000, 0)).toBe(0);
+    expect(estimateLmi(400000, -10)).toBe(0);
+  });
 });

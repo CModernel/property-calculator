@@ -3182,6 +3182,61 @@ optionally reuse in the commit message when you implement it.
   rectangles; switched back to dark mode and confirmed no visual
   regression (identical to before the fix).
 
+- [x] **TODO-102: Build the Advanced Assumptions collapsible restructuring**
+  Implementation follow-up from TODO-99's analysis (done) and enabled by
+  TODO-100 (Realistic Mode toggle, done). Purely a presentation change -
+  no state-model or calculation changes.
+  Confirmed by exploration before implementing: the "advanced" fields
+  TODO-99 identified were already perfectly contiguous in both cards'
+  JSX - no reordering of unrelated content needed, just wrapping existing
+  spans and relocating one block. In Financial Position, the span from
+  "Savings Interest Rate" through the "Show my Mortgage-Free Age" age
+  slider was one unbroken run covering exactly TODO-99's "advanced" set
+  (Savings Interest Rate, Expense Growth Rate, Inflation Rate, Credit
+  Card block, Compare Offset vs ETF block, Invest in ETFs + its whole
+  sub-tree including Strategy Comparison, Mortgage-Free Age block),
+  sitting between "Offset Allocation" (basic) and Interest Rate/Loan
+  Term/Repayments (basic, stays after). "Realistic Mode" (previously the
+  very first item in the card) moved to become the first item INSIDE
+  this new collapsible, per TODO-99's own recommendation. In Income, the
+  4 sliders (Salary Growth Rate, Rent Growth Rate, Vacancy, Effective Tax
+  Rate) were contiguous between the "💵 Income Sources / + Add" header and
+  the add-income form - wrapped in a toggle NESTED inside the card's
+  existing `showIncome` collapsible, using the indented `pl-3
+  border-l-2` treatment (the existing `showClosingCostsBreakdown`
+  pattern) rather than the bare `mt-4` treatment `showIncome` itself
+  uses, since it reads as a sub-section, not a sibling section.
+  New `showFinancialPositionAdvanced`/`showIncomeAdvanced` state, plain
+  `useState(config.x ?? false)` matching every other `showX` in this
+  file. **Auto-expand when customized**, per TODO-99's own spec ("returning
+  users never lose visibility into settings they've actually set"): no
+  precedent anywhere in this file for a `useState` initializer reading
+  sibling state, so this is two plain derived `const`s computed after the
+  relevant states (`financialPositionAdvancedCustomized`/
+  `incomeAdvancedCustomized`, checking each contained value against its
+  inert default, including `!realisticModeEnabled`), OR'd with the raw
+  toggle into `*Expanded` consts that drive both the toggle arrow and the
+  gated content - so a customized section can never be accidentally
+  hidden, while the raw `useState` is still what `onClick` flips and what
+  persists via `handleSaveScenario`.
+  Both new flags added to `handleSaveScenario`'s existing `showX` list -
+  purely additive, no `SCHEMA_VERSION` bump.
+  No calculation-layer changes at all - `npm test -- --run` (369/369)
+  passed unchanged, confirming the large JSX relocation didn't break
+  anything; `npm run lint`/`npm run build` clean.
+  Verified in the browser: both cards default to collapsed (Available
+  Savings/Offset Allocation/Interest Rate/Loan Term visible in Financial
+  Position; Income Sources list visible in Income, no growth-rate
+  sliders shown). Expanded Financial Position's section and confirmed
+  Realistic Mode is the first item inside, working exactly as before.
+  Expanded Income's nested section and confirmed all 4 sliders render
+  correctly with the indented treatment. Set Salary Growth Rate to 3%,
+  saved, reloaded, confirmed Income's Advanced Assumptions auto-expanded
+  (arrow showed "▾") even though the underlying toggle itself defaults
+  collapsed. Cleared the saved scenario and confirmed both sections reset
+  to collapsed and "Total interest paid" returned to the exact $196,743
+  baseline.
+
 - [x] **TODO-52 (Analysis only, no code): When does it make sense to invest in ETFs instead of paying down the offset?**
   Requested by the user - explicitly an analysis task. The question:
   at what point (if any) does investing the surplus in ETFs (dividend-
@@ -3393,20 +3448,6 @@ optionally reuse in the commit message when you implement it.
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
 
 
-- [ ] **TODO-102: Build the Advanced Assumptions collapsible restructuring**
-  Implementation follow-up from TODO-99's analysis (done - see Completed
-  for the full basic/advanced split and card-by-card breakdown). Add a
-  per-card collapsible "⚙️ Advanced Assumptions" sub-section to Financial
-  Position and Income (Purchase Details' single Property Growth Rate
-  stays inline, not worth its own collapsible), reusing the existing
-  `showX`/`▸`/`▾` toggle pattern already used throughout `App.jsx` -
-  purely presentational, no state-model changes. Defaults collapsed
-  unless something inside has already been customized away from its
-  inert default. TODO-100's master "Realistic Mode" toggle (once built)
-  belongs at the top of Financial Position's collapsible. A real enough
-  UI change (touches rendering across two cards) to warrant Plan Mode
-  and its own test/review pass.
-
 - [x] **TODO-43: Add NSW Foreign Purchaser Additional Duty Surcharge (8% extra)**
   Requested by the user, explicitly flagged as **not urgent**, with the
   8% rate confirmed by the user directly. Added
@@ -3431,6 +3472,38 @@ optionally reuse in the commit message when you implement it.
   $389,547, and Remaining Savings flipping to a negative $39,547 with the
   existing over-committed-savings warning; confirmed First Home Buyer
   stayed checked throughout with zero interaction, exactly as designed.
+
+- [ ] **TODO-103: Default Realistic Mode to OFF**
+  `realisticModeEnabled` (`App.jsx:112`) currently defaults to `true` via
+  `useState(config.realisticModeEnabled ?? true)`. Change the fallback to
+  `false` so a brand-new session (nothing saved yet) starts in the simpler,
+  pre-TODO-90 mode. Safe: every scenario saved since TODO-100 already stores
+  its own explicit `realisticModeEnabled` value (`handleSaveScenario`), so
+  this only affects sessions with no saved scenario at all - no schema
+  migration, no behavior change for anyone with existing saved data.
+
+- [ ] **TODO-104: Hide the realistic-factor sliders when Realistic Mode is off, not just leave them inert**
+  6 of the 7 "realistic factor" sliders - Expense Growth Rate/Inflation Rate
+  (Financial Position Advanced Assumptions, `App.jsx:1230-1258`) and Salary
+  Growth Rate/Rent Growth Rate/Vacancy/Effective Tax Rate (Income Advanced
+  Assumptions, `App.jsx:1962-2020`) - stay fully visible and editable inside
+  their collapsibles even when `realisticModeEnabled` is `false`, despite
+  having zero effect on the simulation once the master toggle is off (the
+  `realistic*`-prefixed derived consts already zero them out correctly - this
+  is a UI-only gap). Gate their rendering on `realisticModeEnabled` too,
+  mirroring the existing "Invest in ETFs" pattern already in this file
+  (disabled control + one-line explanatory note, `App.jsx:1372, 1382-1383`).
+  No calculation change - purely hides controls that already do nothing.
+
+- [ ] **TODO-105: Gate Property Growth Rate the same way**
+  The 7th realistic factor, Property Growth Rate (`App.jsx:1094-1107`), isn't
+  inside either Advanced Assumptions collapsible at all - it lives in the
+  Purchase Details card and stays visible unconditionally regardless of
+  Realistic Mode. Needs its own treatment once TODO-104 ships: hide-in-place
+  with an explanatory note vs. relocate into a gated section - an open design
+  question worth resolving before implementing (Purchase Details isn't part
+  of either existing collapsible pattern, so this isn't a drop-in reuse of
+  TODO-104's approach).
 
 
 ---

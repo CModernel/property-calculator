@@ -17,6 +17,10 @@ describe('getBalanceColor', () => {
   it('is red below 0', () => {
     expect(getBalanceColor(-1)).toBe('text-red-600 dark:text-red-400');
   });
+
+  it('falls through to the red/else branch for a NaN input (both comparisons are false)', () => {
+    expect(getBalanceColor(NaN)).toBe('text-red-600 dark:text-red-400');
+  });
 });
 
 describe('getBalanceBgColor', () => {
@@ -34,5 +38,9 @@ describe('getBalanceBgColor', () => {
 
   it('is red below 0', () => {
     expect(getBalanceBgColor(-1)).toBe('bg-red-50 dark:bg-red-950 border-red-300 dark:border-red-700');
+  });
+
+  it('falls through to the red/else branch for a NaN input (both comparisons are false)', () => {
+    expect(getBalanceBgColor(NaN)).toBe('bg-red-50 dark:bg-red-950 border-red-300 dark:border-red-700');
   });
 });

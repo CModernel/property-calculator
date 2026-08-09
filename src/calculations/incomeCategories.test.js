@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { INCOME_CATEGORIES, INCOME_CATEGORY_DEFAULTS, RENTAL_INCOME_CATEGORIES } from './incomeCategories';
+import { INCOME_CATEGORIES, INCOME_CATEGORY_DEFAULTS, RENTAL_INCOME_CATEGORIES, SALARY_INCOME_CATEGORY } from './incomeCategories';
 import { MAX_MONTH } from './recurringAmount';
+
+describe('SALARY_INCOME_CATEGORY', () => {
+  it('is "Salary/Wages" and is a member of INCOME_CATEGORIES', () => {
+    expect(SALARY_INCOME_CATEGORY).toBe('Salary/Wages');
+    expect(INCOME_CATEGORIES).toContain(SALARY_INCOME_CATEGORY);
+  });
+});
 
 describe('INCOME_CATEGORY_DEFAULTS', () => {
   it('only defines defaults for categories that exist in INCOME_CATEGORIES', () => {

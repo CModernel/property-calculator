@@ -30,4 +30,12 @@ describe('safePercentage', () => {
     expect(safePercentage(100, NaN)).toBe(0);
     expect(safePercentage(Infinity, 100, 100)).toBe(100);
   });
+
+  it('handles a negative denominator', () => {
+    expect(safePercentage(50, -100)).toBe(-50);
+  });
+
+  it('treats a negative-zero denominator the same as a positive zero (whole === 0 is true for -0 too)', () => {
+    expect(safePercentage(50, -0, 42)).toBe(42);
+  });
 });

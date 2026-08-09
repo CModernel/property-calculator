@@ -101,6 +101,19 @@ describe('Interest Rate Stress Test', () => {
     expect(classifyStressTest(survivedDelta).label).toBe('High risk');
     expect(classifyStressTest(survivedDelta).critical).toBe(true);
   });
+
+  it('survives exactly at a stressedNetBalance of 0 (the >= 0 boundary), not just clearly-positive surpluses', () => {
+    const paymentAt8 = calculateMonthlyPayment(loanAmount, calculateMonthlyRate(interestRate + 3), totalMonths);
+    const survivedDelta = calculateStressTestSurvivedDelta({
+      loanAmount, interestRate, totalMonths, monthlyPropertyExpenses: 0,
+      monthlyIncome: paymentAt8, monthlyRentalIncome: 0, monthlyPersonalExpenses: 0,
+    });
+    expect(survivedDelta).toBe(3);
+  });
+
+  it('classifies survivedDelta: 2 directly as "Good"', () => {
+    expect(classifyStressTest(2).label).toBe('Good');
+  });
 });
 
 describe('Upfront Cost Ratio', () => {
@@ -113,6 +126,11 @@ describe('Upfront Cost Ratio', () => {
     expect(classifyUpfrontCostRatio(4).label).toBe('High');
     expect(classifyUpfrontCostRatio(2).label).toBe('Normal');
     expect(classifyUpfrontCostRatio(1.9).label).toBe('Excellent');
+  });
+
+  it('is 0 (not NaN or Infinity) when propertyPrice is 0 or negative', () => {
+    expect(calculateUpfrontCostRatio(30000, 0, 0)).toBe(0);
+    expect(calculateUpfrontCostRatio(30000, 0, -100)).toBe(0);
   });
 });
 
@@ -138,6 +156,10 @@ describe('Vacancy Buffer (TODO-69)', () => {
     expect(classifyVacancyBuffer(2.9).label).toBe('High risk');
     expect(classifyVacancyBuffer(2.9).critical).toBe(true);
   });
+
+  it('is Infinity (not NaN) when there are no property costs at all', () => {
+    expect(calculateVacancyBufferMonths(12000, 0)).toBe(Infinity);
+  });
 });
 
 describe('Rental Yield (TODO-69)', () => {
@@ -155,6 +177,11 @@ describe('Rental Yield (TODO-69)', () => {
     expect(classifyRentalYield(5).label).toBe('Strong');
     expect(classifyRentalYield(3).label).toBe('Average');
     expect(classifyRentalYield(2.9).label).toBe('Weak');
+  });
+
+  it('is 0 (not NaN or Infinity) when propertyPrice is 0 or negative', () => {
+    expect(calculateRentalYield(500, 0)).toBe(0);
+    expect(calculateRentalYield(500, -100)).toBe(0);
   });
 });
 

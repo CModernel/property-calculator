@@ -110,6 +110,13 @@ const PropertyInvestmentCalculator = () => {
   // ETFs/Mortgage-Free Age - those are separate opt-in features with
   // their own checkboxes already, not part of this family.
   const [realisticModeEnabled, setRealisticModeEnabled] = useState(config.realisticModeEnabled ?? true);
+  // TODO-102: collapses Financial Position's growth/inflation/opt-in
+  // sliders behind an "⚙️ Advanced Assumptions" toggle - purely
+  // presentational. See financialPositionAdvancedExpanded below, which
+  // OR's this raw toggle with a "something inside is already customized"
+  // check, so a returning user never loses visibility into settings
+  // they've actually set.
+  const [showFinancialPositionAdvanced, setShowFinancialPositionAdvanced] = useState(config.showFinancialPositionAdvanced ?? false);
   // TODO-89: annual % change in property value, compounding monthly - 0
   // (default) keeps propertyValue pinned at propertyPrice forever, same
   // as every other purely-additive rate input this session.
@@ -264,6 +271,10 @@ const PropertyInvestmentCalculator = () => {
   // scenario behaves byte-for-byte identically.
   const [effectiveTaxRate, setEffectiveTaxRate] = useState(config.effectiveTaxRate ?? 0);
   const [showIncome, setShowIncome] = useState(config.showIncome ?? false);
+  // TODO-102: collapses the 4 growth/tax sliders below (Salary/Rent
+  // Growth, Vacancy, Effective Tax Rate) behind a nested "⚙️ Advanced
+  // Assumptions" toggle - see incomeAdvancedExpanded below.
+  const [showIncomeAdvanced, setShowIncomeAdvanced] = useState(config.showIncomeAdvanced ?? false);
   const [showAddIncome, setShowAddIncome] = useState(false);
   const [newIncomeCategory, setNewIncomeCategory] = useState('Salary/Wages'); // see INCOME_CATEGORIES (src/calculations/incomeCategories.js)
   const [newIncomeCustomName, setNewIncomeCustomName] = useState(''); // only used when category is 'Other'
@@ -289,6 +300,25 @@ const PropertyInvestmentCalculator = () => {
   const realisticVacancyWeeksPerYear = realisticModeEnabled ? vacancyWeeksPerYear : 0;
   const realisticInflationRate = realisticModeEnabled ? inflationRate : 0;
   const realisticEffectiveTaxRate = realisticModeEnabled ? effectiveTaxRate : 0;
+
+  // TODO-102: "Advanced Assumptions" auto-expands whenever something
+  // inside it has already been customized away from its inert default -
+  // a returning user should never lose visibility into settings they've
+  // actually set, even if they (or a loaded scenario) left the section
+  // collapsed. OR'd with the raw toggle rather than baked into its
+  // useState initializer - no precedent in this file for a useState
+  // initializer reading sibling state, and this keeps the raw toggle
+  // (what onClick flips, what persists) separate from the derived
+  // "is it actually showing" value used for rendering.
+  const financialPositionAdvancedCustomized =
+    savingsInterestRate !== 0 || expenseGrowthRate !== 0 || inflationRate !== 0 ||
+    useCreditCard || showOpportunityCost || useEtfInvesting || showMortgageFreeAge ||
+    !realisticModeEnabled;
+  const financialPositionAdvancedExpanded = showFinancialPositionAdvanced || financialPositionAdvancedCustomized;
+
+  const incomeAdvancedCustomized =
+    salaryGrowthRate !== 0 || rentGrowthRate !== 0 || vacancyWeeksPerYear !== 0 || effectiveTaxRate !== 0;
+  const incomeAdvancedExpanded = showIncomeAdvanced || incomeAdvancedCustomized;
 
   // Your personal expenses
   const [showPersonalExpenses, setShowPersonalExpenses] = useState(config.showPersonalExpenses ?? false);
@@ -728,7 +758,8 @@ const PropertyInvestmentCalculator = () => {
       offsetContributions,
       personalExpenseItems,
       showPropertyExpenses, showMonthlyExpensesBreakdown, showClosingCostsBreakdown,
-      showIncome, showPersonalExpenses, showPersonalExpensesBreakdown, showProgressCharts, showHealthCheck,
+      showIncome, showIncomeAdvanced, showFinancialPositionAdvanced,
+      showPersonalExpenses, showPersonalExpensesBreakdown, showProgressCharts, showHealthCheck,
       savedAt,
     };
     if (saveScenario(scenario)) {
@@ -1120,25 +1151,6 @@ const PropertyInvestmentCalculator = () => {
             </h2>
 
             <div className="space-y-4">
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
-                  <input
-                    type="checkbox"
-                    checked={realisticModeEnabled}
-                    onChange={(e) => setRealisticModeEnabled(e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-blue-500"
-                  />
-                  Realistic Mode
-                  <InfoTooltip label="What does this control?">
-                    <p>A master switch for every growth/inflation-rate assumption in this calculator: Property Growth Rate, Salary/Rent Growth Rate, Vacancy, Expense Growth Rate, Inflation Rate, and Effective Tax Rate. Turning it off holds all of them at 0% - without changing any of their own slider values, so turning it back on restores exactly what you had.</p>
-                    <p className="mt-2">Doesn't affect Credit Card, Compare Offset vs ETF, Invest in ETFs, or Mortgage-Free Age - those already have their own individual checkboxes.</p>
-                  </InfoTooltip>
-                </label>
-                {!realisticModeEnabled && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Off - every growth/inflation-rate assumption below is held at 0% for now, regardless of what each slider shows.</p>
-                )}
-              </div>
-
               <NumberSliderField
                 label="Available Savings"
                 value={totalSavings}
@@ -1170,6 +1182,35 @@ const PropertyInvestmentCalculator = () => {
               >
                 % of your monthly surplus that goes to the loan offset - the rest builds your savings balance instead. 100% (default) matches the original "everything goes to offset" behavior.
               </NumberSliderField>
+
+              <button
+                type="button"
+                onClick={() => setShowFinancialPositionAdvanced(!showFinancialPositionAdvanced)}
+                className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+              >
+                {financialPositionAdvancedExpanded ? '▾' : '▸'} ⚙️ Advanced Assumptions
+              </button>
+
+              {financialPositionAdvancedExpanded && (
+              <div className="space-y-4 pl-3 border-l-2 border-gray-200 dark:border-gray-700">
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+                  <input
+                    type="checkbox"
+                    checked={realisticModeEnabled}
+                    onChange={(e) => setRealisticModeEnabled(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-blue-500"
+                  />
+                  Realistic Mode
+                  <InfoTooltip label="What does this control?">
+                    <p>A master switch for every growth/inflation-rate assumption in this calculator: Property Growth Rate, Salary/Rent Growth Rate, Vacancy, Expense Growth Rate, Inflation Rate, and Effective Tax Rate. Turning it off holds all of them at 0% - without changing any of their own slider values, so turning it back on restores exactly what you had.</p>
+                    <p className="mt-2">Doesn't affect Credit Card, Compare Offset vs ETF, Invest in ETFs, or Mortgage-Free Age - those already have their own individual checkboxes.</p>
+                  </InfoTooltip>
+                </label>
+                {!realisticModeEnabled && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Off - every growth/inflation-rate assumption below is held at 0% for now, regardless of what each slider shows.</p>
+                )}
+              </div>
 
               <NumberSliderField
                 label="Savings Interest Rate"
@@ -1544,6 +1585,8 @@ const PropertyInvestmentCalculator = () => {
                   Used to show your Mortgage-Free Age in the Purchase Health Check below.
                 </NumberSliderField>
               )}
+              </div>
+              )}
 
               {/* min must stay above 0: a 0% rate makes calculateMonthlyPayment
                   divide 0 by 0, turning every figure on the page into NaN. */}
@@ -1906,6 +1949,16 @@ const PropertyInvestmentCalculator = () => {
                 </button>
               </div>
 
+              <button
+                type="button"
+                onClick={() => setShowIncomeAdvanced(!showIncomeAdvanced)}
+                className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+              >
+                {incomeAdvancedExpanded ? '▾' : '▸'} ⚙️ Advanced Assumptions
+              </button>
+
+              {incomeAdvancedExpanded && (
+              <div className="space-y-4 pl-3 border-l-2 border-gray-200 dark:border-gray-700">
               <NumberSliderField
                 label="Salary Growth Rate"
                 value={salaryGrowthRate}
@@ -1965,6 +2018,8 @@ const PropertyInvestmentCalculator = () => {
               >
                 Only affects income sources checked "Gross (pre-tax)" below - converts them to net using this rate. Enter net figures for everything else and leave this at 0% (default, no-op).
               </NumberSliderField>
+              </div>
+              )}
 
               {/* Add income form */}
               {showAddIncome && (

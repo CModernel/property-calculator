@@ -22,4 +22,17 @@ describe('calculateCompoundedValue', () => {
     expect(result).toBeLessThan(850000);
     expect(result).toBeGreaterThan(0);
   });
+
+  it('handles a fractional month', () => {
+    expect(calculateCompoundedValue(100000, 12, 0.5)).toBeCloseTo(100000 * Math.pow(1.01, 0.5), 6);
+  });
+
+  it('compounds monotonically over a realistic full loan term (360 months)', () => {
+    const values = [1, 120, 240, 360].map((m) => calculateCompoundedValue(500000, 5, m));
+    for (let i = 1; i < values.length; i++) expect(values[i]).toBeGreaterThan(values[i - 1]);
+  });
+
+  it('stays 0 at any growth rate when baseValue is 0', () => {
+    expect(calculateCompoundedValue(0, 12, 12)).toBe(0);
+  });
 });

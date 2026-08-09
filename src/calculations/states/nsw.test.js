@@ -28,6 +28,14 @@ describe('calculateStandardStampDuty', () => {
   it('handles $0 property price', () => {
     expect(calculateStandardStampDuty(0)).toBe(0);
   });
+
+  it('uses the NEXT tier one dollar above each bracket boundary, not the previous tier (off-by-one guard)', () => {
+    expect(calculateStandardStampDuty(18001)).toBeCloseTo(225.015, 5);
+    expect(calculateStandardStampDuty(38001)).toBeCloseTo(525.0175, 5);
+    expect(calculateStandardStampDuty(103001)).toBeCloseTo(1662.035, 5);
+    expect(calculateStandardStampDuty(387001)).toBeCloseTo(11602.045, 5);
+    expect(calculateStandardStampDuty(1290001)).toBeCloseTo(52237.055, 5);
+  });
 });
 
 describe('calculateStampDuty (First Home Buyer)', () => {
@@ -52,6 +60,26 @@ describe('calculateStampDuty (First Home Buyer)', () => {
   it('charges standard duty regardless of price when not a first home buyer', () => {
     expect(calculateStampDuty(900000, false)).toBeCloseTo(calculateStandardStampDuty(900000), 5);
     expect(calculateStampDuty(500000, false)).toBeCloseTo(calculateStandardStampDuty(500000), 5);
+  });
+
+  it('starts a small nonzero taper one dollar above the $800k exemption boundary, not a jump straight to 0', () => {
+    const dutyAt1M = calculateStandardStampDuty(1000000);
+    const expected = (dutyAt1M * (800001 - 800000)) / 200000;
+    expect(calculateStampDuty(800001, true)).toBeCloseTo(expected, 5);
+    expect(calculateStampDuty(800001, true)).toBeGreaterThan(0);
+  });
+
+  it('still uses the taper formula one dollar below the $1M concession cutoff, not standard duty', () => {
+    // The taper formula is anchored to converge smoothly toward standard
+    // duty as price approaches $1M, so the two are numerically close right
+    // at this boundary - what distinguishes them is that this result must
+    // match the taper computation exactly, at full precision.
+    const dutyAt1M = calculateStandardStampDuty(1000000);
+    const expected = (dutyAt1M * (999999 - 800000)) / 200000;
+    expect(calculateStampDuty(999999, true)).toBeCloseTo(expected, 5);
+    // Exactly at $1M, the concession cuts off entirely regardless of
+    // isFirstHomeBuyer - confirms the >= 1000000 branch, not >, gates it.
+    expect(calculateStampDuty(1000000, true)).toBeCloseTo(calculateStandardStampDuty(1000000), 5);
   });
 });
 

@@ -34,4 +34,16 @@ describe('getSteppedValue', () => {
     expect(getSteppedValue(200, changes, 20)).toBe(250);
     expect(getSteppedValue(200, changes, 25)).toBe(300);
   });
+
+  it('when two changes share the same startMonth, the first one encountered in the array wins', () => {
+    const changes = [
+      { startMonth: 13, amount: 250 },
+      { startMonth: 13, amount: 999 },
+    ];
+    expect(getSteppedValue(200, changes, 13)).toBe(250);
+  });
+
+  it('applies a change with startMonth 0 from the very first queried month', () => {
+    expect(getSteppedValue(200, [{ startMonth: 0, amount: 999 }], 0)).toBe(999);
+  });
 });

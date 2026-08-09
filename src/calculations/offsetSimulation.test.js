@@ -1322,4 +1322,374 @@ describe('ETF switch trigger (switchThresholdPct, TODO-98)', () => {
     expect(result.monthlyData.map(d => d.etf)).toEqual([0, 1000, 2000]);
     expect(result.monthlyData.map(d => d.balance)).toEqual([9900, 9800, 9700]);
   });
+
+  it('stays at etf:0 for the entire simulation when switchThresholdPct is never crossed within maxMonths', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 100, // tiny surplus relative to loanAmount - the ratio barely moves
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      offsetAllocationPct: 100,
+      etfAllocationPct: 100,
+      switchThresholdPct: 90, // effectively unreachable in 3 months at this scale
+      maxMonths: 3,
+    });
+    expect(result.monthlyData.map(d => d.etf)).toEqual([0, 0, 0]);
+    expect(result.monthlyData.map(d => d.offset)).toEqual([100, 200, 300]);
+  });
+
+  it('combines with offsetAllocationPct < 100 - a slower-accumulating offset delays when the threshold is crossed', () => {
+    const shared = {
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      etfAllocationPct: 100,
+      switchThresholdPct: 10,
+      maxMonths: 2,
+    };
+    // At offsetAllocationPct: 100 the threshold is already crossed by month 2
+    // (see the test above this one). Halving the share reaching the offset
+    // each month slows the ratio's climb, so the same threshold must still
+    // be untriggered at that same month.
+    const fullOffset = calculateLoanWithOffset({ ...shared, offsetAllocationPct: 100 });
+    const halfOffset = calculateLoanWithOffset({ ...shared, offsetAllocationPct: 50 });
+    expect(fullOffset.monthlyData[1].etf).toBeGreaterThan(0);
+    expect(halfOffset.monthlyData[1].etf).toBe(0);
+  });
+
+  it("leaves etf at 0 the whole time when offsetAllocationPct is 0 - the offset has nothing of its own to divert", () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      offsetAllocationPct: 0,
+      etfAllocationPct: 100,
+      switchThresholdPct: 0,
+      maxMonths: 3,
+    });
+    expect(result.monthlyData.map(d => d.etf)).toEqual([0, 0, 0]);
+    expect(result.monthlyData.map(d => d.savings)).toEqual([1000, 2000, 3000]);
+  });
+});
+
+describe('additional interestRateField scenarios (TODO-57)', () => {
+  it('re-amortizes correctly on a rate DECREASE too, still paying off exactly by term end', () => {
+    const loanAmount = 100000;
+    const initialRate = 9;
+    const initialMonthlyRate = calculateMonthlyRate(initialRate);
+    const initialMonthlyPayment = calculateMonthlyPayment(loanAmount, initialMonthlyRate, 12);
+
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [{ id: 1, name: 'Salary', amount: 0, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
+      monthlyToOffset: 0,
+      loanAmount,
+      monthlyRate: initialMonthlyRate,
+      monthlyPayment: initialMonthlyPayment,
+      interestRateField: { base: initialRate, changes: [{ startMonth: 6, amount: 2 }] },
+      maxMonths: 12,
+    });
+
+    expect(result.monthlyData).toHaveLength(12);
+    expect(result.monthlyData[11].balance).toBe(0);
+  });
+
+  it('re-amortizes correctly through two or more scheduled changes in sequence', () => {
+    const loanAmount = 100000;
+    const initialRate = 6;
+    const initialMonthlyRate = calculateMonthlyRate(initialRate);
+    const initialMonthlyPayment = calculateMonthlyPayment(loanAmount, initialMonthlyRate, 12);
+
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [{ id: 1, name: 'Salary', amount: 0, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
+      monthlyToOffset: 0,
+      loanAmount,
+      monthlyRate: initialMonthlyRate,
+      monthlyPayment: initialMonthlyPayment,
+      interestRateField: { base: initialRate, changes: [{ startMonth: 4, amount: 9 }, { startMonth: 8, amount: 5 }] },
+      maxMonths: 12,
+    });
+
+    expect(result.monthlyData).toHaveLength(12);
+    expect(result.monthlyData[11].balance).toBe(0);
+  });
+
+  it('splits the delta-correction term across offset/savings by offsetAllocationPct, not just into the offset', () => {
+    const loanAmount = 100000;
+    const initialRate = 9;
+    const initialMonthlyRate = calculateMonthlyRate(initialRate);
+    const initialMonthlyPayment = calculateMonthlyPayment(loanAmount, initialMonthlyRate, 12);
+
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [{ id: 1, name: 'Salary', amount: 0, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
+      monthlyToOffset: 0,
+      loanAmount,
+      monthlyRate: initialMonthlyRate,
+      monthlyPayment: initialMonthlyPayment,
+      // A steep rate DROP so the correction (initial payment - new, lower
+      // payment) is unambiguously positive from month 6 on.
+      interestRateField: { base: initialRate, changes: [{ startMonth: 6, amount: 2 }] },
+      offsetAllocationPct: 50,
+      maxMonths: 12,
+    });
+
+    // Before the change, there's no surplus at all (no monthlyToOffset, no
+    // income) - offset and savings both stay at 0 through month 5.
+    expect(result.monthlyData[4].offset).toBe(0);
+    expect(result.monthlyData[4].savings).toBe(0);
+    // From month 6, the ONLY surplus is the correction term itself - if it
+    // were special-cased to always flow straight to the offset (bypassing
+    // offsetAllocationPct), savings would stay at 0. Instead it's split
+    // evenly, same as any other surplus dollar.
+    const month6 = result.monthlyData[5];
+    expect(month6.savings).toBeGreaterThan(0);
+    expect(Math.abs(month6.offset - month6.savings)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('sentinel early-out boundary conditions', () => {
+  it('still hits the sentinel when only initialSavingsBalance is nonzero (savingsInterestRate stays 0)', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 0,
+      loanAmount: 100000,
+      monthlyRate: 0.005,
+      monthlyPayment: 500,
+      initialSavingsBalance: 5000,
+    });
+    expect(result.monthlyData).toEqual([]);
+  });
+
+  it('still hits the sentinel when only savingsInterestRate is nonzero (initialSavingsBalance stays 0)', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 0,
+      loanAmount: 100000,
+      monthlyRate: 0.005,
+      monthlyPayment: 500,
+      savingsInterestRate: 5,
+    });
+    expect(result.monthlyData).toEqual([]);
+  });
+
+  it('returns cleanly with an empty timeline when maxMonths is 0, even with a real surplus', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      loanAmount: 100000,
+      monthlyRate: 0.005,
+      monthlyPayment: 500,
+      maxMonths: 0,
+    });
+    expect(result.months).toBe(0);
+    expect(result.monthlyData).toEqual([]);
+    expect(result.totalInterest).toBe(0);
+  });
+
+  it('documents that offsetting contributions summing to a net 0 total take the sentinel shortcut, despite real per-month timing', () => {
+    // The sentinel gate checks the SUM of contributions, not whether any
+    // individual month has real activity - a net-zero total (however it's
+    // composed) is treated identically to "no contributions at all". Flagged
+    // separately as a candidate TODO, not fixed here.
+    const result = calculateLoanWithOffset({
+      contributions: [
+        { startMonth: 1, recurrence: 'none', amount: 500 },
+        { startMonth: 2, recurrence: 'none', amount: -500 },
+      ],
+      personalExpenseItems: [],
+      monthlyToOffset: 0,
+      loanAmount: 100000,
+      monthlyRate: 0.005,
+      monthlyPayment: 500,
+    });
+    expect(result.monthlyData).toEqual([]);
+  });
+});
+
+describe('additional Salary/rental growth interactions', () => {
+  it('composes correctly with a Gross salary item, salaryGrowthRate, and effectiveTaxRate together', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [{ id: 1, name: 'Salary/Wages', amount: 300, isGross: true, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      salaryGrowthRate: 12,
+      effectiveTaxRate: 25,
+      maxMonths: 2,
+    });
+    let cumulative = 0;
+    const expectedOffsets = [1, 2].map((month) => {
+      const grownNetSalary = calculateCompoundedValue(300 * 0.75, 12, month);
+      cumulative += calculateMonthlyFromWeekly(grownNetSalary);
+      return Math.round(cumulative);
+    });
+    expect(result.monthlyData.map(d => d.offset)).toEqual(expectedOffsets);
+  });
+
+  it('shrinks Salary/Wages income under a negative salaryGrowthRate, unlike a flat 0% rate', () => {
+    const shared = {
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [{ id: 1, name: 'Salary/Wages', amount: 300, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 12,
+    };
+    const flat = calculateLoanWithOffset(shared);
+    const declining = calculateLoanWithOffset({ ...shared, salaryGrowthRate: -5 });
+    expect(declining.monthlyData[11].offset).toBeLessThan(flat.monthlyData[11].offset);
+  });
+
+  it('shrinks House Rent income under a negative rentGrowthRate, unlike a flat 0% rate', () => {
+    const shared = {
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [{ id: 1, name: 'House Rent', amount: 300, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      maxMonths: 12,
+    };
+    const flat = calculateLoanWithOffset(shared);
+    const declining = calculateLoanWithOffset({ ...shared, rentGrowthRate: -5 });
+    expect(declining.monthlyData[11].offset).toBeLessThan(flat.monthlyData[11].offset);
+  });
+});
+
+describe('property and personal expense growth combined (expenseGrowthRate, TODO-92)', () => {
+  it('grows property expenses and personal expenses together in the same call, not just in isolation', () => {
+    const emptyField = { base: 0, changes: [] };
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [{ startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH, amount: 100 }],
+      monthlyToOffset: 1000,
+      expenseFields: {
+        strataFees: emptyField,
+        utilities: emptyField,
+        councilRates: { base: 400, changes: [] }, // quarterly -> $100/month
+        insurance: emptyField,
+        maintenance: emptyField,
+        waterRates: emptyField,
+        landTax: emptyField,
+        propertyManagement: emptyField,
+      },
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      expenseGrowthRate: 12,
+      maxMonths: 2,
+    });
+    let cumulative = 0;
+    const expectedOffsets = [1, 2].map((month) => {
+      const grownPropertyExpense = calculateCompoundedValue(100, 12, month);
+      const grownPersonalExpense = calculateCompoundedValue(100, 12, month);
+      cumulative += 1000 - grownPropertyExpense - grownPersonalExpense;
+      return Math.round(cumulative);
+    });
+    expect(result.monthlyData.map(d => d.offset)).toEqual(expectedOffsets);
+  });
+});
+
+describe('vacancy weeks beyond a full year (vacancyWeeksPerYear > 52)', () => {
+  it('documents the current unclamped behavior - vacancyFactor goes negative and REDUCES the surplus rather than zeroing rental income out', () => {
+    // Not a validated design choice - flagged separately as a candidate TODO
+    // rather than fixed here (fixing would change simulation output).
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [{ id: 1, name: 'House Rent', amount: 300, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      vacancyWeeksPerYear: 60, // > 52 weeks/year
+      maxMonths: 1,
+    });
+    const vacancyFactor = 1 - (60 / 52);
+    expect(vacancyFactor).toBeLessThan(0);
+    const grownRent = calculateMonthlyFromWeekly(300 * vacancyFactor);
+    expect(result.monthlyData[0].offset).toBe(Math.round(1000 + grownRent));
+    expect(result.monthlyData[0].offset).toBeLessThan(1000);
+  });
+});
+
+describe('ETF losses (negative expectedEtfReturn)', () => {
+  it('shrinks the ETF balance under a negative expectedEtfReturn (a loss scenario), unlike a flat/positive return', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      offsetAllocationPct: 100,
+      etfAllocationPct: 100,
+      expectedEtfReturn: -12, // -1%/month via calculateMonthlyRate
+      maxMonths: 3,
+    });
+    // etfBalance grows by the (negative) monthly return BEFORE this month's
+    // deposit lands, so each month is at most a flat $1000/month
+    // accumulation would give (month 1 ties, since there's no prior balance
+    // yet for the negative rate to act on) and strictly less from month 2 on.
+    const naive = [1000, 2000, 3000];
+    result.monthlyData.forEach((d, i) => expect(d.etf).toBeLessThanOrEqual(naive[i]));
+    expect(result.monthlyData[2].etf).toBeLessThan(naive[2]);
+  });
+});
+
+describe('every knob combined at once (regression safety net)', () => {
+  it('composes effectiveTaxRate + etfAllocationPct + switchThresholdPct + offsetAllocationPct all together without crashing or producing garbage', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [{ id: 1, name: 'Salary/Wages', amount: 300, isGross: true, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      offsetAllocationPct: 80,
+      etfAllocationPct: 50,
+      expectedEtfReturn: 12,
+      effectiveTaxRate: 20,
+      switchThresholdPct: 5,
+      maxMonths: 6,
+    });
+    expect(result.monthlyData).toHaveLength(6);
+    result.monthlyData.forEach((d) => {
+      expect(Number.isFinite(d.offset)).toBe(true);
+      expect(Number.isFinite(d.savings)).toBe(true);
+      expect(Number.isFinite(d.etf)).toBe(true);
+      expect(d.offset).toBeGreaterThanOrEqual(0);
+      expect(d.savings).toBeGreaterThanOrEqual(0);
+      expect(d.etf).toBeGreaterThanOrEqual(0);
+    });
+    // No withdrawals are modeled anywhere in this loop - savings and etf can
+    // only ever grow across months in this setup.
+    for (let i = 1; i < result.monthlyData.length; i++) {
+      expect(result.monthlyData[i].savings).toBeGreaterThanOrEqual(result.monthlyData[i - 1].savings);
+      expect(result.monthlyData[i].etf).toBeGreaterThanOrEqual(result.monthlyData[i - 1].etf);
+    }
+  });
 });

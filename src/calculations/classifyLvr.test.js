@@ -59,4 +59,11 @@ describe('classifyLvr', () => {
   it('returns the same object reference as the corresponding LVR_BANDS entry (for tooltip highlight)', () => {
     expect(classifyLvr(85)).toBe(LVR_BANDS.find((b) => b.band === '80–90%'));
   });
+
+  it('falls back to the last band for a NaN input (the only value no real band clears)', () => {
+    // Every finite value, however negative, clears the -Infinity catch-all
+    // band directly - NaN is the only input that exercises the `?? ` fallback
+    // itself, since `NaN >= band.min` is false for every band.
+    expect(classifyLvr(NaN)).toBe(LVR_BANDS[LVR_BANDS.length - 1]);
+  });
 });

@@ -40,6 +40,13 @@ describe('getTimelineSnapshot', () => {
   it('falls back to the last recorded month when past the end of the simulation', () => {
     expect(getTimelineSnapshot(99, monthlyData, 500000, 2291.67)).toBe(monthlyData[monthlyData.length - 1]);
   });
+
+  it('returns undefined rather than throwing when monthlyData is empty and timelineMonth is nonzero', () => {
+    // .find() returns undefined, and the fallback monthlyData[-1] is also
+    // undefined - documents the current shape so a future refactor doesn't
+    // silently change what callers receive here.
+    expect(getTimelineSnapshot(5, [], 500000, 2291.67)).toBeUndefined();
+  });
 });
 
 describe('calculateEffectiveProgress', () => {
@@ -58,6 +65,16 @@ describe('calculateEffectiveProgress', () => {
   it('is 100% when there is no loan at all (a 100% cash purchase)', () => {
     expect(calculateEffectiveProgress(0, 0)).toBe(100);
   });
+
+  it('documents the current unclamped lower bound - a slightly negative result when effectiveBalance overshoots loanAmount', () => {
+    // Only Math.min(100, ...) is applied, with no Math.max(0, ...) floor - a
+    // plausible rounding artifact (offset ending up $1 above the loan
+    // balance) currently produces a small negative progress value instead
+    // of clamping to 0. Not fixed here - flagged separately as a candidate
+    // TODO, since fixing would change display output.
+    const progress = calculateEffectiveProgress(500000, 500001);
+    expect(progress).toBeLessThan(0);
+  });
 });
 
 describe('calculateTimeRemaining', () => {
@@ -68,5 +85,14 @@ describe('calculateTimeRemaining', () => {
 
   it('clamps to zero once past the end of the simulation, instead of going negative', () => {
     expect(calculateTimeRemaining(147, 200)).toEqual({ years: 0, months: 0 });
+  });
+
+  it('is exactly zero at the boundary where timelineMonth equals totalMonths', () => {
+    expect(calculateTimeRemaining(147, 147)).toEqual({ years: 0, months: 0 });
+  });
+
+  it('is always zero when there is no loan term at all (totalMonths: 0)', () => {
+    expect(calculateTimeRemaining(0, 0)).toEqual({ years: 0, months: 0 });
+    expect(calculateTimeRemaining(0, 50)).toEqual({ years: 0, months: 0 });
   });
 });

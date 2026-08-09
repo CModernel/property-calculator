@@ -20,6 +20,16 @@ describe('calculateOffsetTimingBenefit', () => {
     const at54 = calculateOffsetTimingBenefit(1000, 54, 6);
     expect(at54).toBeCloseTo(at27 * 2, 5);
   });
+
+  it('is 0 when avgExtraDaysHeld is 0 (no float at all)', () => {
+    expect(calculateOffsetTimingBenefit(1030, 0, 6.13)).toBe(0);
+  });
+
+  it('scales linearly with monthly card spend too, not just days held', () => {
+    const at1000 = calculateOffsetTimingBenefit(1000, 27, 6);
+    const at2000 = calculateOffsetTimingBenefit(2000, 27, 6);
+    expect(at2000).toBeCloseTo(at1000 * 2, 5);
+  });
 });
 
 describe('calculateCardCashback', () => {

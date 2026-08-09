@@ -17,5 +17,11 @@ describe('sumClosingCosts', () => {
     // able to turn the subtotal into NaN.
     expect(sumClosingCosts([100, NaN, 200])).toBe(300);
     expect(sumClosingCosts([100, undefined, 200])).toBe(300);
+    expect(sumClosingCosts([100, Infinity, 200])).toBe(300);
+    expect(sumClosingCosts([100, null, 200])).toBe(300);
+  });
+
+  it('sums negative values (e.g. a rebate/credit) rather than treating them as non-finite', () => {
+    expect(sumClosingCosts([2000, -500])).toBe(1500);
   });
 });

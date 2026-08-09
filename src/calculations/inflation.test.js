@@ -34,4 +34,19 @@ describe('calculatePresentValueOfInterest', () => {
     expect(result).toBeLessThan(200);
     expect(result).toBeGreaterThan(100);
   });
+
+  it('produces a present value GREATER than the nominal sum under negative inflation (deflation)', () => {
+    const monthlyData = [
+      { month: 1, monthlyInterestPaid: 100 },
+      { month: 2, monthlyInterestPaid: 100 },
+    ];
+    expect(calculatePresentValueOfInterest(monthlyData, -5)).toBeGreaterThan(200);
+  });
+
+  it('sums correctly over a large monthlyData array (not just 2-3 entries)', () => {
+    const monthlyData = Array.from({ length: 360 }, (_, i) => ({ month: i + 1, monthlyInterestPaid: 100 }));
+    const result = calculatePresentValueOfInterest(monthlyData, 5);
+    expect(result).toBeGreaterThan(0);
+    expect(result).toBeLessThan(360 * 100); // discounted, so less than the nominal sum
+  });
 });

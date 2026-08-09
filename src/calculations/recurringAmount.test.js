@@ -45,6 +45,12 @@ describe('isScheduleActive', () => {
     expect(isScheduleActive(schedule, 10)).toBe(true);
     expect(isScheduleActive(schedule, 11)).toBe(false);
   });
+
+  it('fails safe to false for an unrecognized recurrence value, rather than throwing', () => {
+    const schedule = { startMonth: 1, recurrence: 'weekly', endMonth: MAX_MONTH };
+    expect(() => isScheduleActive(schedule, 5)).not.toThrow();
+    expect(isScheduleActive(schedule, 5)).toBe(false);
+  });
 });
 
 describe('getActiveAmount', () => {
@@ -79,6 +85,18 @@ describe('getActiveAmountWithGrowth (TODO-90)', () => {
     const oneTime = [{ amount: 500, startMonth: 6, recurrence: 'none' }];
     expect(getActiveAmountWithGrowth(oneTime, 7, 10)).toBe(0);
   });
+
+  it('sums growth-compounded amounts across multiple simultaneously-active items', () => {
+    const multiItems = [
+      { amount: 1000, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH },
+      { amount: 500, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH },
+    ];
+    expect(getActiveAmountWithGrowth(multiItems, 1, 12)).toBeCloseTo(1500 * 1.01, 6);
+  });
+
+  it('shrinks the amount under a negative annualGrowthRate', () => {
+    expect(getActiveAmountWithGrowth(items, 12, -12)).toBeLessThan(1000);
+  });
 });
 
 describe('gross income tax conversion (effectiveTaxRate, TODO-94)', () => {
@@ -112,6 +130,16 @@ describe('gross income tax conversion (effectiveTaxRate, TODO-94)', () => {
     // 1000 * 0.8 (20% tax) * 1.01 (1%/month growth)
     expect(getActiveAmountWithGrowth(items, 1, 12, 20)).toBeCloseTo(800 * 1.01, 6);
   });
+
+  it('reduces a Gross item to exactly 0 at a 100% effective tax rate', () => {
+    const items = [{ amount: 1000, isGross: true, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }];
+    expect(getActiveAmount(items, 1, 100)).toBe(0);
+  });
+
+  it('increases a Gross item above its gross amount at a negative effective tax rate (a rebate scenario)', () => {
+    const items = [{ amount: 1000, isGross: true, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }];
+    expect(getActiveAmount(items, 1, -10)).toBe(1100);
+  });
 });
 
 describe('countOccurrencesUpTo', () => {
@@ -139,6 +167,13 @@ describe('countOccurrencesUpTo', () => {
     const schedule = { startMonth: 1, recurrence: 'monthly', endMonth: 10 };
     expect(countOccurrencesUpTo(schedule, 10)).toBe(10);
     expect(countOccurrencesUpTo(schedule, 50)).toBe(10);
+  });
+
+  it('caps a quarterly schedule correctly when the query month is past a non-interval-aligned endMonth', () => {
+    // Fires at months 1, 4, 7, 10 - the last firing on/before endMonth 11,
+    // which isn't itself a multiple-of-3 offset from startMonth 1.
+    const schedule = { startMonth: 1, recurrence: 'quarterly', endMonth: 11 };
+    expect(countOccurrencesUpTo(schedule, 20)).toBe(4);
   });
 });
 
@@ -168,6 +203,10 @@ describe('classifyScheduleStatus', () => {
   it('a "Forever" (endMonth === MAX_MONTH) schedule never becomes "past"', () => {
     expect(classifyScheduleStatus({ startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }, MAX_MONTH)).toBe('active');
   });
+
+  it('is "future" before a recurring schedule starts too, not just one-time', () => {
+    expect(classifyScheduleStatus({ startMonth: 6, recurrence: 'monthly', endMonth: MAX_MONTH }, 5)).toBe('future');
+  });
 });
 
 describe('formatScheduleLabel', () => {
@@ -187,5 +226,9 @@ describe('formatScheduleLabel', () => {
       'Quarterly, months 3-12'
     );
     expect(formatScheduleLabel({ startMonth: 1, recurrence: 'yearly', endMonth: 60 })).toBe('Yearly, months 1-60');
+  });
+
+  it('formats a degenerate bounded schedule where startMonth equals endMonth', () => {
+    expect(formatScheduleLabel({ startMonth: 5, recurrence: 'monthly', endMonth: 5 })).toBe('Monthly, months 5-5');
   });
 });

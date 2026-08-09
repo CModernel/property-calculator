@@ -118,4 +118,90 @@ describe('classifyEtfCrash', () => {
     expect(classifyEtfCrash(10)).toBe(ETF_CRASH_BANDS[2]);
     expect(classifyEtfCrash(0)).toBe(ETF_CRASH_BANDS[3]);
   });
+
+  it('classifies an intermediate (non-boundary) value into the correct band', () => {
+    expect(classifyEtfCrash(40)).toBe(ETF_CRASH_BANDS[1]); // between 30 and 50 -> "Resilient"
+    expect(classifyEtfCrash(75)).toBe(ETF_CRASH_BANDS[0]); // > 50 -> "Very resilient"
+  });
+});
+
+describe('runStrategyGrid - offset-sim sentinel path', () => {
+  it('defaults etfBalance/offsetBalance to 0 without throwing when every grid cell hits the sentinel (empty monthlyData)', () => {
+    const results = runStrategyGrid({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 0,
+      loanAmount: 100000,
+      monthlyRate: 0.005,
+      monthlyPayment: 500,
+      offsetAllocationPct: 100,
+      expectedEtfReturn: 8,
+      effectiveTaxRate: 30,
+      maxMonths: 24,
+    });
+    expect(results).toHaveLength(441);
+    for (const row of results) {
+      expect(row.etfBalance).toBe(0);
+      expect(row.offsetBalance).toBe(0);
+      expect(row.totalInterestPaid).toBe(999999);
+      expect(row.riskScore).toBe(0);
+    }
+  });
+});
+
+describe('selectParetoFront - additional boundary/dominance cases', () => {
+  it('returns an empty array when given no results', () => {
+    expect(selectParetoFront([])).toEqual([]);
+  });
+
+  it('excludes a row that is strictly dominated by another (same etfBalance, worse interest)', () => {
+    const results = [
+      { switchThresholdPct: 0, etfAllocationPct: 0, totalInterestPaid: 100, etfBalance: 100, offsetBalance: 400, riskScore: 20 },
+      { switchThresholdPct: 50, etfAllocationPct: 50, totalInterestPaid: 200, etfBalance: 100, offsetBalance: 300, riskScore: 25 },
+    ];
+    const front = selectParetoFront(results);
+    expect(front).toHaveLength(1);
+    expect(front[0].totalInterestPaid).toBe(100);
+  });
+
+  it('returns all 5 points unchanged (no sampling) when there are exactly 5 distinct pareto points', () => {
+    const results = Array.from({ length: 5 }, (_, i) => ({
+      switchThresholdPct: 0,
+      etfAllocationPct: i * 25,
+      totalInterestPaid: 100 + i * 10,
+      etfBalance: i * 25,
+      offsetBalance: 500 - i * 25,
+      riskScore: i * 25,
+    }));
+    const front = selectParetoFront(results);
+    expect(front).toHaveLength(5);
+    expect(front.map(r => r.etfBalance)).toEqual([0, 25, 50, 75, 100]);
+  });
+
+  it('returns exactly 5 evenly-spaced points, at the specific sampled indices, when there are 6 distinct pareto points', () => {
+    const results = Array.from({ length: 6 }, (_, i) => ({
+      switchThresholdPct: 0,
+      etfAllocationPct: i * 20,
+      totalInterestPaid: 100 + i * 10,
+      etfBalance: i * 20,
+      offsetBalance: 500 - i * 20,
+      riskScore: i * 20,
+    }));
+    const front = selectParetoFront(results);
+    expect(front).toHaveLength(5);
+    // Indices 0,1,3,4,5 (Math.round(i*5/4) for i=0..4) - index 2 (etf:40) is
+    // the one point dropped by the evenly-spaced sampling.
+    expect(front.map(r => r.etfBalance)).toEqual([0, 20, 60, 80, 100]);
+  });
+});
+
+describe('calculateEtfCrashSurvivedPct - additional boundary cases', () => {
+  it('treats an exact equality at a crash-tier boundary as surviving (uses >=, not >)', () => {
+    // 1000 * (1 - 0.5) = 500 === 500 -> survives the 50% tier exactly at the boundary.
+    expect(calculateEtfCrashSurvivedPct(1000, 500)).toBe(50);
+  });
+
+  it('returns 0 for every crash tier when etfBalance is 0 but there was a real extra interest cost', () => {
+    expect(calculateEtfCrashSurvivedPct(0, 100)).toBe(0);
+  });
 });

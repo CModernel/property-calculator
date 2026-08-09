@@ -10,6 +10,10 @@ describe('validateAmount', () => {
   it('accepts a positive amount', () => {
     expect(validateAmount(10)).toBe(true);
   });
+
+  it('rejects NaN', () => {
+    expect(validateAmount(NaN)).toBe(false);
+  });
 });
 
 describe('validateScheduleRange', () => {
@@ -41,5 +45,9 @@ describe('hasDuplicateOneTimeMonth', () => {
   it('returns false when no entry matches the month', () => {
     const items = [{ recurrence: 'none', startMonth: 5 }];
     expect(hasDuplicateOneTimeMonth(items, 6)).toBe(false);
+  });
+
+  it('returns false for an empty list', () => {
+    expect(hasDuplicateOneTimeMonth([], 5)).toBe(false);
   });
 });

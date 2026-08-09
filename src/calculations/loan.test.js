@@ -57,6 +57,18 @@ describe('calculateMonthlyPayment', () => {
     const monthlyRate = calculateMonthlyRate(DEFAULTS.interestRate);
     expect(calculateMonthlyPayment(0, monthlyRate, TOTAL_MONTHS)).toBe(0);
   });
+
+  it('documents the current NaN result at a 0% monthly rate (0/0 in the annuity formula) - not a validated 0%-intro-rate design, flagged separately', () => {
+    expect(calculateMonthlyPayment(100000, 0, 12)).toBeNaN();
+  });
+
+  it('falls back to TOTAL_MONTHS when totalMonths is omitted', () => {
+    const monthlyRate = calculateMonthlyRate(DEFAULTS.interestRate);
+    const loanAmount = calculateLoanAmount(DEFAULTS.propertyPrice, DEFAULTS.downPayment);
+    expect(calculateMonthlyPayment(loanAmount, monthlyRate)).toBe(
+      calculateMonthlyPayment(loanAmount, monthlyRate, TOTAL_MONTHS)
+    );
+  });
 });
 
 describe('property expenses', () => {
@@ -225,6 +237,12 @@ describe('amounts available to offset', () => {
     expect(calculateWeeklyToOffset(150)).toBe(150);
     expect(calculateFortnightlyToOffset(300)).toBe(300);
   });
+
+  it('passes through exactly 0 unchanged (boundary of the Math.max(0, x) clamp)', () => {
+    expect(calculateMonthlyToOffset(0)).toBe(0);
+    expect(calculateWeeklyToOffset(0)).toBe(0);
+    expect(calculateFortnightlyToOffset(0)).toBe(0);
+  });
 });
 
 describe('calculateTotalScheduledOffset', () => {
@@ -242,5 +260,12 @@ describe('calculateTotalScheduledOffset', () => {
       { amount: 500, recurrence: 'quarterly', startMonth: 1, endMonth: 360 },
     ])).toBe(10000);
     expect(calculateTotalScheduledOffset([{ amount: 500, recurrence: 'monthly', startMonth: 1, endMonth: 360 }])).toBe(0);
+  });
+
+  it('excludes a yearly recurring contribution too, same filter as quarterly/monthly', () => {
+    expect(calculateTotalScheduledOffset([
+      { amount: 10000, recurrence: 'none' },
+      { amount: 2000, recurrence: 'yearly', startMonth: 1, endMonth: 360 },
+    ])).toBe(10000);
   });
 });

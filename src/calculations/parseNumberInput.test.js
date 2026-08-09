@@ -50,4 +50,16 @@ describe('parseNumberInput', () => {
     expect(parseNumberInput(undefined)).toBeNull();
     expect(parseNumberInput(500)).toBeNull();
   });
+
+  it('parses scientific notation, since Number() itself accepts it', () => {
+    expect(parseNumberInput('1e3')).toBe(1000);
+  });
+
+  it('returns null for comma-formatted input (Number() cannot parse thousands separators)', () => {
+    expect(parseNumberInput('1,000')).toBeNull();
+  });
+
+  it('parses a leading-plus-signed number', () => {
+    expect(parseNumberInput('+5')).toBe(5);
+  });
 });

@@ -24,6 +24,14 @@ describe('withMonthlyPrincipal', () => {
     const result = withMonthlyPrincipal([{ month: 1, totalPrincipalPaid: 500, balance: 249500, offset: 0 }]);
     expect(result[0]).toMatchObject({ month: 1, balance: 249500, offset: 0 });
   });
+
+  it('uses array index, not the entry.month field, to find the previous cumulative total', () => {
+    const result = withMonthlyPrincipal([
+      { month: 1, totalPrincipalPaid: 500 },
+      { month: 5, totalPrincipalPaid: 1200 }, // a gap in month numbering
+    ]);
+    expect(result[1].monthlyPrincipalPaid).toBe(700); // 1200 - 500, by index not month
+  });
 });
 
 describe('getYearTickMonths', () => {
@@ -42,5 +50,9 @@ describe('getYearTickMonths', () => {
 
   it('a loan paid off within its first year still gets a tick at the payoff month', () => {
     expect(getYearTickMonths(7)).toEqual([7]);
+  });
+
+  it('returns a single tick equal to totalMonths for exactly one year (no duplicate final tick)', () => {
+    expect(getYearTickMonths(12)).toEqual([12]);
   });
 });
