@@ -121,7 +121,10 @@ const PropertyInvestmentCalculator = () => {
   // TODO-89: annual % change in property value, compounding monthly - 0
   // (default) keeps propertyValue pinned at propertyPrice forever, same
   // as every other purely-additive rate input this session.
-  const [propertyGrowthRate, setPropertyGrowthRate] = useState(config.propertyGrowthRate ?? 0);
+  // TODO-106: 5% p.a. - conservative end of commonly-cited long-run AU
+  // housing growth (~5-7%), a sensible starting point once Realistic Mode
+  // is switched on rather than a no-op 0%.
+  const [propertyGrowthRate, setPropertyGrowthRate] = useState(config.propertyGrowthRate ?? 5);
   const [propertyType, setPropertyType] = useState(config.propertyType); // 'house' | 'unit'
   const [downPayment, setDownPayment] = useState(config.downPayment);
   // TODO-57: a stepped/scheduled rate, same "Schedule a rate change" pattern
@@ -175,7 +178,8 @@ const PropertyInvestmentCalculator = () => {
   // (default) keeps expenses flat. Deliberately distinct from
   // `inflationRate` (TODO-93) below, which only affects the "today's
   // dollars" display and never changes the simulation itself.
-  const [expenseGrowthRate, setExpenseGrowthRate] = useState(config.expenseGrowthRate ?? 0);
+  // TODO-106: 2.5% p.a. - midpoint of the RBA's 2-3% inflation target band.
+  const [expenseGrowthRate, setExpenseGrowthRate] = useState(config.expenseGrowthRate ?? 2.5);
   // TODO-55: a static "right now" estimate (offset-timing benefit +
   // cashback), deliberately NOT wired into the simulation - see
   // src/calculations/creditCardBenefit.js. Off by default (useCreditCard),
@@ -216,7 +220,8 @@ const PropertyInvestmentCalculator = () => {
   // paid" into today's dollars, no simulation changes. 0 (default) means
   // no inflation is modeled, matching every other purely-additive rate
   // input this session.
-  const [inflationRate, setInflationRate] = useState(config.inflationRate ?? 0);
+  // TODO-106: 2.5% p.a. - same RBA target-band midpoint as expenseGrowthRate.
+  const [inflationRate, setInflationRate] = useState(config.inflationRate ?? 2.5);
   // TODO-70: optional - 0 means "not provided", which hides the Mortgage-Free
   // Age indicator entirely rather than forcing anyone to disclose their age.
   const [currentAge, setCurrentAge] = useState(config.currentAge ?? 30);
@@ -253,24 +258,32 @@ const PropertyInvestmentCalculator = () => {
   // compounding monthly from simulation month 1 - independent of any other
   // growth rate in this app (inflation, savings, property). 0 (default)
   // means every existing scenario behaves byte-for-byte identically.
-  const [salaryGrowthRate, setSalaryGrowthRate] = useState(config.salaryGrowthRate ?? 0);
+  // TODO-106: 3% p.a. - roughly tracks recent AU Wage Price Index growth.
+  const [salaryGrowthRate, setSalaryGrowthRate] = useState(config.salaryGrowthRate ?? 3);
   // TODO-91: annual % growth applied only to rental income sources (House
   // Rent/Room Rent), independent of salaryGrowthRate - rent and wages move
   // on their own schedules. 0 (default) means every existing scenario
   // behaves byte-for-byte identically.
-  const [rentGrowthRate, setRentGrowthRate] = useState(config.rentGrowthRate ?? 0);
+  // TODO-106: 3% p.a. - broadly tracks general income/inflation trends.
+  const [rentGrowthRate, setRentGrowthRate] = useState(config.rentGrowthRate ?? 3);
   // TODO-95: weeks/year a rental property sits vacant, applied as a flat
   // deterministic average haircut on rental income (e.g. 2 weeks -> ~3.8%
   // reduction) - not a random/stochastic event, keeps this app's fully
   // deterministic design intact. 0 (default) means every existing
   // scenario behaves byte-for-byte identically.
-  const [vacancyWeeksPerYear, setVacancyWeeksPerYear] = useState(config.vacancyWeeksPerYear ?? 0);
+  // TODO-106: 2 weeks/year - a commonly used "healthy rental market"
+  // planning assumption.
+  const [vacancyWeeksPerYear, setVacancyWeeksPerYear] = useState(config.vacancyWeeksPerYear ?? 2);
   // TODO-94: flat % converting any income source marked "Gross" (below) to
   // net, everywhere income is read - covers salaried people who only know
   // their gross figure, and non-PAYG income (self-employment/dividends/
   // bonus) via the same mechanism. 0 (default) means every existing
   // scenario behaves byte-for-byte identically.
-  const [effectiveTaxRate, setEffectiveTaxRate] = useState(config.effectiveTaxRate ?? 0);
+  // TODO-106: 20% - a rounded typical AVERAGE (not marginal) tax rate for a
+  // middle-income earner. Fixed constant, not derived from entered income -
+  // deriving it would reintroduce the complexity-budget problem TODO-94
+  // already rejected for real AU tax brackets.
+  const [effectiveTaxRate, setEffectiveTaxRate] = useState(config.effectiveTaxRate ?? 20);
   const [showIncome, setShowIncome] = useState(config.showIncome ?? false);
   const [showAddIncome, setShowAddIncome] = useState(false);
   const [newIncomeCategory, setNewIncomeCategory] = useState('Salary/Wages'); // see INCOME_CATEGORIES (src/calculations/incomeCategories.js)

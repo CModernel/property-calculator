@@ -3355,6 +3355,48 @@ optionally reuse in the commit message when you implement it.
   deleting them outright, in case the user wants to revisit the specific
   wording/investigation either raised.
 
+- [x] **TODO-106: Sensible non-zero default values for the Realistic Mode factors**
+  All 7 factors defaulted to `0` via a plain `useState(config.x ?? 0)` -
+  correct as a no-op when each was first built, but not representative of
+  what a typical user would actually plug in. User asked for common/
+  realistic defaults instead, explicitly leaving room to flag back if a
+  factor needed more analysis first (e.g. deriving it from data already
+  entered, rather than a fixed constant).
+  Resolved via AskUserQuestion, specifically for Effective Tax Rate (the
+  one factor that could plausibly be derived from already-entered total
+  income - the other 6 are generic macro assumptions with nothing in the
+  app to derive them from anyway): **fixed constants for all 7**. Deriving
+  Effective Tax Rate from income would reintroduce the exact complexity-
+  budget problem TODO-94's own analysis already rejected for real AU tax
+  brackets ("if the user needs to understand it to trust it, don't build
+  it that way").
+  New defaults (each within the slider's own existing min/max, no bound
+  changes): Property Growth Rate 5% p.a. (conservative end of long-run AU
+  housing growth), Salary Growth Rate 3% p.a. and Rent Growth Rate 3% p.a.
+  (track AU wage/income trends), Vacancy 2 weeks/year (a common "healthy
+  market" planning assumption), Expense Growth Rate 2.5% p.a. and
+  Inflation Rate 2.5% p.a. (RBA's 2-3% target-band midpoint), Effective
+  Tax Rate 20% (a rounded typical *average*, not marginal, rate).
+  Purely 7 one-line `useState` initializer changes (`?? 0` -> `?? N`) -
+  confirmed via grep that `config.default.json` never sets these keys, so
+  the JS fallback was the sole source of the old 0 default. Every scenario
+  saved since these fields existed already stores its own explicit value,
+  so this only affects brand-new sessions with nothing saved yet. Since
+  `realisticModeEnabled` itself defaults to `false` (TODO-103) and these
+  values stay invisible/inert until the user opts in (TODO-104/109), this
+  has zero effect on anyone who never turns Realistic Mode on.
+  `npm test -- --run` (482/482 unchanged), `npm run lint`, `npm run build`
+  clean - no calculation logic touched.
+  Verified in the browser: cleared the saved scenario, reloaded, turned
+  Realistic Mode on in its dedicated card - all 7 sliders now show their
+  new defaults instead of 0 (5/3/3/2/2.5/2.5/20), and "Time to pay off"
+  moved from the flat 10.8y/129mo baseline to 9.0y/108mo (salary/rent
+  growth compounding on the dominant income flow outpaces expense growth
+  at these settings - a real, sensible effect, not a bug). Turned
+  Realistic Mode back off and confirmed it returns to the exact
+  $196,743/129-month baseline, unaffected by the new defaults - same
+  "holds effect at 0, doesn't reset the slider" behavior as before.
+
 - [x] **TODO-52 (Analysis only, no code): When does it make sense to invest in ETFs instead of paying down the offset?**
   Requested by the user - explicitly an analysis task. The question:
   at what point (if any) does investing the surplus in ETFs (dividend-
@@ -3591,19 +3633,7 @@ optionally reuse in the commit message when you implement it.
   existing over-committed-savings warning; confirmed First Home Buyer
   stayed checked throughout with zero interaction, exactly as designed.
 
-- [ ] **TODO-106: Give the Realistic Mode factors sensible non-zero default values**
-  Right now every "realistic factor" (Property/Salary/Rent/Expense Growth,
-  Vacancy, Inflation Rate, Effective Tax Rate) defaults to 0% - a deliberate
-  no-op when Realistic Mode ships, but not actually representative of what a
-  typical user would plug in. User's ask: lean toward common real-world
-  values (e.g. a modest property growth rate, a typical marginal tax rate)
-  rather than 0, unless doing so would need more analysis first - in which
-  case flag it back. Also raised: whether these should instead be derived
-  from data the user already entered elsewhere (e.g. inferring an effective
-  tax rate from income level) rather than fixed constants - an open design
-  question to resolve before implementing, not a given.
-
-- [ ] **TODO-107 (Superseded by TODO-109 - see below): Reconsider "Advanced Assumptions" - are Financial Position's changes actually reflected?**
+- [ ] **TODO-107 (Superseded by TODO-109 - see above): Reconsider "Advanced Assumptions" - are Financial Position's changes actually reflected?**
   User observed that changing sliders inside Financial Position's Advanced
   Assumptions while Realistic Mode is on didn't seem to move "Total interest
   paid" or "Time to pay off" at all. Investigated live in the browser while
@@ -3618,12 +3648,12 @@ optionally reuse in the commit message when you implement it.
   slider if it keeps causing confusion. Re-test now that the collapse bug is
   fixed before concluding anything else needs to change here.
 
-- [ ] **TODO-108 (Superseded by TODO-109 - see below): Effective Tax Rate/other factors live in a DIFFERENT card than expected**
+- [ ] **TODO-108 (Superseded by TODO-109 - see above): Effective Tax Rate/other factors live in a DIFFERENT card than expected**
   User expected turning Realistic Mode on to reveal "other tax expenses, etc."
   and for that to affect payoff time. Effective Tax Rate (along with Salary/
   Rent Growth and Vacancy) used to live in the **Income** card's own
   "Advanced Assumptions", separate from Financial Position's toggle - easy to
-  miss if only Financial Position was checked. Resolved by TODO-109 below,
+  miss if only Financial Position was checked. Resolved by TODO-109 above,
   which consolidates every factor (including Effective Tax Rate) into one
   dedicated "Realistic Mode" card - nothing left in a different card to miss.
 
