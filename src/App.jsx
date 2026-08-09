@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DollarSign, Home, TrendingDown, Calendar, ShoppingCart, Car, RotateCcw, Wallet, Sun, Moon } from 'lucide-react';
+import { DollarSign, Home, TrendingDown, Calendar, ShoppingCart, Car, RotateCcw, Wallet, Sun, Moon, Sprout } from 'lucide-react';
 import { formatMonthsDetailed, formatCompactMoney } from './calculations/formatting';
 import NumberSliderField from './components/NumberSliderField';
 import LvrBadge from './components/LvrBadge';
@@ -272,10 +272,6 @@ const PropertyInvestmentCalculator = () => {
   // scenario behaves byte-for-byte identically.
   const [effectiveTaxRate, setEffectiveTaxRate] = useState(config.effectiveTaxRate ?? 0);
   const [showIncome, setShowIncome] = useState(config.showIncome ?? false);
-  // TODO-102: collapses the 4 growth/tax sliders below (Salary/Rent
-  // Growth, Vacancy, Effective Tax Rate) behind a nested "⚙️ Advanced
-  // Assumptions" toggle - see incomeAdvancedExpanded below.
-  const [showIncomeAdvanced, setShowIncomeAdvanced] = useState(config.showIncomeAdvanced ?? false);
   const [showAddIncome, setShowAddIncome] = useState(false);
   const [newIncomeCategory, setNewIncomeCategory] = useState('Salary/Wages'); // see INCOME_CATEGORIES (src/calculations/incomeCategories.js)
   const [newIncomeCustomName, setNewIncomeCustomName] = useState(''); // only used when category is 'Other'
@@ -311,21 +307,13 @@ const PropertyInvestmentCalculator = () => {
   // initializer reading sibling state, and this keeps the raw toggle
   // (what onClick flips, what persists) separate from the derived
   // "is it actually showing" value used for rendering.
-  // TODO-103 flipped realisticModeEnabled's own default to false, so the
-  // "customized away from default" check must flip polarity with it -
-  // realisticModeEnabled (true) is now the non-default value worth
-  // auto-surfacing, not !realisticModeEnabled. Getting this backwards was a
-  // real bug: it permanently forced this section open (since the default,
-  // off, always satisfied `!realisticModeEnabled`), making it uncollapsible.
+  // TODO-109: Expense Growth Rate/Inflation Rate/Realistic Mode itself moved
+  // out into their own dedicated "Realistic Mode" card, so this check now
+  // only covers Financial-Position-specific opt-in features.
   const financialPositionAdvancedCustomized =
-    savingsInterestRate !== 0 || expenseGrowthRate !== 0 || inflationRate !== 0 ||
-    useCreditCard || showOpportunityCost || useEtfInvesting || showMortgageFreeAge ||
-    realisticModeEnabled;
+    savingsInterestRate !== 0 ||
+    useCreditCard || showOpportunityCost || useEtfInvesting || showMortgageFreeAge;
   const financialPositionAdvancedExpanded = showFinancialPositionAdvanced || financialPositionAdvancedCustomized;
-
-  const incomeAdvancedCustomized =
-    salaryGrowthRate !== 0 || rentGrowthRate !== 0 || vacancyWeeksPerYear !== 0 || effectiveTaxRate !== 0;
-  const incomeAdvancedExpanded = showIncomeAdvanced || incomeAdvancedCustomized;
 
   // Your personal expenses
   const [showPersonalExpenses, setShowPersonalExpenses] = useState(config.showPersonalExpenses ?? false);
@@ -765,7 +753,7 @@ const PropertyInvestmentCalculator = () => {
       offsetContributions,
       personalExpenseItems,
       showPropertyExpenses, showMonthlyExpensesBreakdown, showClosingCostsBreakdown,
-      showIncome, showIncomeAdvanced, showFinancialPositionAdvanced,
+      showIncome, showFinancialPositionAdvanced,
       showPersonalExpenses, showPersonalExpensesBreakdown, showProgressCharts, showHealthCheck,
       savedAt,
     };
@@ -1098,25 +1086,6 @@ const PropertyInvestmentCalculator = () => {
                 formatBound={formatCompactMoney}
               />
 
-              {realisticModeEnabled ? (
-              <NumberSliderField
-                label="Property Growth Rate"
-                value={propertyGrowthRate}
-                onChange={setPropertyGrowthRate}
-                min={-10}
-                max={15}
-                sliderMin={-5}
-                sliderMax={10}
-                step={0.1}
-                color="blue"
-                suffix="% p.a."
-              >
-                Annual change in your property's value, compounding monthly - feeds the Timeline Explorer's Projected Equity figure below. 0% (default) keeps the property value fixed at the purchase price. Negative values model a downturn.
-              </NumberSliderField>
-              ) : (
-              <p className="text-xs text-gray-500 dark:text-gray-400">Realistic Mode is off (Financial Position → Advanced Assumptions) - turn it on to model property appreciation.</p>
-              )}
-
               <NumberSliderField
                 label="Deposit Contribution"
                 value={downPayment}
@@ -1151,6 +1120,147 @@ const PropertyInvestmentCalculator = () => {
               >
                 Deposit: ${downPayment.toLocaleString()} ({(100 - lvr).toFixed(1)}% of price)
               </NumberSliderField>
+            </div>
+          </div>
+
+          {/* Realistic Mode - TODO-109: consolidates every growth/inflation/
+              tax factor into one place, since none of them "belong" to any
+              single existing card (Property Growth Rate used to live in
+              Purchase Details above; Salary/Rent Growth, Vacancy, and
+              Effective Tax Rate used to live in Income, below). */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-5">
+            <h2 className="text-xl font-bold text-gray-700 dark:text-gray-200 mb-4 flex items-center gap-2">
+              <Sprout size={24} className="text-green-600 dark:text-green-400" />
+              Realistic Mode
+            </h2>
+
+            <div className="space-y-4">
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+                  <input
+                    type="checkbox"
+                    checked={realisticModeEnabled}
+                    onChange={(e) => setRealisticModeEnabled(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-blue-500"
+                  />
+                  Realistic Mode
+                  <InfoTooltip label="What does this control?">
+                    <p>A master switch for every growth/inflation-rate assumption in this calculator: Property Growth Rate, Salary/Rent Growth Rate, Vacancy, Expense Growth Rate, Inflation Rate, and Effective Tax Rate. Turning it off holds all of them at 0% - without changing any of their own slider values, so turning it back on restores exactly what you had.</p>
+                    <p className="mt-2">Doesn't affect Credit Card, Compare Offset vs ETF, Invest in ETFs, or Mortgage-Free Age (in Financial Position, below) - those already have their own individual checkboxes.</p>
+                  </InfoTooltip>
+                </label>
+              </div>
+
+              {realisticModeEnabled ? (
+              <>
+              <NumberSliderField
+                label="Property Growth Rate"
+                value={propertyGrowthRate}
+                onChange={setPropertyGrowthRate}
+                min={-10}
+                max={15}
+                sliderMin={-5}
+                sliderMax={10}
+                step={0.1}
+                color="blue"
+                suffix="% p.a."
+              >
+                Annual change in your property's value, compounding monthly - feeds the Timeline Explorer's Projected Equity figure below. 0% (default) keeps the property value fixed at the purchase price. Negative values model a downturn.
+              </NumberSliderField>
+
+              <NumberSliderField
+                label="Salary Growth Rate"
+                value={salaryGrowthRate}
+                onChange={setSalaryGrowthRate}
+                min={-5}
+                max={15}
+                sliderMin={0}
+                sliderMax={8}
+                step={0.1}
+                color="green"
+                suffix="% p.a."
+              >
+                Annual growth applied only to "Salary/Wages" income sources, compounding monthly - independent of inflation, savings, or property growth (real wage growth moves on its own, via promotions or job changes). 0% (default) keeps salary income flat.
+              </NumberSliderField>
+
+              <NumberSliderField
+                label="Rent Growth Rate"
+                value={rentGrowthRate}
+                onChange={setRentGrowthRate}
+                min={-5}
+                max={15}
+                sliderMin={0}
+                sliderMax={8}
+                step={0.1}
+                color="green"
+                suffix="% p.a."
+              >
+                Annual growth applied only to "House Rent"/"Room Rent" income sources, compounding monthly - independent of Salary Growth Rate above, since rent and wages move on their own schedules. 0% (default) keeps rental income flat.
+              </NumberSliderField>
+
+              <NumberSliderField
+                label="Vacancy (weeks/year)"
+                value={vacancyWeeksPerYear}
+                onChange={setVacancyWeeksPerYear}
+                min={0}
+                max={52}
+                sliderMin={0}
+                sliderMax={12}
+                step={1}
+                color="green"
+                suffix=" weeks"
+              >
+                Applies a flat, deterministic average reduction to "House Rent"/"Room Rent" income every month (e.g. 2 weeks/year ≈ 3.8% less) - not a random event, just an expected average. 0 (default) assumes no vacancy.
+              </NumberSliderField>
+
+              <NumberSliderField
+                label="Expense Growth Rate"
+                value={expenseGrowthRate}
+                onChange={setExpenseGrowthRate}
+                min={-5}
+                max={15}
+                sliderMin={0}
+                sliderMax={8}
+                step={0.1}
+                color="orange"
+                suffix="% p.a."
+              >
+                Annual growth applied to your Personal and Property Expenses together, compounding inside the simulation - unlike the Inflation Rate below (which only affects the "today's dollars" display), this genuinely changes projected payoff time and total interest. 0% (default) keeps expenses flat.
+              </NumberSliderField>
+
+              <NumberSliderField
+                label="Inflation Rate"
+                value={inflationRate}
+                onChange={setInflationRate}
+                min={0}
+                max={15}
+                sliderMin={0}
+                sliderMax={8}
+                step={0.1}
+                color="blue"
+                suffix="% p.a."
+              >
+                Shows "Total interest paid" in today's dollars alongside the nominal figure below - a display-only conversion, it doesn't change the loan simulation itself. 0% (default) shows the nominal figure only.
+              </NumberSliderField>
+
+              <NumberSliderField
+                label="Effective Tax Rate"
+                value={effectiveTaxRate}
+                onChange={setEffectiveTaxRate}
+                min={0}
+                max={90}
+                sliderMin={0}
+                sliderMax={47}
+                step={1}
+                color="purple"
+                suffix="%"
+              >
+                Only affects income sources checked "Gross (pre-tax)" below - converts them to net using this rate. Enter net figures for everything else and leave this at 0% (default, no-op).
+              </NumberSliderField>
+              </>
+              ) : (
+              <p className="text-xs text-gray-500 dark:text-gray-400">Off - every growth/inflation/tax assumption below is held at 0%. Turn this on to model property appreciation, salary/rent growth, vacancy, expense growth, inflation, and effective tax rate.</p>
+              )}
             </div>
           </div>
 
@@ -1204,25 +1314,6 @@ const PropertyInvestmentCalculator = () => {
 
               {financialPositionAdvancedExpanded && (
               <div className="space-y-4 pl-3 border-l-2 border-gray-200 dark:border-gray-700">
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
-                  <input
-                    type="checkbox"
-                    checked={realisticModeEnabled}
-                    onChange={(e) => setRealisticModeEnabled(e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-blue-500"
-                  />
-                  Realistic Mode
-                  <InfoTooltip label="What does this control?">
-                    <p>A master switch for every growth/inflation-rate assumption in this calculator: Property Growth Rate, Salary/Rent Growth Rate, Vacancy, Expense Growth Rate, Inflation Rate, and Effective Tax Rate. Turning it off holds all of them at 0% - without changing any of their own slider values, so turning it back on restores exactly what you had.</p>
-                    <p className="mt-2">Doesn't affect Credit Card, Compare Offset vs ETF, Invest in ETFs, or Mortgage-Free Age - those already have their own individual checkboxes.</p>
-                  </InfoTooltip>
-                </label>
-                {!realisticModeEnabled && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Off - the Property/Expense/Salary/Rent Growth, Vacancy, Inflation, and Effective Tax Rate sliders are hidden until you turn this back on.</p>
-                )}
-              </div>
-
               <NumberSliderField
                 label="Savings Interest Rate"
                 value={savingsInterestRate}
@@ -1237,40 +1328,6 @@ const PropertyInvestmentCalculator = () => {
               >
                 Annual interest earned on your savings balance (seeded from Remaining Savings, plus whatever isn't sent to the offset each month). 0% (default) means no interest is modeled.
               </NumberSliderField>
-
-              {realisticModeEnabled && (
-              <NumberSliderField
-                label="Expense Growth Rate"
-                value={expenseGrowthRate}
-                onChange={setExpenseGrowthRate}
-                min={-5}
-                max={15}
-                sliderMin={0}
-                sliderMax={8}
-                step={0.1}
-                color="orange"
-                suffix="% p.a."
-              >
-                Annual growth applied to your Personal and Property Expenses together, compounding inside the simulation - unlike the Inflation Rate below (which only affects the "today's dollars" display), this genuinely changes projected payoff time and total interest. 0% (default) keeps expenses flat.
-              </NumberSliderField>
-              )}
-
-              {realisticModeEnabled && (
-              <NumberSliderField
-                label="Inflation Rate"
-                value={inflationRate}
-                onChange={setInflationRate}
-                min={0}
-                max={15}
-                sliderMin={0}
-                sliderMax={8}
-                step={0.1}
-                color="blue"
-                suffix="% p.a."
-              >
-                Shows "Total interest paid" in today's dollars alongside the nominal figure below - a display-only conversion, it doesn't change the loan simulation itself. 0% (default) shows the nominal figure only.
-              </NumberSliderField>
-              )}
 
               <div>
                 <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
@@ -1395,9 +1452,9 @@ const PropertyInvestmentCalculator = () => {
                   </InfoTooltip>
                 </label>
                 {!realisticModeEnabled ? (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Realistic Mode is off (see the toggle above), which holds Effective Tax Rate at 0% - turn it back on to use this.</p>
-                ) : effectiveTaxRate === 0 ? (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Set an Effective Tax Rate above (in the Income section) first - otherwise this compares a pre-tax ETF return against the offset's tax-free return, which isn't a fair comparison.</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Realistic Mode is off (see the Realistic Mode card above), which holds Effective Tax Rate at 0% - turn it back on to use this.</p>
+                ) : realisticEffectiveTaxRate === 0 ? (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Set an Effective Tax Rate in the Realistic Mode card above first - otherwise this compares a pre-tax ETF return against the offset's tax-free return, which isn't a fair comparison.</p>
                 ) : !useEtfInvesting && (
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Diverts part of your offset contribution into a growing ETF balance instead.</p>
                 )}
@@ -1963,84 +2020,6 @@ const PropertyInvestmentCalculator = () => {
                   {showAddIncome ? '✕ Cancel' : '+ Add'}
                 </button>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setShowIncomeAdvanced(!showIncomeAdvanced)}
-                className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
-              >
-                {incomeAdvancedExpanded ? '▾' : '▸'} ⚙️ Advanced Assumptions
-              </button>
-
-              {incomeAdvancedExpanded && (
-              <div className="space-y-4 pl-3 border-l-2 border-gray-200 dark:border-gray-700">
-              {realisticModeEnabled ? (
-              <>
-              <NumberSliderField
-                label="Salary Growth Rate"
-                value={salaryGrowthRate}
-                onChange={setSalaryGrowthRate}
-                min={-5}
-                max={15}
-                sliderMin={0}
-                sliderMax={8}
-                step={0.1}
-                color="green"
-                suffix="% p.a."
-              >
-                Annual growth applied only to "Salary/Wages" income sources, compounding monthly - independent of inflation, savings, or property growth (real wage growth moves on its own, via promotions or job changes). 0% (default) keeps salary income flat.
-              </NumberSliderField>
-
-              <NumberSliderField
-                label="Rent Growth Rate"
-                value={rentGrowthRate}
-                onChange={setRentGrowthRate}
-                min={-5}
-                max={15}
-                sliderMin={0}
-                sliderMax={8}
-                step={0.1}
-                color="green"
-                suffix="% p.a."
-              >
-                Annual growth applied only to "House Rent"/"Room Rent" income sources, compounding monthly - independent of Salary Growth Rate above, since rent and wages move on their own schedules. 0% (default) keeps rental income flat.
-              </NumberSliderField>
-
-              <NumberSliderField
-                label="Vacancy (weeks/year)"
-                value={vacancyWeeksPerYear}
-                onChange={setVacancyWeeksPerYear}
-                min={0}
-                max={52}
-                sliderMin={0}
-                sliderMax={12}
-                step={1}
-                color="green"
-                suffix=" weeks"
-              >
-                Applies a flat, deterministic average reduction to "House Rent"/"Room Rent" income every month (e.g. 2 weeks/year ≈ 3.8% less) - not a random event, just an expected average. 0 (default) assumes no vacancy.
-              </NumberSliderField>
-
-              <NumberSliderField
-                label="Effective Tax Rate"
-                value={effectiveTaxRate}
-                onChange={setEffectiveTaxRate}
-                min={0}
-                max={90}
-                sliderMin={0}
-                sliderMax={47}
-                step={1}
-                color="purple"
-                suffix="%"
-              >
-                Only affects income sources checked "Gross (pre-tax)" below - converts them to net using this rate. Enter net figures for everything else and leave this at 0% (default, no-op).
-              </NumberSliderField>
-              </>
-              ) : (
-              <p className="text-xs text-gray-500 dark:text-gray-400">Realistic Mode is off (Financial Position → Advanced Assumptions) - turn it back on to access Salary/Rent Growth, Vacancy, and Effective Tax Rate.</p>
-              )}
-              </div>
-              )}
 
               {/* Add income form */}
               {showAddIncome && (

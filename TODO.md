@@ -3287,6 +3287,74 @@ optionally reuse in the commit message when you implement it.
   All three (TODO-103/104/105): `npm test -- --run` (482/482 unchanged),
   `npm run lint`, `npm run build` clean - no calculation logic touched.
 
+- [x] **TODO-109: Consolidate "Realistic Mode" into its own dedicated card**
+  Follow-up from the user's feedback right after TODO-103/104/105 shipped:
+  the master toggle lived in Financial Position, but its 7 gated sliders
+  were scattered across 3 different cards (Property Growth Rate in
+  Purchase Details; Expense Growth Rate/Inflation Rate in Financial
+  Position; Salary/Rent Growth, Vacancy, Effective Tax Rate in Income's
+  own separate Advanced Assumptions) - confirmed by exploration to be the
+  only feature in this file where one control's toggle and its gated
+  inputs lived in physically different cards, awkward enough that the code
+  itself had to explain it via cross-card "see the toggle in Financial
+  Position" notes.
+  Resolved via AskUserQuestion (card position): new **"🌱 Realistic Mode"**
+  card, inserted right after Purchase Details and before Financial
+  Position - property basics first, then the assumptions family that
+  affects everything after it. Pure JSX relocation, no state/calculation/
+  persistence changes - every field kept its existing `useState`/`onChange`
+  wiring, only where each `NumberSliderField` renders moved. Contains the
+  master toggle + tooltip, then all 7 factors gated as a single
+  `{realisticModeEnabled ? (<>...7 sliders...</>) : (<p>one combined
+  note</p>)}` (replacing the 3 separate per-field/per-card notes TODO-104/
+  105 had introduced).
+  **Consequences elsewhere**: Purchase Details lost Property Growth Rate
+  entirely (no stub left behind). Financial Position's own "Advanced
+  Assumptions" lost the toggle/Expense Growth Rate/Inflation Rate but kept
+  Savings Interest Rate/Credit Card/Compare Offset vs ETF/Invest in ETFs/
+  Mortgage-Free Age - still has 5 legitimate FP-specific items, stays as
+  its own collapsible; `financialPositionAdvancedCustomized` trimmed to
+  just those 5. Income's "Advanced Assumptions" became completely empty
+  once its 4 items moved out, so it was removed wholesale - the toggle
+  button, `showIncomeAdvanced` state, and `incomeAdvancedCustomized`/
+  `incomeAdvancedExpanded` derived consts are all gone; Income now goes
+  straight from "+ Add" to the add-income form. Dropped `showIncomeAdvanced`
+  from `handleSaveScenario`'s list - subtractive only, old saved scenarios
+  just carry one harmless unused key.
+  **Fixed a latent bug found while touching this area**: "Invest in ETFs"'s
+  off-state note checked the raw `effectiveTaxRate` (inconsistent with its
+  own `disabled` check, which already used the derived
+  `realisticEffectiveTaxRate`) and its copy said "in the Income section,"
+  which would've gone stale the moment Effective Tax Rate moved - fixed
+  both, now reads `realisticEffectiveTaxRate` and says "in the Realistic
+  Mode card above."
+  Confirmed safe before moving anything: grepped all `App.*.test.jsx` files
+  for every affected label/section name - zero hits, so no existing
+  integration test could break; `effectiveTaxRate`'s other consumers (the
+  "Net at X% tax" hint, the income-list gross/net annotation, the
+  simulation-parameter objects, persistence) all read the state/derived
+  value directly rather than by DOM proximity, confirmed unaffected.
+  `npm test -- --run` (482/482 unchanged), `npm run lint`, `npm run build`
+  clean.
+  Verified in the browser: fresh session shows the new card between
+  Purchase Details and Financial Position, off by default with the combined
+  note; toggling on reveals all 7 sliders in order (Property/Salary/Rent
+  Growth, Vacancy, Expense Growth, Inflation, Effective Tax Rate); Purchase
+  Details no longer shows Property Growth Rate at all; Financial Position's
+  Advanced Assumptions still opens/closes normally with its remaining 5
+  items; Income goes straight from "+ Add" to the income list with no
+  Advanced Assumptions toggle at all; re-ran the Expense Growth Rate 5%
+  regression check from TODO-104's verification and got the identical
+  result ($196,743 -> $211,665, 129 -> 142 months), confirming the move
+  didn't change any calculation; "Invest in ETFs" note now correctly reads
+  "Set an Effective Tax Rate in the Realistic Mode card above first."
+  **Supersedes TODO-107/108** (queued last turn about the old scattered
+  layout being confusing) - both were about *finding* the scattered
+  controls; now that they're consolidated into one card, the confusion
+  those two describe no longer applies. Left both `[ ]` rather than
+  deleting them outright, in case the user wants to revisit the specific
+  wording/investigation either raised.
+
 - [x] **TODO-52 (Analysis only, no code): When does it make sense to invest in ETFs instead of paying down the offset?**
   Requested by the user - explicitly an analysis task. The question:
   at what point (if any) does investing the surplus in ETFs (dividend-
@@ -3535,7 +3603,7 @@ optionally reuse in the commit message when you implement it.
   tax rate from income level) rather than fixed constants - an open design
   question to resolve before implementing, not a given.
 
-- [ ] **TODO-107: Reconsider "Advanced Assumptions" - are Financial Position's changes actually reflected?**
+- [ ] **TODO-107 (Superseded by TODO-109 - see below): Reconsider "Advanced Assumptions" - are Financial Position's changes actually reflected?**
   User observed that changing sliders inside Financial Position's Advanced
   Assumptions while Realistic Mode is on didn't seem to move "Total interest
   paid" or "Time to pay off" at all. Investigated live in the browser while
@@ -3550,17 +3618,14 @@ optionally reuse in the commit message when you implement it.
   slider if it keeps causing confusion. Re-test now that the collapse bug is
   fixed before concluding anything else needs to change here.
 
-- [ ] **TODO-108: Effective Tax Rate/other factors live in a DIFFERENT card than expected**
+- [ ] **TODO-108 (Superseded by TODO-109 - see below): Effective Tax Rate/other factors live in a DIFFERENT card than expected**
   User expected turning Realistic Mode on to reveal "other tax expenses, etc."
   and for that to affect payoff time. Effective Tax Rate (along with Salary/
-  Rent Growth and Vacancy) actually lives in the **Income** card's own
-  "Advanced Assumptions" (`App.jsx:1962-2020`), separate from Financial
-  Position's - easy to miss if only Financial Position was checked. Consider
-  whether Income's Advanced Assumptions needs a more visible cross-reference
-  to Financial Position's Realistic Mode toggle (which controls it from a
-  different card), or whether it's discoverable enough already now that
-  TODO-108-era bug (see below) no longer keeps people from noticing the
-  toggle at all.
+  Rent Growth and Vacancy) used to live in the **Income** card's own
+  "Advanced Assumptions", separate from Financial Position's toggle - easy to
+  miss if only Financial Position was checked. Resolved by TODO-109 below,
+  which consolidates every factor (including Effective Tax Rate) into one
+  dedicated "Realistic Mode" card - nothing left in a different card to miss.
 
 
 ---
