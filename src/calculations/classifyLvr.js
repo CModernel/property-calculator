@@ -1,3 +1,5 @@
+import { classifyByBands } from './purchaseHealthCheck';
+
 // Ordered highest-LVR-band first. `min` is each band's inclusive lower bound;
 // the matching band is the first whose lvr >= min. The final band's -Infinity
 // is deliberately the catch-all: it also covers 0, negative, and any
@@ -11,6 +13,9 @@ export const LVR_BANDS = [
   { min: -Infinity, band: '<60%', symbol: '🔵', summary: 'Very safe, maximum flexibility', textClass: 'text-blue-600 dark:text-blue-400', bgClass: 'bg-blue-50 dark:bg-blue-950 border-blue-300 dark:border-blue-700' },
 ];
 
+// TODO-110: reuses purchaseHealthCheck.js's classifyByBands, which was
+// itself generalized from this exact mechanism - was never refactored to
+// call it back until now.
 export function classifyLvr(lvr) {
-  return LVR_BANDS.find((band) => lvr >= band.min) ?? LVR_BANDS[LVR_BANDS.length - 1];
+  return classifyByBands(lvr, LVR_BANDS);
 }

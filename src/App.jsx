@@ -1,11 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { DollarSign, Home, TrendingDown, Calendar, ShoppingCart, Car, RotateCcw, Wallet, Sun, Moon, Sprout } from 'lucide-react';
 import { formatMonthsDetailed, formatCompactMoney } from './calculations/formatting';
 import NumberSliderField from './components/NumberSliderField';
 import LvrBadge from './components/LvrBadge';
 import InfoTooltip from './components/InfoTooltip';
-import LoanBalanceChart from './components/LoanBalanceChart';
-import PrincipalInterestChart from './components/PrincipalInterestChart';
+// TODO-112: lazy - recharts (and the redux-toolkit/immer/d3 stack it
+// vendors) is a large chunk of the production bundle, but these two charts
+// only ever mount once showProgressCharts is toggled on below. Deferring
+// the import keeps that whole module graph out of the initial bundle for
+// anyone who never opens this card.
+const LoanBalanceChart = lazy(() => import('./components/LoanBalanceChart'));
+const PrincipalInterestChart = lazy(() => import('./components/PrincipalInterestChart'));
 import { getNextSuggestion } from './calculations/suggestions';
 import { getBalanceColor, getBalanceBgColor } from './calculations/ui';
 import {
@@ -1320,6 +1325,7 @@ const PropertyInvestmentCalculator = () => {
               <button
                 type="button"
                 onClick={() => setShowFinancialPositionAdvanced(!showFinancialPositionAdvanced)}
+                aria-expanded={financialPositionAdvancedExpanded}
                 className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
               >
                 {financialPositionAdvancedExpanded ? '▾' : '▸'} ⚙️ Advanced Assumptions
@@ -1732,6 +1738,7 @@ const PropertyInvestmentCalculator = () => {
               <button
                 type="button"
                 onClick={() => setShowClosingCostsBreakdown(!showClosingCostsBreakdown)}
+                aria-expanded={showClosingCostsBreakdown}
                 className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
               >
                 {showClosingCostsBreakdown ? '▾' : '▸'} Closing costs breakdown (subtotal: ${closingCostsSubtotal.toLocaleString()})
@@ -1876,6 +1883,7 @@ const PropertyInvestmentCalculator = () => {
             <button
               type="button"
               onClick={() => setShowPropertyExpenses(!showPropertyExpenses)}
+              aria-expanded={showPropertyExpenses}
               className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
             >
               {showPropertyExpenses ? '▾' : '▸'} Property expenses breakdown (subtotal: $
@@ -2017,6 +2025,7 @@ const PropertyInvestmentCalculator = () => {
             <button
               type="button"
               onClick={() => setShowIncome(!showIncome)}
+              aria-expanded={showIncome}
               className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
             >
               {showIncome ? '▾' : '▸'} Income breakdown (subtotal: ${weeklyIncome.toLocaleString()}/week)
@@ -2028,6 +2037,7 @@ const PropertyInvestmentCalculator = () => {
                 <h3 className="text-md font-bold text-gray-700 dark:text-gray-200">💵 Income Sources</h3>
                 <button
                   onClick={() => setShowAddIncome(!showAddIncome)}
+                  aria-expanded={showAddIncome}
                   className="px-3 py-1 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600 transition-colors"
                 >
                   {showAddIncome ? '✕ Cancel' : '+ Add'}
@@ -2074,8 +2084,9 @@ const PropertyInvestmentCalculator = () => {
 
                         {newIncomeIsShared && (
                           <div>
-                            <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Number of People: {newIncomeNumPeople}</label>
+                            <label htmlFor="newIncomeNumPeopleSlider" className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Number of People: {newIncomeNumPeople}</label>
                             <input
+                              id="newIncomeNumPeopleSlider"
                               type="range" min="2" max="6"
                               value={newIncomeNumPeople}
                               onChange={(e) => setNewIncomeNumPeople(Number(e.target.value))}
@@ -2155,10 +2166,11 @@ const PropertyInvestmentCalculator = () => {
                     </label>
 
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
+                      <label htmlFor="newIncomeStartMonthSlider" className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
                         {newIncomeOneTime ? `Occurs at Month: ${newIncomeStartMonth}` : `Start Month: ${newIncomeStartMonth}`}
                       </label>
                       <input
+                        id="newIncomeStartMonthSlider"
                         type="range" min="1" max={MAX_MONTH}
                         value={newIncomeStartMonth}
                         onChange={(e) => setNewIncomeStartMonth(Number(e.target.value))}
@@ -2179,10 +2191,11 @@ const PropertyInvestmentCalculator = () => {
                         </div>
 
                         <div>
-                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
+                          <label htmlFor="newIncomeEndMonthSlider" className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
                             End Month: {newIncomeEndMonth === MAX_MONTH ? 'Forever' : newIncomeEndMonth}
                           </label>
                           <input
+                            id="newIncomeEndMonthSlider"
                             type="range" min={newIncomeStartMonth} max={MAX_MONTH}
                             value={newIncomeEndMonth}
                             onChange={(e) => setNewIncomeEndMonth(Number(e.target.value))}
@@ -2237,6 +2250,7 @@ const PropertyInvestmentCalculator = () => {
             <button
               type="button"
               onClick={() => setShowPersonalExpenses(!showPersonalExpenses)}
+              aria-expanded={showPersonalExpenses}
               className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
             >
               {showPersonalExpenses ? '▾' : '▸'} Personal expenses breakdown (subtotal: $
@@ -2251,6 +2265,7 @@ const PropertyInvestmentCalculator = () => {
                   <h3 className="text-md font-bold text-gray-700 dark:text-gray-200">💰 Offset Contributions Schedule</h3>
                   <button
                     onClick={() => setShowAddContribution(!showAddContribution)}
+                    aria-expanded={showAddContribution}
                     className="px-3 py-1 bg-cyan-500 text-white rounded-lg text-sm hover:bg-cyan-600 transition-colors"
                   >
                     {showAddContribution ? '✕ Cancel' : '+ Add'}
@@ -2281,10 +2296,11 @@ const PropertyInvestmentCalculator = () => {
                     </label>
 
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
+                      <label htmlFor="newContribStartMonthSlider" className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
                         {newContribOneTime ? `Occurs at Month: ${newContribStartMonth}` : `Start Month: ${newContribStartMonth}`}
                       </label>
                       <input
+                        id="newContribStartMonthSlider"
                         type="range" min="1" max={MAX_MONTH}
                         value={newContribStartMonth}
                         onChange={(e) => setNewContribStartMonth(Number(e.target.value))}
@@ -2305,10 +2321,11 @@ const PropertyInvestmentCalculator = () => {
                         </div>
 
                         <div>
-                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
+                          <label htmlFor="newContribEndMonthSlider" className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
                             End Month: {newContribEndMonth === MAX_MONTH ? 'Forever' : newContribEndMonth}
                           </label>
                           <input
+                            id="newContribEndMonthSlider"
                             type="range" min={newContribStartMonth} max={MAX_MONTH}
                             value={newContribEndMonth}
                             onChange={(e) => setNewContribEndMonth(Number(e.target.value))}
@@ -2404,6 +2421,7 @@ const PropertyInvestmentCalculator = () => {
                   </h2>
                   <button
                     onClick={() => setShowAddExceptExp(!showAddExceptExp)}
+                    aria-expanded={showAddExceptExp}
                     className="px-3 py-1 bg-yellow-500 text-white rounded-lg text-sm hover:bg-yellow-600 transition-colors"
                   >
                     {showAddExceptExp ? '✕ Cancel' : '+ Add'}
@@ -2463,10 +2481,11 @@ const PropertyInvestmentCalculator = () => {
                       </label>
 
                       <div>
-                        <label className="block font-medium text-gray-700 dark:text-gray-200 mb-1">
+                        <label htmlFor="newExpStartMonthSlider" className="block font-medium text-gray-700 dark:text-gray-200 mb-1">
                           {newExpOneTime ? `Occurs at Month: ${newExpStartMonth}` : `Start Month: ${newExpStartMonth}`}
                         </label>
                         <input
+                          id="newExpStartMonthSlider"
                           type="range" min="1" max={MAX_MONTH}
                           value={newExpStartMonth}
                           onChange={(e) => setNewExpStartMonth(Number(e.target.value))}
@@ -2487,10 +2506,11 @@ const PropertyInvestmentCalculator = () => {
                           </div>
 
                           <div>
-                            <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
+                            <label htmlFor="newExpEndMonthSlider" className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
                               End Month: {newExpEndMonth === MAX_MONTH ? 'Forever' : newExpEndMonth}
                             </label>
                             <input
+                              id="newExpEndMonthSlider"
                               type="range" min={newExpStartMonth} max={MAX_MONTH}
                               value={newExpEndMonth}
                               onChange={(e) => setNewExpEndMonth(Number(e.target.value))}
@@ -2659,6 +2679,7 @@ const PropertyInvestmentCalculator = () => {
                     <button
                       type="button"
                       onClick={() => setShowMonthlyExpensesBreakdown(!showMonthlyExpensesBreakdown)}
+                      aria-expanded={showMonthlyExpensesBreakdown}
                       className="w-full flex justify-between items-center text-left"
                     >
                       <span className="text-gray-600 dark:text-gray-300">
@@ -2718,6 +2739,7 @@ const PropertyInvestmentCalculator = () => {
                       <button
                         type="button"
                         onClick={() => setShowPersonalExpensesBreakdown(!showPersonalExpensesBreakdown)}
+                        aria-expanded={showPersonalExpensesBreakdown}
                         className="text-left text-gray-600 dark:text-gray-300"
                       >
                         {showPersonalExpensesBreakdown ? '▾' : '▸'} Personal Expenses:
@@ -2862,6 +2884,7 @@ const PropertyInvestmentCalculator = () => {
               <button
                 type="button"
                 onClick={() => setShowHealthCheck(!showHealthCheck)}
+                aria-expanded={showHealthCheck}
                 className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
               >
                 {showHealthCheck ? '▾ Hide' : '▸ Show'}
@@ -3166,6 +3189,7 @@ const PropertyInvestmentCalculator = () => {
 
               <input
                 type="range"
+                aria-label="Viewing month"
                 min="0"
                 max={loanSimulation.months}
                 value={timelineMonth}
@@ -3422,11 +3446,13 @@ const PropertyInvestmentCalculator = () => {
           <button
             type="button"
             onClick={() => setShowProgressCharts(!showProgressCharts)}
+            aria-expanded={showProgressCharts}
             className="font-bold text-gray-700 dark:text-gray-200 text-lg flex items-center gap-2"
           >
             {showProgressCharts ? '▾' : '▸'} 📈 Progress Over Time
           </button>
           {showProgressCharts && (
+            <Suspense fallback={<p className="text-sm text-gray-500 dark:text-gray-400 mt-4">Loading charts...</p>}>
             <div className="space-y-6 mt-4">
               <div>
                 <p className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-2">Loan Balance vs. Offset vs. Effective Balance</p>
@@ -3437,6 +3463,7 @@ const PropertyInvestmentCalculator = () => {
                 <PrincipalInterestChart monthlyData={loanSimulation.monthlyData} isDarkMode={isDarkMode} />
               </div>
             </div>
+            </Suspense>
           )}
         </div>
       )}

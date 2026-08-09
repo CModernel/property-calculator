@@ -3603,10 +3603,6 @@ optionally reuse in the commit message when you implement it.
   ships independently of TODO-96), TODO-98 (Pareto Front Strategy
   Comparison - the grid search + non-dominated filtering + comparison
   table, depends on TODO-96).
----
-
-## 🟡 MEDIUM PRIORITY (Important, but not blocking)
-
 
 - [x] **TODO-43: Add NSW Foreign Purchaser Additional Duty Surcharge (8% extra)**
   Requested by the user, explicitly flagged as **not urgent**, with the
@@ -3632,6 +3628,73 @@ optionally reuse in the commit message when you implement it.
   $389,547, and Remaining Savings flipping to a negative $39,547 with the
   existing over-committed-savings warning; confirmed First Home Buyer
   stayed checked throughout with zero interaction, exactly as designed.
+  (TODO-110: moved here from the MEDIUM PRIORITY section, where this had
+  sat marked `[x]` but unmoved since it was first completed.)
+
+- [x] **TODO-110: Housekeeping - move TODO-43 to Completed, dedupe classifyLvr.js against classifyByBands**
+  Two tiny, unrelated, zero-risk cleanups from the same audit pass, bundled
+  since neither was worth its own ticket: (a) TODO-43 above - moved from the
+  MEDIUM PRIORITY section, where it had sat marked `[x]` but unmoved since
+  first completed. (b) `classifyLvr.js` reimplemented the exact
+  band-matching logic (`.find(band => value >= band.min) ?? fallback`) that
+  `purchaseHealthCheck.js`'s `classifyByBands` already generalizes - its own
+  header comment literally said it "Generalizes classifyLvr.js's own
+  mechanism," but `classifyLvr.js` was never refactored to call it back.
+  Changed `classifyLvr` to `return classifyByBands(lvr, LVR_BANDS)` instead
+  of duplicating the one-liner - both were correct and equivalent, purely a
+  DRY cleanup, `LVR_BANDS` itself untouched.
+  `npm test -- --run` (482/482 unchanged, including `classifyLvr.test.js`'s
+  own reference-identity and NaN-fallback assertions, which exercise the
+  exact behavior now delegated to `classifyByBands`), `npm run lint`,
+  `npm run build` clean.
+
+- [x] **TODO-111: Accessibility - aria-expanded on collapsible toggles, htmlFor/id on raw sliders**
+  `App.jsx` had 12 collapsible toggle buttons (+Add/Show.../Advanced
+  Assumptions, etc.) with no `aria-expanded` attribute, so screen readers got
+  no signal they controlled hidden content - added `aria-expanded={expanded}`
+  to each, mirroring the same boolean already used to pick the ▸/▾ glyph
+  (e.g. `financialPositionAdvancedExpanded`, `showIncome`, `showHealthCheck`,
+  `showProgressCharts`, and 8 others).
+  Separately, 8 raw `<input type="range">` sliders had a visually-adjacent
+  `<label>` with no `htmlFor`/`id` pairing, unlike `NumberSliderField.jsx`
+  which already does this correctly via `useId()` - added matching static
+  `id`/`htmlFor` pairs to the 7 that have an adjacent `<label>` (Number of
+  People; Start/End Month for each of the 3 duplicated add-forms - Income,
+  Offset Contributions, Personal Expenses). The Timeline Explorer's
+  "Viewing Month" slider has no adjacent `<label>` element at all (just a
+  `<span>` heading above it) - gave it a plain `aria-label="Viewing month"`
+  instead of inventing a label/htmlFor pair for a heading that isn't one.
+  `npm test -- --run` (482/482 unchanged), `npm run lint`, `npm run build`
+  clean - purely additive JSX attributes, no behavior change.
+
+- [x] **TODO-112: Code-split recharts behind a lazy-loaded boundary**
+  recharts (plus the redux-toolkit/immer/d3 stack it vendors) was statically
+  imported at the top of `App.jsx` and shipped inside the single 673KB
+  production bundle for every visitor, even though `LoanBalanceChart`/
+  `PrincipalInterestChart` only ever mount once `showProgressCharts` is
+  toggled on. Changed both imports to `const LoanBalanceChart =
+  lazy(() => import('./components/LoanBalanceChart'))` (same for
+  `PrincipalInterestChart`), and wrapped their existing
+  `{showProgressCharts && (...)}` render block in a `<Suspense fallback=
+  {<p>Loading charts...</p>}>` boundary - no change to the gating condition
+  itself, purely deferring the import.
+  **Measured result**: `npm run build`'s single 673KB/195KB-gzip chunk
+  split into a 320KB/91KB-gzip main bundle plus two small lazy chunks
+  (`LoanBalanceChart` ~17KB, `PrincipalInterestChart` ~13KB) and a shared
+  ~325KB/98KB-gzip `chartData` chunk (recharts + its vendored d3/redux
+  stack) that now only downloads once a visitor actually opens "Progress
+  Over Time." Vite's ">500kB chunk" build warning is gone entirely. This
+  was the one performance finding from the audit that was actually
+  user-facing (every page load's initial download/parse time), unlike the
+  CPU-bound findings which measured sub-16ms and were already accepted as
+  trivial per TODO-98.
+  `npm test -- --run` (482/482 unchanged), `npm run lint` clean. Verified
+  in the browser: opened "Progress Over Time," both charts rendered
+  correctly with no console errors, confirming the lazy boundary works.
+---
+
+## 🟡 MEDIUM PRIORITY (Important, but not blocking)
+
 
 - [ ] **TODO-107 (Superseded by TODO-109 - see above): Reconsider "Advanced Assumptions" - are Financial Position's changes actually reflected?**
   User observed that changing sliders inside Financial Position's Advanced
@@ -3656,6 +3719,55 @@ optionally reuse in the commit message when you implement it.
   miss if only Financial Position was checked. Resolved by TODO-109 above,
   which consolidates every factor (including Effective Tax Rate) into one
   dedicated "Realistic Mode" card - nothing left in a different card to miss.
+
+- [ ] **TODO-113: App-level integration tests for Realistic Mode and Strategy Comparison**
+  Neither of the two newest major features has any `App.*.test.jsx`
+  coverage - confirmed via grep, zero hits for "Realistic Mode", "Strategy
+  Comparison," or any of the 7 factor labels across all 6 integration test
+  files. The underlying calculation logic is already well unit-tested
+  (`strategyComparison.test.js`), but the React wiring isn't: does checking
+  "Realistic Mode" reveal the 7 sliders and change "Total interest paid";
+  does unchecking it hide them again and hold effect at 0 without resetting
+  the underlying values; does the Strategy Comparison table render its
+  Pareto-front rows; does its "Apply" button correctly call
+  `setSwitchThresholdPct`/`setEtfAllocationPct`.
+
+- [ ] **TODO-114: Fix tooltip/badge touch fallback on mobile**
+  Every `InfoTooltip` (~12+ instances) and `LvrBadge` popover relies
+  exclusively on CSS `:hover`/`:focus-within` (`InfoTooltip.jsx:9,12`,
+  `LvrBadge.jsx:12,18`) with no click/touch-toggle fallback and no
+  `@media (hover: hover)` guard anywhere - confirmed via grep, zero
+  touch-specific handling exists in the codebase. Tapping the `?`/badge
+  button on a touch device (especially iOS Safari) may not reliably trigger
+  `:focus-within`, making a meaningful fraction of the app's explanatory
+  tooltips hard or impossible to open on a phone. Needs a click/tap-toggle
+  path alongside (or instead of) the hover-only behavior.
+
+- [ ] **TODO-115: Reorganize "Your Personal Expenses" - pull Offset Contributions out**
+  The "Your Personal Expenses" card (`App.jsx:2232`) contains an "Offset
+  Contributions Schedule" sub-section (`App.jsx:2251`) - a mortgage-offset
+  feature, conceptually unrelated to personal expenses - sandwiched before a
+  second, separately-styled sub-card literally titled "Personal Expenses"
+  again (`App.jsx:2401`), nested inside the outer card of the same name.
+  Confusing information architecture - a user looking for "where do I add
+  an offset contribution" has to look inside "Personal Expenses." Needs a
+  redesign: likely split Offset Contributions into its own top-level card
+  (or relocate it next to Financial Position, where the offset itself
+  lives), and resolve the duplicate "Personal Expenses" naming/nesting.
+  Also touches a related a11y smell: the nested `<h2>`s at `App.jsx:2401`
+  and `2807` ("Total Summary" inside "Property Balance") should probably be
+  `<h3>`s once resolved, to keep a clean document outline.
+
+- [ ] **TODO-116: Extract the 3x-duplicated "add item" recurrence-picker form**
+  The One-Time checkbox -> Start-Month slider -> Monthly/Quarterly/Yearly
+  button trio -> End-Month slider form is copy-pasted three times - Income
+  Sources (`App.jsx:2143-2189`), Offset Contributions (`App.jsx:2271-2317`),
+  Personal Expenses (`App.jsx:2453-2499`) - each with its own private set of
+  4 `useState` variables (12 total for one repeated concept). Extract into a
+  shared component/hook. Biggest-effort item on this list, and the kind of
+  `App.jsx` change TODO-62's own analysis flagged as carrying real
+  regression risk (this file gets touched by nearly every TODO) - worth
+  extra care/testing when picked up.
 
 
 ---
