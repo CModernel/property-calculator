@@ -3237,6 +3237,56 @@ optionally reuse in the commit message when you implement it.
   to collapsed and "Total interest paid" returned to the exact $196,743
   baseline.
 
+- [x] **TODO-103: Default Realistic Mode to OFF**
+  One-line change: `useState(config.realisticModeEnabled ?? true)` (`App.jsx:112`)
+  -> `?? false`. Safe as designed - every scenario saved since TODO-100
+  already stores its own explicit `realisticModeEnabled` value
+  (`handleSaveScenario`), so this only changes brand-new sessions with
+  nothing saved yet; no schema bump needed, no behavior change for anyone
+  with existing saved data.
+
+- [x] **TODO-104: Hide the realistic-factor sliders when Realistic Mode is off, instead of leaving them inert**
+  Wrapped "Expense Growth Rate"/"Inflation Rate" (Financial Position
+  Advanced Assumptions) and the whole "Salary Growth Rate/Rent Growth Rate/
+  Vacancy/Effective Tax Rate" block (Income Advanced Assumptions) in
+  `{realisticModeEnabled && (...)}`, each replaced by a one-line
+  explanatory note when hidden - "Savings Interest Rate" stays always
+  visible since it's unrelated to Realistic Mode. Updated the existing
+  Financial Position off-state note to describe hiding instead of "held at
+  0%, regardless of what each slider shows."
+  **Real bug found and fixed while verifying in the browser** (directly
+  matches the user's own separate "no puedo colapsar Advanced Assumptions"
+  report): `financialPositionAdvancedCustomized` still included
+  `!realisticModeEnabled` from TODO-102/100, when Realistic Mode's own
+  default was `true` (so "off" was the noteworthy customization worth
+  auto-surfacing). TODO-103 flipped that default to `false` without
+  flipping this check's polarity - since "off" became the new default,
+  `!realisticModeEnabled` was now true FROM THE START, permanently forcing
+  the whole Advanced Assumptions section open with no way to collapse it,
+  defeating TODO-104's entire purpose. Fixed by inverting to plain
+  `realisticModeEnabled` (turning it ON is now the customization worth
+  auto-surfacing, matching how `useCreditCard`/`useEtfInvesting`/etc.
+  already work in the same check). Verified: fresh session now starts
+  collapsed, expands/collapses freely by default, still auto-expands (and
+  stays open) once Realistic Mode is switched on - matching every other
+  opt-in checkbox in the same list.
+  Verified in the browser: changing Expense Growth Rate to 5% while
+  Realistic Mode is on moved "Total interest paid" from $196,743 to
+  $211,665 and "Time to pay off" from 129 to 142 months - confirms the
+  factors still have real effect, addressing the user's separate "doesn't
+  seem to affect anything" report (see TODO-107, queued for re-testing now
+  that the collapse bug above is fixed).
+
+- [x] **TODO-105: Gate Property Growth Rate the same way**
+  Wrapped the "Property Growth Rate" `NumberSliderField` (Purchase Details,
+  outside either Advanced Assumptions collapsible) in
+  `{realisticModeEnabled ? (...) : (<p>...)}`, hiding in place per the
+  user's explicit preference (chosen over relocating it into a different
+  card's collapsible, to avoid disrupting Purchase Details' existing
+  layout) - same mechanical pattern as TODO-104, no relocation.
+  All three (TODO-103/104/105): `npm test -- --run` (482/482 unchanged),
+  `npm run lint`, `npm run build` clean - no calculation logic touched.
+
 - [x] **TODO-52 (Analysis only, no code): When does it make sense to invest in ETFs instead of paying down the offset?**
   Requested by the user - explicitly an analysis task. The question:
   at what point (if any) does investing the surplus in ETFs (dividend-
@@ -3473,37 +3523,44 @@ optionally reuse in the commit message when you implement it.
   existing over-committed-savings warning; confirmed First Home Buyer
   stayed checked throughout with zero interaction, exactly as designed.
 
-- [ ] **TODO-103: Default Realistic Mode to OFF**
-  `realisticModeEnabled` (`App.jsx:112`) currently defaults to `true` via
-  `useState(config.realisticModeEnabled ?? true)`. Change the fallback to
-  `false` so a brand-new session (nothing saved yet) starts in the simpler,
-  pre-TODO-90 mode. Safe: every scenario saved since TODO-100 already stores
-  its own explicit `realisticModeEnabled` value (`handleSaveScenario`), so
-  this only affects sessions with no saved scenario at all - no schema
-  migration, no behavior change for anyone with existing saved data.
+- [ ] **TODO-106: Give the Realistic Mode factors sensible non-zero default values**
+  Right now every "realistic factor" (Property/Salary/Rent/Expense Growth,
+  Vacancy, Inflation Rate, Effective Tax Rate) defaults to 0% - a deliberate
+  no-op when Realistic Mode ships, but not actually representative of what a
+  typical user would plug in. User's ask: lean toward common real-world
+  values (e.g. a modest property growth rate, a typical marginal tax rate)
+  rather than 0, unless doing so would need more analysis first - in which
+  case flag it back. Also raised: whether these should instead be derived
+  from data the user already entered elsewhere (e.g. inferring an effective
+  tax rate from income level) rather than fixed constants - an open design
+  question to resolve before implementing, not a given.
 
-- [ ] **TODO-104: Hide the realistic-factor sliders when Realistic Mode is off, not just leave them inert**
-  6 of the 7 "realistic factor" sliders - Expense Growth Rate/Inflation Rate
-  (Financial Position Advanced Assumptions, `App.jsx:1230-1258`) and Salary
-  Growth Rate/Rent Growth Rate/Vacancy/Effective Tax Rate (Income Advanced
-  Assumptions, `App.jsx:1962-2020`) - stay fully visible and editable inside
-  their collapsibles even when `realisticModeEnabled` is `false`, despite
-  having zero effect on the simulation once the master toggle is off (the
-  `realistic*`-prefixed derived consts already zero them out correctly - this
-  is a UI-only gap). Gate their rendering on `realisticModeEnabled` too,
-  mirroring the existing "Invest in ETFs" pattern already in this file
-  (disabled control + one-line explanatory note, `App.jsx:1372, 1382-1383`).
-  No calculation change - purely hides controls that already do nothing.
+- [ ] **TODO-107: Reconsider "Advanced Assumptions" - are Financial Position's changes actually reflected?**
+  User observed that changing sliders inside Financial Position's Advanced
+  Assumptions while Realistic Mode is on didn't seem to move "Total interest
+  paid" or "Time to pay off" at all. Investigated live in the browser while
+  finishing TODO-103/104/105: Expense Growth Rate DOES move both figures
+  significantly (confirmed: $196,743 -> $211,665, 129 -> 142 months, at 5%).
+  Likely explanation: a real bug found and fixed while finishing TODO-104 (see
+  its write-up below - the section was stuck permanently open by default,
+  which may have made testing confusing), or the user specifically tested
+  "Savings Interest Rate" - which by design does NOT affect loan payoff time
+  at all, since it only grows the separate Savings balance (a parallel,
+  non-offset account), not a bug. Possibly worth a clarifying note near that
+  slider if it keeps causing confusion. Re-test now that the collapse bug is
+  fixed before concluding anything else needs to change here.
 
-- [ ] **TODO-105: Gate Property Growth Rate the same way**
-  The 7th realistic factor, Property Growth Rate (`App.jsx:1094-1107`), isn't
-  inside either Advanced Assumptions collapsible at all - it lives in the
-  Purchase Details card and stays visible unconditionally regardless of
-  Realistic Mode. Needs its own treatment once TODO-104 ships: hide-in-place
-  with an explanatory note vs. relocate into a gated section - an open design
-  question worth resolving before implementing (Purchase Details isn't part
-  of either existing collapsible pattern, so this isn't a drop-in reuse of
-  TODO-104's approach).
+- [ ] **TODO-108: Effective Tax Rate/other factors live in a DIFFERENT card than expected**
+  User expected turning Realistic Mode on to reveal "other tax expenses, etc."
+  and for that to affect payoff time. Effective Tax Rate (along with Salary/
+  Rent Growth and Vacancy) actually lives in the **Income** card's own
+  "Advanced Assumptions" (`App.jsx:1962-2020`), separate from Financial
+  Position's - easy to miss if only Financial Position was checked. Consider
+  whether Income's Advanced Assumptions needs a more visible cross-reference
+  to Financial Position's Realistic Mode toggle (which controls it from a
+  different card), or whether it's discoverable enough already now that
+  TODO-108-era bug (see below) no longer keeps people from noticing the
+  toggle at all.
 
 
 ---
