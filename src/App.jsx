@@ -1,4 +1,4 @@
-import React, { useState, lazy, Suspense } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { DollarSign, Home, Calendar, ShoppingCart, Car, RotateCcw, Wallet, Sun, Moon, Sprout, PiggyBank } from 'lucide-react';
 import { formatMonthsDetailed, formatCompactMoney } from './calculations/formatting';
 import NumberSliderField from './components/NumberSliderField';
@@ -1167,11 +1167,14 @@ const PropertyInvestmentCalculator = () => {
                     className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-blue-500"
                   />
                   Realistic Mode
-                  <InfoTooltip label="What does this control?">
-                    <p>A master switch for every growth/inflation-rate assumption in this calculator: Property Growth Rate, Salary/Rent Growth Rate, Vacancy, Expense Growth Rate, Inflation Rate, and Effective Tax Rate. Turning it off holds all of them at 0% - without changing any of their own slider values, so turning it back on restores exactly what you had.</p>
-                    <p className="mt-2">Doesn't affect Credit Card, Compare Offset vs ETF, Invest in ETFs, or Mortgage-Free Age (in Financial Position, below) - those already have their own individual checkboxes.</p>
-                  </InfoTooltip>
                 </label>
+                {/* Outside the <label> deliberately - nesting it inside would
+                    pull the tooltip button's own aria-label into the
+                    checkbox's computed accessible name. */}
+                <InfoTooltip label="What does this control?">
+                  <p>A master switch for every growth/inflation-rate assumption in this calculator: Property Growth Rate, Salary/Rent Growth Rate, Vacancy, Expense Growth Rate, Inflation Rate, and Effective Tax Rate. Turning it off holds all of them at 0% - without changing any of their own slider values, so turning it back on restores exactly what you had.</p>
+                  <p className="mt-2">Doesn't affect Credit Card, Compare Offset vs ETF, Invest in ETFs, or Mortgage-Free Age (in Financial Position, below) - those already have their own individual checkboxes.</p>
+                </InfoTooltip>
               </div>
 
               {realisticModeEnabled ? (
@@ -1362,11 +1365,14 @@ const PropertyInvestmentCalculator = () => {
                     className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-blue-500"
                   />
                   Model credit card usage
-                  <InfoTooltip label="How does the credit card benefit work?">
-                    <p>Paying eligible expenses by credit card instead of debit, and clearing the balance in full every month, lets that money sit in your offset a little longer before it's swept out to pay the statement - plus you may earn cashback or rewards.</p>
-                    <p className="mt-2">Assumes you never carry a balance or pay interest/late fees. Keep any expense where your bank charges a fee for <em>not</em> using debit off this - that fee can erase the whole benefit.</p>
-                  </InfoTooltip>
                 </label>
+                {/* Outside the <label> deliberately - nesting it inside would
+                    pull the tooltip button's own aria-label into the
+                    checkbox's computed accessible name. */}
+                <InfoTooltip label="How does the credit card benefit work?">
+                  <p>Paying eligible expenses by credit card instead of debit, and clearing the balance in full every month, lets that money sit in your offset a little longer before it's swept out to pay the statement - plus you may earn cashback or rewards.</p>
+                  <p className="mt-2">Assumes you never carry a balance or pay interest/late fees. Keep any expense where your bank charges a fee for <em>not</em> using debit off this - that fee can erase the whole benefit.</p>
+                </InfoTooltip>
                 {!useCreditCard && (
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Estimates the small extra benefit of paying eligible expenses by credit card and clearing the balance in full every month.</p>
                 )}
@@ -1450,11 +1456,14 @@ const PropertyInvestmentCalculator = () => {
                     className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-blue-500"
                   />
                   Compare Offset vs ETF Investing
-                  <InfoTooltip label="What is this comparing?">
-                    <p>Your offset's "return" is exactly your mortgage rate - guaranteed and tax-free, since it's not income, the bank just stops charging you interest on that portion of the loan. Matching that with an ETF needs an even higher return before tax, since capital gains/dividends are taxable and returns aren't guaranteed.</p>
-                    <p className="mt-2">This is a simple side-by-side, not a recommendation - always consult a licensed financial adviser before making investment decisions.</p>
-                  </InfoTooltip>
                 </label>
+                {/* Outside the <label> deliberately - nesting it inside would
+                    pull the tooltip button's own aria-label into the
+                    checkbox's computed accessible name. */}
+                <InfoTooltip label="What is this comparing?">
+                  <p>Your offset's "return" is exactly your mortgage rate - guaranteed and tax-free, since it's not income, the bank just stops charging you interest on that portion of the loan. Matching that with an ETF needs an even higher return before tax, since capital gains/dividends are taxable and returns aren't guaranteed.</p>
+                  <p className="mt-2">This is a simple side-by-side, not a recommendation - always consult a licensed financial adviser before making investment decisions.</p>
+                </InfoTooltip>
                 {!showOpportunityCost && (
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Shows what your next dollar earns in the offset vs. an ETF, side by side.</p>
                 )}
@@ -1470,11 +1479,14 @@ const PropertyInvestmentCalculator = () => {
                     className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-blue-500 disabled:cursor-not-allowed"
                   />
                   Invest in ETFs
-                  <InfoTooltip label="What does this do?">
-                    <p>Diverts part of what would otherwise go to your offset into a growing ETF balance instead - a single, manually-set strategy, simulated deterministically like everything else in this app. Slower offset payoff, potentially higher return.</p>
-                    <p className="mt-2">This is illustrative only, not a recommendation - always consult a licensed financial adviser before making investment decisions.</p>
-                  </InfoTooltip>
                 </label>
+                {/* Outside the <label> deliberately - nesting it inside would
+                    pull the tooltip button's own aria-label into the
+                    checkbox's computed accessible name. */}
+                <InfoTooltip label="What does this do?">
+                  <p>Diverts part of what would otherwise go to your offset into a growing ETF balance instead - a single, manually-set strategy, simulated deterministically like everything else in this app. Slower offset payoff, potentially higher return.</p>
+                  <p className="mt-2">This is illustrative only, not a recommendation - always consult a licensed financial adviser before making investment decisions.</p>
+                </InfoTooltip>
                 {!realisticModeEnabled ? (
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Realistic Mode is off (see the Realistic Mode card above), which holds Effective Tax Rate at 0% - turn it back on to use this.</p>
                 ) : realisticEffectiveTaxRate === 0 ? (
@@ -2850,7 +2862,7 @@ const PropertyInvestmentCalculator = () => {
 
               {/* Total Summary section */}
               <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-3 border border-slate-200 dark:border-slate-700 mt-4">
-                <h2 className="text-lg font-bold text-gray-700 dark:text-gray-200 mb-3">💵 Total Summary</h2>
+                <h3 className="text-lg font-bold text-gray-700 dark:text-gray-200 mb-3">💵 Total Summary</h3>
 
                 <div className="flex items-center gap-4 mb-4">
                   <div className="relative w-16 h-16 rounded-full shadow-inner" style={{

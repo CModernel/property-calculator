@@ -3811,6 +3811,38 @@ optionally reuse in the commit message when you implement it.
   `<h2>` nested inside "Property Balance"'s own `<h2>` is the same class of
   issue, but a different, unrelated card - queued separately as TODO-120
   rather than silently bundled into this task.
+
+- [x] **TODO-119: Removed the unused `import React` from App.jsx**
+  `import React, { useState, lazy, Suspense } from 'react';` → `import {
+  useState, lazy, Suspense } from 'react';` - confirmed via grep zero
+  `React.` usage anywhere in the file before removing. One-line change.
+
+- [x] **TODO-120: Demoted "Total Summary"'s `<h2>` to `<h3>` inside "Property Balance"**
+  Same fix shape as TODO-115's Personal Expenses heading - no text/visual
+  change, just the correct semantic nesting level under Property Balance's
+  own `<h2>`. Verified in the browser via DOM query: `H2: Property Balance`
+  / `H3: Total Summary`.
+
+- [x] **TODO-117: Raised Vitest's `testTimeout` to 15000ms to reduce flaky full-suite failures**
+  Added `testTimeout: 15000` to `vite.config.js`'s `test: {}` block (was
+  unset, i.e. Vitest's 5000ms default). Only affects how long a hung/slow
+  test is given before failing - doesn't mask a genuinely broken test.
+
+- [x] **TODO-118: Moved InfoTooltip outside the `<label>` on 4 checkboxes to fix accessible-name pollution**
+  "Realistic Mode", "Model credit card usage", "Compare Offset vs ETF
+  Investing", and "Invest in ETFs" all had their `InfoTooltip` nested
+  INSIDE the `<label>`, same issue "First Home Buyer" already avoided (its
+  own code comment explains why - nesting pulls the tooltip button's own
+  aria-label into the checkbox's computed accessible name). Moved each
+  `InfoTooltip` to a sibling position immediately after `</label>`, same
+  pattern as "First Home Buyer", with the same explanatory comment.
+  Verified via a DOM query in the browser: all 4 checkboxes' `<label>`
+  elements now have `hasNestedButton: false` and clean label text (e.g.
+  "Realistic Mode" instead of "Realistic Mode" + the entire tooltip
+  paragraph). Confirmed the tooltip still opens/closes correctly on click
+  in its new position, no visual change.
+  `npm test -- --run` (495/495), `npm run lint`, `npm run build` clean -
+  pure JSX repositioning, no logic touched.
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -3828,52 +3860,424 @@ optionally reuse in the commit message when you implement it.
   regression risk (this file gets touched by nearly every TODO) - worth
   extra care/testing when picked up.
 
-- [ ] **TODO-117: Reduce flaky "Test timed out in 5000ms" failures on the full test suite**
-  Found while finishing TODO-113: running the full 488-test suite is
-  intermittently flaky under system load - random `App.*.test.jsx` files
-  (never the calculation-layer unit tests, never the same files twice) hit
-  Vitest's default 5000ms test timeout. Confirmed this is CPU contention
-  (system load average was 37-64 from unrelated running apps at the time),
-  not a logic bug - every affected test passes 100% of the time run in
-  isolation. Still, a jsdom-rendered React integration test doing several
-  `userEvent` interactions is inherently heavier than the default timeout
-  assumes, so this will keep recurring on a loaded machine (or CI) even
-  though no test is actually broken. Consider raising `testTimeout` in
-  `vite.config.js`'s `test: {}` block (currently unset, so it's Vitest's
-  5000ms default) specifically for jsdom-environment files, or globally if
-  that's simpler - just enough headroom that a busy machine doesn't produce
-  false failures.
+- [ ] **TODO-121: Explain Realistic Mode vs. Optimistic (off) mode with a tooltip**
+  User's ask: add a simple tooltip/explanation clarifying WHY turning
+  Realistic Mode off produces a cheaper/faster result than turning it on -
+  not because the calculator changed its math for the better, but because
+  "off" is an optimistic baseline that ignores real-world costs (tax on
+  income, expense/rent growth, vacancy) that do apply in real life. Hypothetically,
+  if you paid no tax at all, the "off" numbers would be accurate - the point
+  of Realistic Mode is exactly that this isn't the real world. Needs
+  copy that makes this framing obvious at a glance (e.g. in the Realistic
+  Mode card's own tooltip, and/or a one-line note near "Total interest
+  paid"/"Time to pay off" when the mode is off).
 
-- [ ] **TODO-118: Checkboxes with a nested InfoTooltip have a bloated accessible name**
-  Found while writing TODO-113's tests: "Realistic Mode" (`App.jsx:1157-1169`),
-  "Invest in ETFs" (`App.jsx:1459-1472`), "Compare Offset vs ETF Investing"
-  (`App.jsx:1439-1452`), and "Model credit card usage" (`App.jsx:1351-1364`)
-  all nest their `InfoTooltip` INSIDE the `<label>` - so a screen reader's
-  computed accessible name for the checkbox is not just "Realistic Mode" but
-  "Realistic Mode" + the entire hidden tooltip explanation paragraph(s),
-  since the tooltip's `role="tooltip"` content is still in the DOM (just
-  visually hidden). "First Home Buyer" (`App.jsx:1046-1052`) already gets
-  this right - its own code comment explains why: `InfoTooltip` sits as a
-  sibling AFTER `</label>` specifically to keep it out of the computed name.
-  Apply that same pattern to the 4 checkboxes above.
+- [ ] **TODO-122: Reconsider whether Effective Tax Rate should be more realistic (ATO-style brackets)**
+  User's ask: is the current tax calculation realistic - does it use actual
+  ATO progressive tax brackets based on annual income, the way real
+  Australian income tax works? **Answer, as currently implemented: no** -
+  `effectiveTaxRate` is a single flat percentage the user manually types in
+  (`App.jsx`'s Realistic Mode card), applied via `getNetAmount` in
+  `src/calculations/recurringAmount.js:27-29` to every Gross-marked income
+  item independently, every month - it is NOT derived from the user's actual
+  entered income, and does NOT model any bracket structure. **This directly
+  re-opens a decision already made twice**: TODO-94 explicitly rejected
+  modeling real AU tax brackets ("if the user needs to understand it to
+  trust it, don't build it that way"), and TODO-106 reaffirmed a flat
+  constant specifically to avoid reintroducing that complexity when picking
+  the 20% default. Revisiting this needs the same complexity-budget
+  question to be asked again, explicitly, before any code changes - worth
+  a fresh decision, not an automatic "yes, add brackets."
+  **Refined follow-up from the user, after discussion**: a hybrid, not full
+  bracket modeling - keep the flat-rate slider exactly as-is (still the only
+  thing the simulation actually reads, so it stays auditable/simple), but
+  show a one-time SUGGESTED value computed from real ATO brackets applied to
+  the user's already-entered annual income, which the user can accept or
+  freely override. This avoids the original complexity-budget objection
+  entirely, since the bracket math would run once as a display hint, not
+  inside the recurring simulation loop. Implementation sketch: a new small
+  `auTaxBrackets.js` data file, same tiered shape as `NSW_STAMP_DUTY_TIERS`
+  (`src/calculations/states/nsw.js`) - `calculateStandardStampDuty`'s own
+  `.find(tier => price <= tier.max)` + `base + (amount - over) * rate`
+  pattern is directly reusable for ATO brackets (already tested, already
+  proven). Real nuance to resolve before implementing: the suggestion can
+  only be computed from income sources already marked "Gross" (their
+  pre-tax `amount` is known) - income entered as net has no recoverable
+  gross figure without already knowing the tax rate (circular), so the
+  suggestion's own copy needs to be honest about that ("based on your
+  Gross-marked income only") rather than silently ignoring net-entered
+  income sources.
+  **Second refinement (both behaviors wanted, not either/or)**: (1)
+  auto-fill the slider with the suggested value exactly ONCE, at the moment
+  Realistic Mode transitions from off to on (a plain closure check inside
+  the checkbox's own `onChange` - `const turningOn = e.target.checked &&
+  !realisticModeEnabled`, same "seed once" shape already used elsewhere,
+  e.g. Property Type -> Strata seeding). After that single moment the field
+  is a completely normal, freely-editable slider - manually changing it, or
+  toggling Realistic Mode off and on again, doesn't re-lock or re-suggest
+  anything beyond that one trigger point. (2) SEPARATELY, always show a
+  live-recalculating hint/tooltip (e.g. "Right now, ATO brackets would
+  suggest ~23% based on your current income") so that if the user changes
+  income or other values afterward, they can check whether the suggestion
+  has since moved, without it silently overwriting their own value. Copy
+  for both must make clear this is illustrative/an example, not
+  authoritative tax advice.
+  **Related, possibly bigger source of imprecision worth keeping in mind
+  when implementing (see also TODO-127)**: a suggested rate based on total/
+  blended income is an AVERAGE rate, but rental/investment income sits on
+  top of salary income under Australia's progressive scale, so its own
+  relevant rate is really the MARGINAL rate on that top slice, not the
+  average - these can differ meaningfully. Negative gearing (investment
+  losses reducing OTHER taxable income) isn't modeled at all either.
 
-- [ ] **TODO-119: Remove the unused `import React` from App.jsx**
-  `import React, { useState, lazy, Suspense } from 'react';` (`App.jsx:1`) -
-  confirmed via grep, zero `React.` usage anywhere in the file (modern
-  Vite/React JSX runtime doesn't need it in scope). Currently silent because
-  eslint's `no-unused-vars` rule exempts capitalized names
-  (`varsIgnorePattern: '^[A-Z_]'`, `eslint.config.js:26`) - not a bug, just
-  dead weight. One-line removal.
+- [ ] **TODO-123: Clarify that tax is modeled as smooth/PAYG-style withholding, not an annual lump sum**
+  Follow-up from discussion: the app has no calendar/financial-year concept
+  at all (confirmed via grep - no purchase date, no "month 1 = which real
+  month" mapping anywhere), so `effectiveTaxRate` is applied as a smooth,
+  continuous monthly reduction rather than modeling a once-a-year tax bill/
+  refund. For Salary/Wages this is already a reasonable approximation of
+  real PAYG withholding. For rental/investment income (which in reality has
+  no automatic withholding - paid via quarterly PAYG instalments or a lump
+  sum at tax time), the current smooth model doesn't match real cash-flow
+  timing.
+  **Analyzed the actual magnitude before deciding whether to change
+  anything, per the user's explicit request**: the difference is a timing/
+  float effect only - the TOTAL tax paid over a year is identical either
+  way, what differs is whether that money sits in the offset for longer
+  before being extracted (lump-sum-at-EOFY) vs. leaving smoothly every month
+  (current model). This is the same class of effect as the existing Credit
+  Card Timing Benefit (`src/calculations/creditCardBenefit.js`,
+  `calculateOffsetTimingBenefit`) - which this codebase already deliberately
+  keeps as a small STATIC estimate rather than folding into the core
+  simulation loop, for the same reason. Given typical rental-income tax
+  amounts relative to total interest paid (hundreds of thousands of
+  dollars), this timing effect is expected to be small (low hundreds to low
+  thousands of dollars over a multi-year simulation) - not worth a calendar/
+  financial-year concept in the core loop.
+  **Resolution: no simulation changes** - add a one-line clarifying note
+  (tooltip or inline text) near Effective Tax Rate stating tax is modeled
+  as smooth/PAYG-style withholding for simplicity, not an annual lump sum,
+  and that this is a simplification for non-wage income specifically. Only
+  show this note while Realistic Mode is on (it's meaningless with the
+  mode off, since `effectiveTaxRate` is forced to 0 either way).
+  **Quantified per the user's follow-up ask ("how far off could this
+  actually be")**: worked through the math - delaying a rental-income tax
+  amount `T` by an average of ~6 months (smooth-monthly vs. lump-sum-at-
+  EOFY) before it leaves the offset changes total interest by roughly
+  `T x mortgage_rate x 0.5` per year of simulation. For a modest rental tax
+  amount (~$3k/yr) at a ~6% rate, that's ~$90/yr, or under 1% of a typical
+  $150k-$300k total-interest figure over a full loan term. It grows with
+  how much Gross-marked rental/investment income is in the scenario -
+  could reach low single digits (~2-5%) for a scenario with substantial
+  investment income, still small. Suggested tooltip copy along these
+  lines: "Simplification: modeled as smooth PAYG-style withholding, not an
+  annual lump sum - typically changes total interest by well under 5%,
+  more if a large share of your income is Gross rental/investment income."
+  **Separately, and likely a BIGGER source of imprecision than this timing
+  question** (flagging since it came up during this analysis, not
+  something to fold into this tooltip): `effectiveTaxRate` is one blended
+  rate applied to all Gross income alike, but doesn't distinguish the
+  MARGINAL rate that should really apply to rental/investment income
+  sitting on top of salary (see new TODO-127, low difficulty), and doesn't
+  model negative gearing - investment losses offsetting other taxable
+  income (see new TODO-129, a much bigger undertaking) - at all.
 
-- [ ] **TODO-120: "Total Summary" `<h2>` nested inside "Property Balance"'s own `<h2>`**
-  Found during TODO-115 (same class of issue as the "Personal Expenses"
-  heading nesting fixed there, but a different, unrelated card, so kept
-  separate rather than silently bundled in). `App.jsx`'s "🏠 Property
-  Balance" results card has its own top-level `<h2>`; nested inside it, the
-  "💵 Total Summary" sub-section is ALSO an `<h2>` rather than an `<h3>` -
-  breaks a clean document outline for assistive tech, same fix shape as
-  TODO-115 (demote to `<h3>`, no visual/text change needed).
+- [ ] **TODO-124 (Analysis only, no code): Should "Invest in ETFs" divert from Savings instead of from the Offset's own share?**
+  User's proposal: instead of `etfAllocationPct` diverting a % of the
+  OFFSET's own share (current design, `offsetSimulation.js` - `etfShare =
+  offsetShare * (etfAllocationPct/100)`), it should divert a % of the
+  SAVINGS/non-offset share instead (`etfShare = nonOffsetShare *
+  (etfAllocationPct/100)`) - meaning at `offsetAllocationPct: 100%` (the
+  app's own default), ETF investing would be impossible (nothing in the
+  savings pool to draw from), which the user considers correct/expected
+  behavior, not a bug.
+  **Technical complexity: low, not high.** The formula is the same shape,
+  just sourcing `etfShare` from `nonOffsetShare` instead of `offsetShare` -
+  a small, contained change to the core loop, no new state, no new
+  simulation concept. No "simplified version" is needed - the full version
+  is already simple.
+  **The real issue is conceptual, not computational - flagging clearly
+  before this goes any further**: this is the EXACT formula that was
+  implemented FIRST during TODO-96 this same session, then caught and
+  fixed as a bug specifically because at the app's default
+  `offsetAllocationPct: 100%`, it made "Invest in ETFs" silently do nothing
+  (see TODO-96's write-up above: "Important correction made mid-
+  implementation"). More importantly, it changes WHAT QUESTION the whole
+  feature answers: TODO-52's original analysis (which TODO-96/97/98 were
+  built to answer) was specifically about the offset-vs-ETF trade-off -
+  "should money that would otherwise reduce guaranteed, tax-free loan
+  interest instead chase a risky-but-higher ETF return." If ETF money comes
+  from savings instead, the feature stops being about that trade-off
+  entirely and becomes a much narrower "should my already-set-aside cash
+  sit idle or in an ETF" question - unrelated to the mortgage. Not
+  necessarily wrong to want that instead, but it's a different feature with
+  a different premise, not a tweak to the existing one - needs an explicit
+  decision on which question the feature should actually answer before any
+  implementation, not just a formula swap.
+  **User's follow-up**: downgraded to nice-to-have - they haven't actually
+  tested the app's current ETF behavior yet, so aren't sure this analysis
+  matches what they'll actually want once they see it in action; asked
+  directly whether a better way to model "Offset vs. Savings+ETF" already
+  exists. **Answer: yes** - the CURRENT implementation (ETF diverts from
+  the offset's own share) already is that better way; it's specifically
+  what makes the Strategy Comparison/Pareto-front analysis (TODO-98)
+  meaningful at all. Recommend leaving this as-is unless/until testing the
+  current behavior surfaces a concrete problem with it - don't implement
+  the savings-sourced variant preemptively.
+  Separately, the user raised a bigger, distinct point worth its own item:
+  see new TODO-126 (a master way to fully hide ETF investing from the UI,
+  for users who only care about the property/offset side).
 
+- [ ] **TODO-125: Clarify that income amounts are assumed NET (take-home) unless "Gross" is checked**
+  User's ask: income amounts are entered as net/take-home for simplicity,
+  but is this actually communicated anywhere near where the user enters
+  the number, or only inferable from the separate "This is a gross
+  (pre-tax) amount" checkbox's own label? Checked: confirmed there is NO
+  tooltip/hint on "Weekly Amount ($)" (`App.jsx`, generic income), "Weekly
+  Rent"/"Weekly Rent per Person" (rental categories) - the only clue is the
+  adjacent checkbox's wording, and the actual explicit instruction ("Enter
+  net figures for everything else") lives on the Effective Tax Rate slider
+  in a DIFFERENT card (Realistic Mode), which a user filling out the
+  Income form has no particular reason to have read first. Real,
+  reasonably likely source of confusion. Fix: add a short inline hint or
+  `InfoTooltip` near the amount field (or the "Gross" checkbox, since all 3
+  amount-field variants share one checkbox) stating plainly that the
+  amount is assumed net/take-home unless the box below is checked.
+
+- [ ] **TODO-126: A master toggle to fully hide ETF investing from the UI**
+  User's point: ETF investing is arguably out of scope for a property
+  calculator (this is a property-focused tool, ETF investing is a
+  tangential feature) - even with "Invest in ETFs" left unchecked today, its own
+  checkbox row (with tooltip) and the separate "Compare Offset vs ETF
+  Investing" checkbox (plus, if that one's checked, the "Expected ETF
+  Return" slider and static comparison box) still take up space in
+  Financial Position's Advanced Assumptions for users who have zero
+  interest in ETFs, ever. Wants a way to hide ALL of it at once - every
+  ETF-related checkbox, slider, tooltip, tax interaction, and the Strategy
+  Comparison table - not just leave the two checkboxes unchecked. Needs
+  design: e.g. a top-level "Show ETF investing options" master checkbox
+  (default off?) gating both `useEtfInvesting`'s and `showOpportunityCost`'s
+  entire UI blocks, distinct from those two checkboxes' own on/off state.
+
+- [ ] **TODO-127: Effective Tax Rate should arguably use the MARGINAL rate for rental/investment income, not a blended average**
+  Surfaced while quantifying TODO-123's estimation error, and directly
+  relevant to TODO-122's bracket-suggestion design. A single blended
+  `effectiveTaxRate` is applied to all Gross income alike, but under
+  Australia's progressive scale, rental/investment income effectively sits
+  ON TOP of salary income - its relevant rate is really the MARGINAL rate
+  on that top slice, which can be meaningfully higher than a blended
+  average-of-everything rate.
+  **Difficulty: low - this is essentially free once TODO-122 exists**, not
+  a separate calculation engine. TODO-122's bracket lookup already has to
+  find which tier a given income level falls into; that tier's own `rate`
+  field IS the marginal rate - returning it directly (for "income + this
+  extra rental income, what bracket does the top dollar land in") instead
+  of computing a blended average across all lower tiers is a small variant
+  of the same lookup, not new work. Mainly a decision of which number to
+  surface as "the suggestion" (or offer both, labeled clearly) once
+  TODO-122 is being built - not its own separate implementation effort.
+
+- [ ] **TODO-128: Two-color slider track for "ETF Allocation" (and maybe "Switch Trigger")**
+  User's idea, after confirming how the current split actually works
+  (`offsetAllocationPct` splits surplus into offset-bound vs. savings-
+  bound; `etfAllocationPct` then diverts a % of the OFFSET-bound share
+  specifically into ETF - e.g. at 50%/40%, of a $1000 surplus: $500 stays
+  savings-bound untouched, and of the other $500 offset-bound share, 40%
+  ($200) redirects to ETF, leaving $300 actually reaching the offset).
+  Visibility + an explanatory tooltip already exist for this slider today
+  (`App.jsx:1524-1538` - gated on `etfInvestingActive`, with clarifying
+  `children` text) - nothing to add there. The NEW ask is purely visual:
+  color the slider track differently on each side of the drag handle (e.g.
+  one color for "stays offset-bound," another for "goes to ETF"), so the
+  split reads at a glance.
+  **Feasibility: moderate, not hard, but not free either** - `NumberSliderField`
+  (`src/components/NumberSliderField.jsx`) currently applies one flat
+  Tailwind background class to the whole track (`TRACK_CLASSES[color]`,
+  line 7-13); representing a value-dependent split needs an inline CSS
+  `linear-gradient` background with a hard color stop computed from the
+  current value's position in `[sliderMin, sliderMax]` - not itself hard,
+  but Tailwind's `dark:` variant doesn't apply to inline styles, so the
+  gradient's two colors need to already be resolved per-theme somehow
+  (either real hex values switched via an `isDarkMode` prop `NumberSliderField`
+  doesn't currently take, or CSS custom properties with their own `dark:`
+  overrides defined once in a stylesheet). Should be an opt-in prop (e.g.
+  `splitColor`), not the default for all ~20+ existing sliders using this
+  component - most don't want or need this.
+
+- [ ] **TODO-129: Model negative gearing (investment property losses offsetting other taxable income)**
+  Split out from the original TODO-127 for a cleaner difficulty read (the
+  user asked specifically how hard each part would be, and these two are
+  very different). Negative gearing - an investment property's losses
+  (expenses + loan interest exceeding rental income) reducing the
+  investor's OTHER taxable income, a very common real scenario for AU
+  property investors - isn't modeled at all today; the current flat-rate
+  `effectiveTaxRate` conversion can only ever reduce income, never
+  represent a net tax BENEFIT from a negatively-geared property.
+  **Difficulty: REVISED to low-medium (correcting the medium-high estimate
+  above)**. User pushed back on whether this needs anything "complicated
+  like re-calculating the property's value" - it doesn't, and re-checking
+  `offsetSimulation.js` line-by-line shows the original "two cleanly
+  separate domains" framing was wrong: all three ingredients are already
+  local variables inside the SAME loop iteration, not in separate systems.
+  `rentalIncomeSources`' own contribution is already summed at line 224
+  (currently inlined into a combined income total - just needs pulling out
+  into its own named const); `monthlyExpensesForMonth` is fully resolved by
+  line 266; `monthlyInterest` is computed at line 322. Negative gearing is
+  a pure CASH-FLOW comparison (rental income vs. expenses + interest that
+  same month) - it has nothing to do with property VALUE/capital gains, so
+  that specific worry doesn't apply here at all. The new code is roughly:
+  `if (rentalIncomeThisMonth - monthlyExpensesForMonth - monthlyInterest < 0)`
+  → credit the shortfall back into that month's surplus at some tax rate,
+  gated on `isInvestmentProperty` (already exists) and naturally a no-op
+  when there's no rental income source at all.
+  **Not exaggerated or unnecessary** - negative gearing is one of the most-
+  discussed real considerations for AU property investors, and this
+  simplified cash-flow version (no dynamic valuation, no loss-carryforward
+  across years, just "was this property cash-flow negative this month")
+  fits the stated balance of realism without modeling complexity. Two
+  design decisions worth a short Plan Mode pass before building: (1) which
+  rate to apply to the benefit - reuse `effectiveTaxRate` FULL, unadjusted
+  (ties back to TODO-127's marginal-vs-average question) - this is
+  ordinary-income relief, not a capital gain, so TODO-131's 50% CGT
+  discount does NOT apply here; worth flagging explicitly since the two
+  TODOs sit next to each other and use similarly-named rates for different
+  reasons, (2) whether it needs its own toggle or just activates
+  automatically once Realistic Mode + Investment Property are both on.
+
+- [ ] **TODO-130 (Decided, not yet built): Remove the ongoing "Savings" allocation concept - repurpose Offset Allocation as a direct Offset-vs-ETF split**
+  Evolves/supersedes TODO-124's narrower framing. User's reasoning: taking
+  ETF money FROM a separate non-offset "Savings" pool doesn't make sense as
+  a permanent feature, because the offset account already gives you
+  everything a generic savings account gives you (fully liquid, withdraw
+  any time) PLUS it reduces guaranteed loan interest - a plain savings
+  balance sitting outside the offset is strictly dominated in the common
+  case. ETF, by contrast, is a genuinely different kind of commitment
+  (illiquid, hard to reverse, real market risk) - so the meaningful
+  decision isn't "offset vs. savings vs. ETF," it's just "offset vs. ETF."
+  Proposal: delete the ongoing monthly diversion role of `offsetAllocationPct`
+  entirely, and let that same slider directly control what fraction of
+  surplus goes to ETF instead (the complement goes to offset) - collapsing
+  today's two-slider, two-step split (Offset Allocation → then ETF
+  Allocation carves a slice out of the offset's own share) into one slider,
+  one step.
+  **Decided: agree with the core reasoning - the original caveat turned out
+  to be even weaker than stated.** Initial concern was that a savings/term-
+  deposit rate could occasionally exceed the mortgage rate. User quantified
+  it with real AU rates: comparing after-tax, a savings account needs
+  roughly `mortgageRate / (1 - marginalRate)` pre-tax to match a 100%
+  offset (e.g. at a 6.14% mortgage and 39% marginal rate, that's
+  6.14/0.61 ≈ 10.07% pre-tax) - because offset "interest saved" is
+  effectively tax-free (it's a reduction in an already-taxed obligation,
+  not taxable income) while savings-account interest is fully taxable. Even
+  today's more attractive advertised AU savings rates (~5.5%, conditional)
+  sit well under that bar for anyone with a normal owner-occupier mortgage
+  and meaningful marginal tax rate. So this isn't just "uncommon," it's
+  "essentially never worth it for the mainstream case this app targets" -
+  removing the ongoing Savings diversion is the right simplification.
+  Recommend keeping `initialSavingsBalance` (seeded from "Remaining
+  Savings," i.e. real pre-existing cash at settlement) and its own
+  `savingsInterestRate` compounding exactly as-is - that's a one-time
+  starting position, not an ongoing allocation choice, and is unaffected by
+  this change either way (confirmed in `offsetSimulation.js`: its interest
+  accrual, lines 288-290, already runs independently of any ongoing
+  `offsetShare`/`savingsBalance` contribution logic). What goes away is
+  only the ONGOING monthly diversion path (line 297-298: `offsetShare`/
+  `savingsBalance += netMonthlyDeposit - offsetShare`).
+  **Does the app currently propose WHEN/HOW MUCH to invest in ETF, or is it
+  purely user-set?** Purely user-set, with one assist: Strategy Comparison
+  (TODO-98) runs a 21x21 grid search over `(switchThresholdPct,
+  etfAllocationPct)` and surfaces up to 5 Pareto-optimal combinations with
+  an "Apply" button - so the app DOES propose good candidate combinations
+  to pick from. But it's a single FIXED pair applied as a step function
+  (once `switchThresholdPct` is crossed, `etfAllocationPct` applies at its
+  full set value for the rest of the simulation) - not a gradually
+  increasing/ramping schedule like the "start at 20%, increase over time"
+  example. A ramping schedule is a materially bigger feature (needs a rate-
+  of-increase parameter, not just two numbers) and isn't proposed here -
+  flagging as a possible future idea only if there's real interest, not
+  recommending it now.
+  **Concrete changes this would need, if pursued:**
+  - `offsetSimulation.js`: remove the `offsetAllocationPct`/ongoing-savings-
+    diversion lines (296-298) entirely; `etfShare` computes directly off
+    `netMonthlyDeposit` instead of off `offsetShare`; `initialSavingsBalance`/
+    `savingsInterestRate` and their own compounding (lines 284-290) stay
+    untouched.
+  - `strategyComparison.js`: no change needed - confirmed `offsetAllocationPct`
+    was never a grid axis (only `switchThresholdPct`/`etfAllocationPct` are),
+    it was just passed through fixed in `baseParams`.
+  - `App.jsx`: remove the "Offset Allocation" slider/state/tooltip from
+    Financial Position; "ETF Allocation"'s existing tooltip copy needs
+    rewording (currently describes diverting "the offset's own share" -
+    would become "your monthly surplus" directly); `handleSaveScenario`
+    drops `offsetAllocationPct` from saved config (keeps
+    `initialSavingsBalance`/`savingsInterestRate`).
+  - Timeline Explorer: the `savings` column stops growing from ongoing
+    contributions - only the initial seed's own interest, a smaller/flatter
+    line than before.
+  - Test suite: this touches the TODO-49/50/96/98 test blocks across
+    `offsetSimulation.test.js`/`strategyComparison.test.js`/
+    `timelineSnapshot.test.js` most directly - a real but bounded rewrite,
+    not a full-suite risk.
+  Meaningful enough surface area (deletes a shipped feature, not just UI
+  cleanup) to warrant its own Plan Mode session if/when the user decides to
+  proceed - not implemented here.
+
+- [ ] **TODO-131: ETF growth's tax drag should use the AU 50% CGT discount, not the full effectiveTaxRate**
+  User supplied a detailed AU capital-gains-tax breakdown: for an individual
+  resident holding an asset >12 months, only 50% of the capital gain is
+  added to taxable income before applying the marginal rate - so the real
+  effective tax on an ETF's growth is roughly `effectiveTaxRate * 0.5`, not
+  the full `effectiveTaxRate`. Checked the current formula
+  (`offsetSimulation.js:166`: `expectedEtfReturn * (1 - effectiveTaxRate /
+  100)`, compounded monthly at line 293) - it taxes ETF growth at the FULL
+  rate, continuously, every month. That overstates the tax drag twice over:
+  (1) ignores the 50% discount entirely, (2) implicitly taxes gains as they
+  accrue rather than only at an eventual sale (capital gains tax only
+  triggers on a realization event - unlike PAYG income, growth can compound
+  tax-deferred for years before that happens, which the user separately
+  flagged as a meaningful long-term-investing advantage.
+  **Scoped fix, matching the user's own preference to avoid adding
+  complexity**:
+  apply the 50% discount to the rate (`expectedEtfReturn * (1 -
+  (effectiveTaxRate * 0.5) / 100)`), assuming a >12-month holding
+  throughout - reasonable given ETF investing is already framed everywhere
+  else in this app (TODO-130, the original TODO-52 analysis) as a long-
+  term, hard-to-reverse commitment, not a trade. **Explicitly NOT
+  proposing** full realization-timing/deferral modeling (tracking cost
+  basis, unrealized vs. realized gains, only taxing at an actual "sale"
+  event) - the app has no sale concept at all, and building one would be
+  real complexity for a benefit (multi-year tax deferral) this simpler fix
+  doesn't capture but also doesn't need to model precisely to be
+  meaningfully more accurate than today's double-overstated drag. One-line
+  formula change, no new state.
+  Also worth one added sentence to the existing opportunity-cost tooltip
+  (`App.jsx:1454`, "capital gains/dividends are taxable...") naming the CGT
+  discount specifically - today's wording could lead a user to overestimate
+  the tax drag when doing their own breakeven math.
+  **Separately, confirmed no TODO needed for the rest of what the user
+  shared** (the after-tax breakeven-rate framework - 6% offset needing
+  ~7.45% ETF pre-tax-adjusted to match, and their suggested tiers 6%/7-8%/
+  8-10%/10-12%+/15%+ - plus historical market-return benchmarks: S&P 500
+  ~9-11%, ASX 300 ~9-10%+franking credits, VDHG ~9.38%/10yr). User's own
+  conclusion, which is correct: this is the user's own research to plug
+  into "Expected ETF Return," not something the calculator should auto-
+  compute or hardcode - matches how the app already treats every other
+  growth-rate assumption (property growth, salary growth, etc.), none of
+  which are auto-derived from market data either.
+
+- [ ] **TODO-132: Clarify that "Expected ETF Return" means TOTAL return (price growth + dividends/distributions reinvested), not just price growth**
+  Gap surfaced while reviewing the user's market-benchmark breakdown (US
+  S&P 500 ~9-11% total, mostly price growth; AU ASX 300 ~9-10% total, but
+  ~4-5% of that is dividends - a much bigger share than the US case).
+  Checked the current slider (`App.jsx:1488-1501`): its tooltip says "A
+  diversified ETF has historically returned roughly this much per year over
+  the long term" - doesn't say whether that figure should include
+  dividends/distributions. A user comparing an AU ETF's advertised dividend
+  yield (a few %) against this field without realizing the number should be
+  TOTAL return would badly understate their own scenario. One-sentence
+  tooltip addition ("include dividends/distributions reinvested, not just
+  price growth"), same low-cost shape as TODO-121/123/125/131's tooltip
+  notes - no calculation change.
 
 ---
 
