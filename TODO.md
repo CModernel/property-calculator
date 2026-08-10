@@ -3731,21 +3731,45 @@ optionally reuse in the commit message when you implement it.
   Every failing test, including this new file's, passes cleanly 100% of
   the time when run in isolation or as part of a lighter run - confirmed
   this is CPU contention on this machine right now, not a logic bug.
+
+- [x] **TODO-114: Fix tooltip/badge touch fallback on mobile**
+  Every `InfoTooltip` (~12+ instances) and `LvrBadge` relied exclusively on
+  CSS `:hover`/`:focus-within` to reveal their popover - plain `<button>`
+  elements don't reliably receive focus on tap in iOS Safari (only real
+  form controls like `<input>`/`<select>` do), so a meaningful fraction of
+  the app's explanatory tooltips (and the LVR risk badge) may have been
+  unopenable on a phone. Desktop hover/keyboard-focus needed to stay
+  exactly as-is - this only had to add the missing tap path.
+  New shared hook `src/hooks/useTooltipToggle.js` (`useState` + `useRef` +
+  a `document` click listener that closes the popover when the click
+  target is outside the ref'd wrapper) - both components were already
+  structurally identical (`InfoTooltip.jsx`'s own header comment: "Generic
+  version of LvrBadge's hover/focus tooltip pattern"), so this is a real,
+  current duplication need rather than a speculative one. Both components
+  got the same mechanical change: `ref` on the outer `<span>`, `onClick=
+  {toggle}` + `cursor-pointer` (was `cursor-default`) on the trigger
+  `<button>`, and the tooltip `<div>`'s hardcoded `invisible opacity-0`
+  became `` `${isOpen ? 'visible opacity-100' : 'invisible opacity-0'}` ``
+  - the existing `group-hover:`/`group-focus-within:` classes are
+  untouched and continue to independently override this on hover/focus,
+  exactly as before. No prop/API change to either component, so none of
+  the ~12+ call sites in `App.jsx` needed any changes.
+  New tests: `useTooltipToggle.test.js` (starts closed, toggle flips
+  open/closed, exposes a ref), `InfoTooltip.test.jsx` (new file - it had no
+  test before since it had no logic worth testing; now it does: renders,
+  opens on click, closes on outside click, re-closes on a second click of
+  the trigger itself without the outside-click handler fighting it), and
+  one new case added to the existing `LvrBadge.test.jsx` (same open/close-
+  on-outside-click behavior).
+  `npm test -- --run` (496/496), `npm run lint`, `npm run build` clean.
+  Verified in the browser: clicking the LVR badge and a regular
+  `InfoTooltip` (e.g. "Realistic Mode"'s) both open the popover on tap and
+  close when clicking elsewhere on the page; hover still works
+  independently on desktop.
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
 
-
-- [ ] **TODO-114: Fix tooltip/badge touch fallback on mobile**
-  Every `InfoTooltip` (~12+ instances) and `LvrBadge` popover relies
-  exclusively on CSS `:hover`/`:focus-within` (`InfoTooltip.jsx:9,12`,
-  `LvrBadge.jsx:12,18`) with no click/touch-toggle fallback and no
-  `@media (hover: hover)` guard anywhere - confirmed via grep, zero
-  touch-specific handling exists in the codebase. Tapping the `?`/badge
-  button on a touch device (especially iOS Safari) may not reliably trigger
-  `:focus-within`, making a meaningful fraction of the app's explanatory
-  tooltips hard or impossible to open on a phone. Needs a click/tap-toggle
-  path alongside (or instead of) the hover-only behavior.
 
 - [ ] **TODO-115: Reorganize "Your Personal Expenses" - pull Offset Contributions out**
   The "Your Personal Expenses" card (`App.jsx:2232`) contains an "Offset
@@ -3772,6 +3796,43 @@ optionally reuse in the commit message when you implement it.
   `App.jsx` change TODO-62's own analysis flagged as carrying real
   regression risk (this file gets touched by nearly every TODO) - worth
   extra care/testing when picked up.
+
+- [ ] **TODO-117: Reduce flaky "Test timed out in 5000ms" failures on the full test suite**
+  Found while finishing TODO-113: running the full 488-test suite is
+  intermittently flaky under system load - random `App.*.test.jsx` files
+  (never the calculation-layer unit tests, never the same files twice) hit
+  Vitest's default 5000ms test timeout. Confirmed this is CPU contention
+  (system load average was 37-64 from unrelated running apps at the time),
+  not a logic bug - every affected test passes 100% of the time run in
+  isolation. Still, a jsdom-rendered React integration test doing several
+  `userEvent` interactions is inherently heavier than the default timeout
+  assumes, so this will keep recurring on a loaded machine (or CI) even
+  though no test is actually broken. Consider raising `testTimeout` in
+  `vite.config.js`'s `test: {}` block (currently unset, so it's Vitest's
+  5000ms default) specifically for jsdom-environment files, or globally if
+  that's simpler - just enough headroom that a busy machine doesn't produce
+  false failures.
+
+- [ ] **TODO-118: Checkboxes with a nested InfoTooltip have a bloated accessible name**
+  Found while writing TODO-113's tests: "Realistic Mode" (`App.jsx:1157-1169`),
+  "Invest in ETFs" (`App.jsx:1459-1472`), "Compare Offset vs ETF Investing"
+  (`App.jsx:1439-1452`), and "Model credit card usage" (`App.jsx:1351-1364`)
+  all nest their `InfoTooltip` INSIDE the `<label>` - so a screen reader's
+  computed accessible name for the checkbox is not just "Realistic Mode" but
+  "Realistic Mode" + the entire hidden tooltip explanation paragraph(s),
+  since the tooltip's `role="tooltip"` content is still in the DOM (just
+  visually hidden). "First Home Buyer" (`App.jsx:1046-1052`) already gets
+  this right - its own code comment explains why: `InfoTooltip` sits as a
+  sibling AFTER `</label>` specifically to keep it out of the computed name.
+  Apply that same pattern to the 4 checkboxes above.
+
+- [ ] **TODO-119: Remove the unused `import React` from App.jsx**
+  `import React, { useState, lazy, Suspense } from 'react';` (`App.jsx:1`) -
+  confirmed via grep, zero `React.` usage anywhere in the file (modern
+  Vite/React JSX runtime doesn't need it in scope). Currently silent because
+  eslint's `no-unused-vars` rule exempts capitalized names
+  (`varsIgnorePattern: '^[A-Z_]'`, `eslint.config.js:26`) - not a bug, just
+  dead weight. One-line removal.
 
 
 ---

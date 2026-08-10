@@ -1,15 +1,20 @@
 import { classifyLvr, LVR_BANDS } from '../calculations/classifyLvr';
+import { useTooltipToggle } from '../hooks/useTooltipToggle';
 
-// Hover/focus handled entirely with Tailwind's `group`/`group-focus-within` -
-// no useState needed, and focus-within gives keyboard accessibility for free.
+// Hover/focus handled with Tailwind's `group`/`group-focus-within`, plus
+// (TODO-114) useTooltipToggle for a tap-to-open/tap-outside-to-close path on
+// touch devices, where neither :hover nor :focus-within reliably fires on a
+// <button> tap.
 const LvrBadge = ({ lvr }) => {
   const current = classifyLvr(lvr);
+  const { isOpen, toggle, ref } = useTooltipToggle();
 
   return (
-    <span className="relative inline-flex group align-middle ml-1">
+    <span ref={ref} className="relative inline-flex group align-middle ml-1">
       <button
         type="button"
-        className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] leading-none border cursor-default focus:outline-none focus:ring-2 focus:ring-gray-300 ${current.bgClass}`}
+        onClick={toggle}
+        className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] leading-none border cursor-pointer focus:outline-none focus:ring-2 focus:ring-gray-300 ${current.bgClass}`}
         aria-label={`LVR risk: ${current.summary} (${current.band})`}
       >
         {current.symbol}
@@ -17,7 +22,7 @@ const LvrBadge = ({ lvr }) => {
 
       <div
         role="tooltip"
-        className="invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 transition-opacity duration-150 absolute z-20 top-full left-1/2 -translate-x-1/2 mt-2 w-72 max-w-[90vw] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 shadow-lg text-xs"
+        className={`${isOpen ? 'visible opacity-100' : 'invisible opacity-0'} group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 transition-opacity duration-150 absolute z-20 top-full left-1/2 -translate-x-1/2 mt-2 w-72 max-w-[90vw] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 shadow-lg text-xs`}
       >
         <p className="text-gray-600 dark:text-gray-300 mb-2">
           The lower the LVR, the lower the risk and the greater the borrowing flexibility.

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import '../test/reactTestSetup';
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import LvrBadge from './LvrBadge';
 import { classifyLvr, LVR_BANDS } from '../calculations/classifyLvr';
 
@@ -24,5 +24,18 @@ describe('LvrBadge', () => {
       const row = screen.getByText(band.band).closest('tr');
       expect(row).not.toHaveClass('bg-gray-100');
     }
+  });
+
+  it('opens the tooltip when tapped and closes again when clicking outside (TODO-114 touch fallback)', () => {
+    render(<LvrBadge lvr={85} />);
+    const button = screen.getByRole('button', { name: /^LVR risk:/ });
+    const tooltip = screen.getByRole('tooltip');
+    expect(tooltip).toHaveClass('invisible');
+
+    fireEvent.click(button);
+    expect(tooltip).toHaveClass('visible');
+
+    fireEvent.click(document.body);
+    expect(tooltip).toHaveClass('invisible');
   });
 });
