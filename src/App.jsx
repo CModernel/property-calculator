@@ -1281,11 +1281,11 @@ const PropertyInvestmentCalculator = () => {
                 color="purple"
                 suffix="%"
               >
-                Only affects income sources checked "Gross (pre-tax)" below - converts them to net using this rate. Enter net figures for everything else and leave this at 0% (default, no-op).
+                Only affects income sources checked "Gross (pre-tax)" below - converts them to net using this rate. Enter net figures for everything else and leave this at 0% (default, no-op). Simplification: applied smoothly every month (PAYG-style), not as an annual tax return - typically well under 5% off for salary-only income, more with substantial Gross rental/investment income on top.
               </NumberSliderField>
               </>
               ) : (
-              <p className="text-xs text-gray-500 dark:text-gray-400">Off - every growth/inflation/tax assumption below is held at 0%. Turn this on to model property appreciation, salary/rent growth, vacancy, expense growth, inflation, and effective tax rate.</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Off - every growth/inflation/tax assumption below is held at 0%. This is an optimistic baseline, not an improved calculation: it's what the numbers below would look like if you paid no tax and nothing ever grew, which isn't realistic. Turn this on to model property appreciation, salary/rent growth, vacancy, expense growth, inflation, and effective tax rate - real-world costs that make results slower/more expensive, not a "worse" version of the same estimate.</p>
               )}
             </div>
           </div>
@@ -1462,6 +1462,7 @@ const PropertyInvestmentCalculator = () => {
                     checkbox's computed accessible name. */}
                 <InfoTooltip label="What is this comparing?">
                   <p>Your offset's "return" is exactly your mortgage rate - guaranteed and tax-free, since it's not income, the bank just stops charging you interest on that portion of the loan. Matching that with an ETF needs an even higher return before tax, since capital gains/dividends are taxable and returns aren't guaranteed.</p>
+                  <p className="mt-2">This calculator applies Australia's 50% capital gains discount (assuming a &gt;12 month holding) before taxing ETF growth at your Effective Tax Rate - still less favorable than the offset's fully tax-free return, but not taxed at the full rate either.</p>
                   <p className="mt-2">This is a simple side-by-side, not a recommendation - always consult a licensed financial adviser before making investment decisions.</p>
                 </InfoTooltip>
                 {!showOpportunityCost && (
@@ -1509,7 +1510,7 @@ const PropertyInvestmentCalculator = () => {
                   color="blue"
                   suffix="% p.a."
                 >
-                  A diversified ETF has historically returned roughly this much per year over the long term - but unlike the offset, it's not guaranteed and can fall in any given year.
+                  A diversified ETF has historically returned roughly this much per year over the long term - but unlike the offset, it's not guaranteed and can fall in any given year. This should be TOTAL return (price growth plus dividends/distributions reinvested), not just price growth alone.
                 </NumberSliderField>
               )}
 
@@ -2334,7 +2335,7 @@ const PropertyInvestmentCalculator = () => {
                           onChange={(e) => setNewIncomeIsGross(e.target.checked)}
                           className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-purple-600 dark:text-purple-400 focus:ring-purple-500"
                         />
-                        This is a gross (pre-tax) amount
+                        This is a gross (pre-tax) amount (otherwise assumed net/take-home)
                       </label>
                       {newIncomeIsGross && realisticEffectiveTaxRate > 0 && (
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -3109,6 +3110,11 @@ const PropertyInvestmentCalculator = () => {
           {(monthlyToOffset > 0 || totalScheduledOffset > 0) && (
             <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg p-5 shadow-lg text-white">
               <h3 className="font-bold mb-3 text-lg">⏱️ Loan Simulation</h3>
+              {!realisticModeEnabled && (
+                <p className="text-xs opacity-75 mb-3">
+                  Realistic Mode is off - these figures are an optimistic baseline (no tax, no growth), not the most likely real-world outcome.
+                </p>
+              )}
               <div className="space-y-3">
                 <div className="bg-white/60 dark:bg-black/20 backdrop-blur rounded-lg p-3">
                   <p className="text-sm opacity-90 mb-1">Time to pay off:</p>

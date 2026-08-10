@@ -1218,7 +1218,7 @@ describe('ETF investing (etfAllocationPct/expectedEtfReturn, TODO-96)', () => {
     expect(result.monthlyData.map(d => d.etf)).toEqual([200, 400]);
   });
 
-  it("grows the ETF balance at expectedEtfReturn net of effectiveTaxRate, compounding on the running balance before each month's deposit", () => {
+  it("grows the ETF balance at expectedEtfReturn net of HALF effectiveTaxRate (TODO-131: AU 50% CGT discount), compounding on the running balance before each month's deposit", () => {
     const result = calculateLoanWithOffset({
       contributions: [],
       personalExpenseItems: [],
@@ -1229,10 +1229,10 @@ describe('ETF investing (etfAllocationPct/expectedEtfReturn, TODO-96)', () => {
       offsetAllocationPct: 100, // the entire surplus would otherwise go to offset
       etfAllocationPct: 100, // ...all of which instead goes to ETF
       expectedEtfReturn: 24,
-      effectiveTaxRate: 50, // net rate: 24 * (1 - 0.5) = 12% p.a. -> exactly 1%/month
+      effectiveTaxRate: 50, // net rate: 24 * (1 - 0.5*0.5) = 18% p.a. -> exactly 1.5%/month
       maxMonths: 3,
     });
-    expect(result.monthlyData.map(d => d.etf)).toEqual([1000, 2010, 3030]);
+    expect(result.monthlyData.map(d => d.etf)).toEqual([1000, 2015, 3045]);
     expect(result.monthlyData.map(d => d.offset)).toEqual([0, 0, 0]);
   });
 
@@ -1292,9 +1292,9 @@ describe('ETF switch trigger (switchThresholdPct, TODO-98)', () => {
     const withDefault = calculateLoanWithOffset(shared);
     const withExplicitZero = calculateLoanWithOffset({ ...shared, switchThresholdPct: 0 });
     expect(withExplicitZero).toEqual(withDefault);
-    // Same numbers as the TODO-96 "grows the ETF balance" test - a 0%
+    // Same numbers as the TODO-96/131 "grows the ETF balance" test - a 0%
     // threshold triggers immediately, exactly like having no threshold at all.
-    expect(withDefault.monthlyData.map(d => d.etf)).toEqual([1000, 2010, 3030]);
+    expect(withDefault.monthlyData.map(d => d.etf)).toEqual([1000, 2015, 3045]);
   });
 
   it('holds the ETF share at 0 until offsetBalance crosses switchThresholdPct of the remaining balance, then switches on for good', () => {

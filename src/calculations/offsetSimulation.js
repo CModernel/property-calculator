@@ -161,9 +161,14 @@ export function calculateLoanWithOffset({
   let months = 0;
   const monthlyData = [];
   const savingsMonthlyRate = calculateMonthlyRate(savingsInterestRate);
-  // TODO-96: taxed by effectiveTaxRate before being applied - see the
-  // param comment above for why this isn't just expectedEtfReturn as-is.
-  const etfMonthlyRate = calculateMonthlyRate(expectedEtfReturn * (1 - effectiveTaxRate / 100));
+  // TODO-96/131: taxed before being applied - see the param comment above
+  // for why this isn't just expectedEtfReturn as-is. Uses HALF of
+  // effectiveTaxRate, not the full rate: AU capital gains held >12 months
+  // get the 50% CGT discount before the marginal rate applies, unlike
+  // ordinary (PAYG) income. ETF investing is already framed everywhere in
+  // this app as a long-term, hard-to-reverse commitment, so a >12-month
+  // holding is assumed throughout.
+  const etfMonthlyRate = calculateMonthlyRate(expectedEtfReturn * (1 - (effectiveTaxRate * 0.5) / 100));
 
   // The caller's monthlyToOffset already has the ORIGINAL (month-1)
   // monthlyPayment baked in (see App.jsx's baseMonthlySurplus) - a rate

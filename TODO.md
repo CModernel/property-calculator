@@ -3843,6 +3843,61 @@ optionally reuse in the commit message when you implement it.
   in its new position, no visual change.
   `npm test -- --run` (495/495), `npm run lint`, `npm run build` clean -
   pure JSX repositioning, no logic touched.
+
+- [x] **TODO-131: ETF growth's tax drag now uses the AU 50% CGT discount instead of the full effectiveTaxRate**
+  Changed `offsetSimulation.js:166` from `expectedEtfReturn * (1 -
+  effectiveTaxRate / 100)` to `expectedEtfReturn * (1 - (effectiveTaxRate *
+  0.5) / 100)`, assuming a >12-month holding throughout (ETF investing is
+  already framed everywhere in this app as a long-term commitment).
+  Explicitly did NOT add realization-timing/deferral modeling (tracking a
+  "sale" event) - out of scope, matches the user's own preference to avoid
+  added complexity. Added a sentence to the existing "Compare Offset vs ETF
+  Investing" tooltip (`App.jsx`) naming the CGT discount specifically, so
+  the wording doesn't lead a user to overestimate the tax drag when doing
+  their own breakeven math.
+  Updated the two `offsetSimulation.test.js` tests whose expected ETF
+  balances baked in the old full-rate formula (`effectiveTaxRate: 50,
+  expectedEtfReturn: 24` -> net rate is now 18% p.a./1.5%/month, not 12%/1%)
+  - `[1000, 2010, 3030]` became `[1000, 2015, 3045]` in both.
+  `npm test -- --run` (495/495), `npm run lint`, `npm run build` clean.
+  Verified the updated tooltip text in the browser.
+
+- [x] **TODO-132: Clarified that "Expected ETF Return" means TOTAL return (price growth + dividends/distributions reinvested)**
+  Added one sentence to the "Expected ETF Return" slider's helper text
+  (`App.jsx`): "This should be TOTAL return (price growth plus dividends/
+  distributions reinvested), not just price growth." No calculation
+  change. Verified in the browser.
+
+- [x] **TODO-121: Added a tooltip/note explaining Realistic Mode vs. Optimistic (off) mode**
+  Two additions, both only text/copy: (1) the existing "Realistic Mode off"
+  note (in the Realistic Mode card) now explains it's an optimistic
+  baseline ("what the numbers would look like if you paid no tax and
+  nothing ever grew"), not an improved calculation; (2) a new one-line note
+  at the top of the "⏱️ Loan Simulation" results card, shown only when
+  Realistic Mode is off, reiterating that "Time to pay off"/"Total interest
+  paid" are an optimistic baseline. Verified both in the browser.
+
+- [x] **TODO-123: Clarified that tax is modeled as smooth/PAYG-style withholding, not an annual lump sum**
+  Added a sentence to the Effective Tax Rate slider's helper text
+  (`App.jsx`, only ever shown while Realistic Mode is on): "Simplification:
+  applied smoothly every month (PAYG-style), not as an annual tax return -
+  typically well under 5% off for salary-only income, more with substantial
+  Gross rental/investment income on top." No simulation change - matches
+  the analysis's conclusion that this is a timing/float effect only (same
+  class as the existing Credit Card Timing Benefit), not worth a calendar/
+  financial-year concept in the core loop. Verified in the browser.
+
+- [x] **TODO-125: Clarified that income amounts are assumed NET (take-home) unless "Gross" is checked**
+  The shared "This is a gross (pre-tax) amount" checkbox label (used by all
+  3 income amount-field variants: generic Weekly Amount, House Rent, Room
+  Rent) now reads "This is a gross (pre-tax) amount (otherwise assumed
+  net/take-home)" - a one-line change, always visible regardless of the
+  checkbox's state, right where the user is already entering the amount.
+  Verified in the browser.
+
+  All 5 of the above (`npm test -- --run` 495/495, `npm run lint`, `npm run
+  build` clean, Spanish-text sweep clean): pure copy/tooltip additions plus
+  TODO-131's one-line formula change - no other calculation logic touched.
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -3859,18 +3914,6 @@ optionally reuse in the commit message when you implement it.
   `App.jsx` change TODO-62's own analysis flagged as carrying real
   regression risk (this file gets touched by nearly every TODO) - worth
   extra care/testing when picked up.
-
-- [ ] **TODO-121: Explain Realistic Mode vs. Optimistic (off) mode with a tooltip**
-  User's ask: add a simple tooltip/explanation clarifying WHY turning
-  Realistic Mode off produces a cheaper/faster result than turning it on -
-  not because the calculator changed its math for the better, but because
-  "off" is an optimistic baseline that ignores real-world costs (tax on
-  income, expense/rent growth, vacancy) that do apply in real life. Hypothetically,
-  if you paid no tax at all, the "off" numbers would be accurate - the point
-  of Realistic Mode is exactly that this isn't the real world. Needs
-  copy that makes this framing obvious at a glance (e.g. in the Realistic
-  Mode card's own tooltip, and/or a one-line note near "Total interest
-  paid"/"Time to pay off" when the mode is off).
 
 - [ ] **TODO-122: Reconsider whether Effective Tax Rate should be more realistic (ATO-style brackets)**
   User's ask: is the current tax calculation realistic - does it use actual
@@ -3930,58 +3973,6 @@ optionally reuse in the commit message when you implement it.
   average - these can differ meaningfully. Negative gearing (investment
   losses reducing OTHER taxable income) isn't modeled at all either.
 
-- [ ] **TODO-123: Clarify that tax is modeled as smooth/PAYG-style withholding, not an annual lump sum**
-  Follow-up from discussion: the app has no calendar/financial-year concept
-  at all (confirmed via grep - no purchase date, no "month 1 = which real
-  month" mapping anywhere), so `effectiveTaxRate` is applied as a smooth,
-  continuous monthly reduction rather than modeling a once-a-year tax bill/
-  refund. For Salary/Wages this is already a reasonable approximation of
-  real PAYG withholding. For rental/investment income (which in reality has
-  no automatic withholding - paid via quarterly PAYG instalments or a lump
-  sum at tax time), the current smooth model doesn't match real cash-flow
-  timing.
-  **Analyzed the actual magnitude before deciding whether to change
-  anything, per the user's explicit request**: the difference is a timing/
-  float effect only - the TOTAL tax paid over a year is identical either
-  way, what differs is whether that money sits in the offset for longer
-  before being extracted (lump-sum-at-EOFY) vs. leaving smoothly every month
-  (current model). This is the same class of effect as the existing Credit
-  Card Timing Benefit (`src/calculations/creditCardBenefit.js`,
-  `calculateOffsetTimingBenefit`) - which this codebase already deliberately
-  keeps as a small STATIC estimate rather than folding into the core
-  simulation loop, for the same reason. Given typical rental-income tax
-  amounts relative to total interest paid (hundreds of thousands of
-  dollars), this timing effect is expected to be small (low hundreds to low
-  thousands of dollars over a multi-year simulation) - not worth a calendar/
-  financial-year concept in the core loop.
-  **Resolution: no simulation changes** - add a one-line clarifying note
-  (tooltip or inline text) near Effective Tax Rate stating tax is modeled
-  as smooth/PAYG-style withholding for simplicity, not an annual lump sum,
-  and that this is a simplification for non-wage income specifically. Only
-  show this note while Realistic Mode is on (it's meaningless with the
-  mode off, since `effectiveTaxRate` is forced to 0 either way).
-  **Quantified per the user's follow-up ask ("how far off could this
-  actually be")**: worked through the math - delaying a rental-income tax
-  amount `T` by an average of ~6 months (smooth-monthly vs. lump-sum-at-
-  EOFY) before it leaves the offset changes total interest by roughly
-  `T x mortgage_rate x 0.5` per year of simulation. For a modest rental tax
-  amount (~$3k/yr) at a ~6% rate, that's ~$90/yr, or under 1% of a typical
-  $150k-$300k total-interest figure over a full loan term. It grows with
-  how much Gross-marked rental/investment income is in the scenario -
-  could reach low single digits (~2-5%) for a scenario with substantial
-  investment income, still small. Suggested tooltip copy along these
-  lines: "Simplification: modeled as smooth PAYG-style withholding, not an
-  annual lump sum - typically changes total interest by well under 5%,
-  more if a large share of your income is Gross rental/investment income."
-  **Separately, and likely a BIGGER source of imprecision than this timing
-  question** (flagging since it came up during this analysis, not
-  something to fold into this tooltip): `effectiveTaxRate` is one blended
-  rate applied to all Gross income alike, but doesn't distinguish the
-  MARGINAL rate that should really apply to rental/investment income
-  sitting on top of salary (see new TODO-127, low difficulty), and doesn't
-  model negative gearing - investment losses offsetting other taxable
-  income (see new TODO-129, a much bigger undertaking) - at all.
-
 - [ ] **TODO-124 (Analysis only, no code): Should "Invest in ETFs" divert from Savings instead of from the Offset's own share?**
   User's proposal: instead of `etfAllocationPct` diverting a % of the
   OFFSET's own share (current design, `offsetSimulation.js` - `etfShare =
@@ -4027,22 +4018,6 @@ optionally reuse in the commit message when you implement it.
   Separately, the user raised a bigger, distinct point worth its own item:
   see new TODO-126 (a master way to fully hide ETF investing from the UI,
   for users who only care about the property/offset side).
-
-- [ ] **TODO-125: Clarify that income amounts are assumed NET (take-home) unless "Gross" is checked**
-  User's ask: income amounts are entered as net/take-home for simplicity,
-  but is this actually communicated anywhere near where the user enters
-  the number, or only inferable from the separate "This is a gross
-  (pre-tax) amount" checkbox's own label? Checked: confirmed there is NO
-  tooltip/hint on "Weekly Amount ($)" (`App.jsx`, generic income), "Weekly
-  Rent"/"Weekly Rent per Person" (rental categories) - the only clue is the
-  adjacent checkbox's wording, and the actual explicit instruction ("Enter
-  net figures for everything else") lives on the Effective Tax Rate slider
-  in a DIFFERENT card (Realistic Mode), which a user filling out the
-  Income form has no particular reason to have read first. Real,
-  reasonably likely source of confusion. Fix: add a short inline hint or
-  `InfoTooltip` near the amount field (or the "Gross" checkbox, since all 3
-  amount-field variants share one checkbox) stating plainly that the
-  amount is assumed net/take-home unless the box below is checked.
 
 - [ ] **TODO-126: A master toggle to fully hide ETF investing from the UI**
   User's point: ETF investing is arguably out of scope for a property
@@ -4221,63 +4196,6 @@ optionally reuse in the commit message when you implement it.
   Meaningful enough surface area (deletes a shipped feature, not just UI
   cleanup) to warrant its own Plan Mode session if/when the user decides to
   proceed - not implemented here.
-
-- [ ] **TODO-131: ETF growth's tax drag should use the AU 50% CGT discount, not the full effectiveTaxRate**
-  User supplied a detailed AU capital-gains-tax breakdown: for an individual
-  resident holding an asset >12 months, only 50% of the capital gain is
-  added to taxable income before applying the marginal rate - so the real
-  effective tax on an ETF's growth is roughly `effectiveTaxRate * 0.5`, not
-  the full `effectiveTaxRate`. Checked the current formula
-  (`offsetSimulation.js:166`: `expectedEtfReturn * (1 - effectiveTaxRate /
-  100)`, compounded monthly at line 293) - it taxes ETF growth at the FULL
-  rate, continuously, every month. That overstates the tax drag twice over:
-  (1) ignores the 50% discount entirely, (2) implicitly taxes gains as they
-  accrue rather than only at an eventual sale (capital gains tax only
-  triggers on a realization event - unlike PAYG income, growth can compound
-  tax-deferred for years before that happens, which the user separately
-  flagged as a meaningful long-term-investing advantage.
-  **Scoped fix, matching the user's own preference to avoid adding
-  complexity**:
-  apply the 50% discount to the rate (`expectedEtfReturn * (1 -
-  (effectiveTaxRate * 0.5) / 100)`), assuming a >12-month holding
-  throughout - reasonable given ETF investing is already framed everywhere
-  else in this app (TODO-130, the original TODO-52 analysis) as a long-
-  term, hard-to-reverse commitment, not a trade. **Explicitly NOT
-  proposing** full realization-timing/deferral modeling (tracking cost
-  basis, unrealized vs. realized gains, only taxing at an actual "sale"
-  event) - the app has no sale concept at all, and building one would be
-  real complexity for a benefit (multi-year tax deferral) this simpler fix
-  doesn't capture but also doesn't need to model precisely to be
-  meaningfully more accurate than today's double-overstated drag. One-line
-  formula change, no new state.
-  Also worth one added sentence to the existing opportunity-cost tooltip
-  (`App.jsx:1454`, "capital gains/dividends are taxable...") naming the CGT
-  discount specifically - today's wording could lead a user to overestimate
-  the tax drag when doing their own breakeven math.
-  **Separately, confirmed no TODO needed for the rest of what the user
-  shared** (the after-tax breakeven-rate framework - 6% offset needing
-  ~7.45% ETF pre-tax-adjusted to match, and their suggested tiers 6%/7-8%/
-  8-10%/10-12%+/15%+ - plus historical market-return benchmarks: S&P 500
-  ~9-11%, ASX 300 ~9-10%+franking credits, VDHG ~9.38%/10yr). User's own
-  conclusion, which is correct: this is the user's own research to plug
-  into "Expected ETF Return," not something the calculator should auto-
-  compute or hardcode - matches how the app already treats every other
-  growth-rate assumption (property growth, salary growth, etc.), none of
-  which are auto-derived from market data either.
-
-- [ ] **TODO-132: Clarify that "Expected ETF Return" means TOTAL return (price growth + dividends/distributions reinvested), not just price growth**
-  Gap surfaced while reviewing the user's market-benchmark breakdown (US
-  S&P 500 ~9-11% total, mostly price growth; AU ASX 300 ~9-10% total, but
-  ~4-5% of that is dividends - a much bigger share than the US case).
-  Checked the current slider (`App.jsx:1488-1501`): its tooltip says "A
-  diversified ETF has historically returned roughly this much per year over
-  the long term" - doesn't say whether that figure should include
-  dividends/distributions. A user comparing an AU ETF's advertised dividend
-  yield (a few %) against this field without realizing the number should be
-  TOTAL return would badly understate their own scenario. One-sentence
-  tooltip addition ("include dividends/distributions reinvested, not just
-  price growth"), same low-cost shape as TODO-121/123/125/131's tooltip
-  notes - no calculation change.
 
 ---
 
