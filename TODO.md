@@ -3766,25 +3766,56 @@ optionally reuse in the commit message when you implement it.
   `InfoTooltip` (e.g. "Realistic Mode"'s) both open the popover on tap and
   close when clicking elsewhere on the page; hover still works
   independently on desktop.
+
+- [x] **TODO-115: Reorganize "Your Personal Expenses" - pull Offset Contributions out**
+  "Your Personal Expenses" contained, once expanded, two unrelated things
+  back to back: an unstyled "💰 Offset Contributions Schedule" section (a
+  mortgage-offset feature - confirmed via exploration that
+  `offsetContributions` is only ever read by `calculateLoanWithOffset` calls
+  and the separate "TO OFFSET" results card, never by anything Personal-
+  Expenses-related) followed by a second, separately-card-styled "Personal
+  Expenses" sub-section duplicating the outer card's own heading text at the
+  wrong heading level (`<h2>` nested inside another `<h2>`-headed card).
+  Resolved via AskUserQuestion: Offset Contributions got **its own new
+  top-level card** (icon: `PiggyBank`), positioned right after Financial
+  Position - same reasoning as TODO-109's Realistic Mode card (substantial
+  enough - add-form + list + interest-saved summary - to deserve its own
+  space). New state `showOffsetContributions`, same collapsed-by-default
+  "breakdown (subtotal: $X)" toggle convention already used by Income/
+  Property Expenses/Personal Expenses; added to `handleSaveScenario`.
+  "Your Personal Expenses" simplified to match the "Income" card's own
+  template exactly (h2 + breakdown toggle + a plain `<h3>` sub-heading row
+  with its own "+Add" button, no nested card chrome) - removed the redundant
+  wrapper div and demoted the inner `<h2>` (dropping its `TrendingDown`
+  icon, now unused and removed from the lucide import) to a plain
+  `<h3>Personal Expenses</h3>`, keeping the exact same text so every
+  existing `getByText('Personal Expenses')` test query kept matching
+  unchanged.
+  Test updates: `App.collapsiblePanels.test.jsx`'s `TOGGLE_CASES` "Personal
+  expenses breakdown" row now checks for the simplified `<h3>` instead of
+  the (now relocated) Offset Contributions heading, plus a new row for
+  "Offset contributions breakdown"; the obsolete `describe('showPersonalExpenses
+  gates both sub-sections at once')` block was deleted outright (the
+  invariant it tested is exactly what changed). `App.expensesAndContributions.test.jsx`
+  got a new `openOffsetContributions(user)` helper, swapped in for the 6
+  call sites that used to open Offset Contributions via the (now-unrelated)
+  "Personal expenses breakdown" toggle.
+  `npm test -- --run` (495/495), `npm run lint`, `npm run build` clean - pure
+  JSX relocation, no calculation logic touched.
+  Verified in the browser: the new "Offset Contributions" card appears right
+  after Financial Position, collapsed by default with the correct $0
+  subtotal; expanding it shows the add-form/list/summary exactly as before.
+  "Your Personal Expenses" now shows a single clean "Personal Expenses"
+  sub-heading with no more nested card-within-a-card look.
+  **Flagged but deliberately out of scope**: the analogous "Total Summary"
+  `<h2>` nested inside "Property Balance"'s own `<h2>` is the same class of
+  issue, but a different, unrelated card - queued separately as TODO-120
+  rather than silently bundled into this task.
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
 
 
-- [ ] **TODO-115: Reorganize "Your Personal Expenses" - pull Offset Contributions out**
-  The "Your Personal Expenses" card (`App.jsx:2232`) contains an "Offset
-  Contributions Schedule" sub-section (`App.jsx:2251`) - a mortgage-offset
-  feature, conceptually unrelated to personal expenses - sandwiched before a
-  second, separately-styled sub-card literally titled "Personal Expenses"
-  again (`App.jsx:2401`), nested inside the outer card of the same name.
-  Confusing information architecture - a user looking for "where do I add
-  an offset contribution" has to look inside "Personal Expenses." Needs a
-  redesign: likely split Offset Contributions into its own top-level card
-  (or relocate it next to Financial Position, where the offset itself
-  lives), and resolve the duplicate "Personal Expenses" naming/nesting.
-  Also touches a related a11y smell: the nested `<h2>`s at `App.jsx:2401`
-  and `2807` ("Total Summary" inside "Property Balance") should probably be
-  `<h3>`s once resolved, to keep a clean document outline.
 
 - [ ] **TODO-116: Extract the 3x-duplicated "add item" recurrence-picker form**
   The One-Time checkbox -> Start-Month slider -> Monthly/Quarterly/Yearly
@@ -3833,6 +3864,15 @@ optionally reuse in the commit message when you implement it.
   eslint's `no-unused-vars` rule exempts capitalized names
   (`varsIgnorePattern: '^[A-Z_]'`, `eslint.config.js:26`) - not a bug, just
   dead weight. One-line removal.
+
+- [ ] **TODO-120: "Total Summary" `<h2>` nested inside "Property Balance"'s own `<h2>`**
+  Found during TODO-115 (same class of issue as the "Personal Expenses"
+  heading nesting fixed there, but a different, unrelated card, so kept
+  separate rather than silently bundled in). `App.jsx`'s "🏠 Property
+  Balance" results card has its own top-level `<h2>`; nested inside it, the
+  "💵 Total Summary" sub-section is ALSO an `<h2>` rather than an `<h3>` -
+  breaks a clean document outline for assistive tech, same fix shape as
+  TODO-115 (demote to `<h3>`, no visual/text change needed).
 
 
 ---

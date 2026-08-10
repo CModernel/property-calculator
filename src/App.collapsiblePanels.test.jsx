@@ -8,7 +8,8 @@ import App from './App';
 // Each case: [button name regex, a stable text/label that only appears once expanded]
 const TOGGLE_CASES = [
   ['Income breakdown', () => screen.getByText('💵 Income Sources')],
-  ['Personal expenses breakdown', () => screen.getByText('💰 Offset Contributions Schedule')],
+  ['Personal expenses breakdown', () => screen.getByText('Personal Expenses')],
+  ['Offset contributions breakdown', () => screen.getByText('💰 Offset Contributions Schedule')],
   ['Property expenses breakdown', () => screen.getByLabelText('Utilities (monthly)')],
   ['Closing costs breakdown', () => screen.getByLabelText('Conveyancing')],
 ];
@@ -71,7 +72,7 @@ describe('"Add" form toggles', () => {
   it('Offset Contributions: "+ Add" reveals the Amount field', async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.click(screen.getByRole('button', { name: /Personal expenses breakdown/ }));
+    await user.click(screen.getByRole('button', { name: /Offset contributions breakdown/ }));
     const contributionsSection = screen.getByText('💰 Offset Contributions Schedule').parentElement;
 
     await user.click(within(contributionsSection).getByRole('button', { name: '+ Add' }));
@@ -86,28 +87,5 @@ describe('"Add" form toggles', () => {
 
     await user.click(within(section).getByRole('button', { name: '+ Add' }));
     expect(screen.getByDisplayValue('Groceries')).toBeInTheDocument();
-  });
-});
-
-describe('showPersonalExpenses gates both sub-sections at once', () => {
-  it('collapsed hides Offset Contributions/Personal Expenses simultaneously; expanding reveals both', () => {
-    render(<App />);
-    for (const heading of ['💰 Offset Contributions Schedule', 'Personal Expenses']) {
-      expect(screen.queryByText(heading)).not.toBeInTheDocument();
-    }
-    expect(screen.queryByText('Groceries')).not.toBeInTheDocument();
-  });
-
-  it('expanding reveals both sub-sections together', async () => {
-    const user = userEvent.setup();
-    render(<App />);
-    await user.click(screen.getByRole('button', { name: /Personal expenses breakdown/ }));
-
-    for (const heading of ['💰 Offset Contributions Schedule', 'Personal Expenses']) {
-      expect(screen.getByText(heading)).toBeInTheDocument();
-    }
-    // Groceries is a seeded personalExpenseItems list entry now (TODO-66),
-    // not a fixed labeled field.
-    expect(screen.getByText('Groceries')).toBeInTheDocument();
   });
 });

@@ -1,5 +1,5 @@
 import React, { useState, lazy, Suspense } from 'react';
-import { DollarSign, Home, TrendingDown, Calendar, ShoppingCart, Car, RotateCcw, Wallet, Sun, Moon, Sprout } from 'lucide-react';
+import { DollarSign, Home, Calendar, ShoppingCart, Car, RotateCcw, Wallet, Sun, Moon, Sprout, PiggyBank } from 'lucide-react';
 import { formatMonthsDetailed, formatCompactMoney } from './calculations/formatting';
 import NumberSliderField from './components/NumberSliderField';
 import LvrBadge from './components/LvrBadge';
@@ -352,6 +352,11 @@ const PropertyInvestmentCalculator = () => {
   // recur (e.g. "$500 every quarter") instead of only ever being a single
   // lump sum.
   const [offsetContributions, setOffsetContributions] = useState(config.offsetContributions ?? []);
+  // TODO-115: Offset Contributions moved into its own top-level card,
+  // separate from showPersonalExpenses - it's a mortgage-offset feature,
+  // not a personal expense, and never had a real reason to share a toggle
+  // with one.
+  const [showOffsetContributions, setShowOffsetContributions] = useState(config.showOffsetContributions ?? false);
   const [showAddContribution, setShowAddContribution] = useState(false);
   // Contributions default to one-time (unlike Income/Expenses, which default
   // to recurring) - preserves the pre-TODO-32 behavior where every
@@ -772,7 +777,7 @@ const PropertyInvestmentCalculator = () => {
       personalExpenseItems,
       showPropertyExpenses, showMonthlyExpensesBreakdown, showClosingCostsBreakdown,
       showIncome, showFinancialPositionAdvanced,
-      showPersonalExpenses, showPersonalExpensesBreakdown, showProgressCharts, showHealthCheck,
+      showPersonalExpenses, showPersonalExpensesBreakdown, showOffsetContributions, showProgressCharts, showHealthCheck,
       savedAt,
     };
     if (saveScenario(scenario)) {
@@ -1715,6 +1720,177 @@ const PropertyInvestmentCalculator = () => {
             </div>
           </div>
 
+          {/* Offset Contributions - TODO-115: split out of "Your Personal
+              Expenses" into its own card. offsetContributions is a
+              mortgage-offset feature (read by calculateLoanWithOffset and
+              the "TO OFFSET" results card), not a personal expense - it
+              never had a real reason to share that card's toggle. */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-5">
+            <h2 className="text-xl font-bold text-gray-700 dark:text-gray-200 mb-4 flex items-center gap-2">
+              <PiggyBank size={24} className="text-cyan-600 dark:text-cyan-400" />
+              Offset Contributions
+            </h2>
+
+            <button
+              type="button"
+              onClick={() => setShowOffsetContributions(!showOffsetContributions)}
+              aria-expanded={showOffsetContributions}
+              className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+            >
+              {showOffsetContributions ? '▾' : '▸'} Offset contributions breakdown (subtotal: ${totalScheduledOffset.toLocaleString()})
+            </button>
+
+            {showOffsetContributions && (
+            <div className="space-y-4 mt-4">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-md font-bold text-gray-700 dark:text-gray-200">💰 Offset Contributions Schedule</h3>
+                  <button
+                    onClick={() => setShowAddContribution(!showAddContribution)}
+                    aria-expanded={showAddContribution}
+                    className="px-3 py-1 bg-cyan-500 text-white rounded-lg text-sm hover:bg-cyan-600 transition-colors"
+                  >
+                    {showAddContribution ? '✕ Cancel' : '+ Add'}
+                  </button>
+                </div>
+
+                {/* Add contribution form */}
+                {showAddContribution && (
+                  <div className="mb-3 p-3 bg-cyan-50 dark:bg-cyan-950 rounded-lg border border-cyan-200 dark:border-cyan-800 space-y-3">
+                    <NumberSliderField
+                      label="Amount ($)"
+                      value={newContribAmount}
+                      onChange={setNewContribAmount}
+                      min={0}
+                      max={500000}
+                      prefix="$"
+                      hideSlider
+                    />
+
+                    <label className="flex items-center gap-2 text-xs font-medium text-gray-700 dark:text-gray-200">
+                      <input
+                        type="checkbox"
+                        checked={newContribOneTime}
+                        onChange={(e) => setNewContribOneTime(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-cyan-600 dark:text-cyan-400 focus:ring-cyan-500"
+                      />
+                      One-Time (occurs once, doesn't repeat)
+                    </label>
+
+                    <div>
+                      <label htmlFor="newContribStartMonthSlider" className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
+                        {newContribOneTime ? `Occurs at Month: ${newContribStartMonth}` : `Start Month: ${newContribStartMonth}`}
+                      </label>
+                      <input
+                        id="newContribStartMonthSlider"
+                        type="range" min="1" max={MAX_MONTH}
+                        value={newContribStartMonth}
+                        onChange={(e) => setNewContribStartMonth(Number(e.target.value))}
+                        className="w-full h-2 bg-cyan-200 dark:bg-cyan-900 rounded-lg appearance-none cursor-pointer"
+                      />
+                    </div>
+
+                    {!newContribOneTime && (
+                      <div className="space-y-3">
+                        <div className="flex gap-2 text-xs">
+                          {['monthly', 'quarterly', 'yearly'].map((option) => (
+                            <button
+                              key={option}
+                              onClick={() => setNewContribRecurrence(option)}
+                              className={`flex-1 py-1 rounded border capitalize text-gray-800 dark:text-gray-100 ${newContribRecurrence === option ? 'bg-blue-200 dark:bg-blue-900 border-blue-400 dark:border-blue-700 font-bold' : 'bg-white dark:bg-gray-800'}`}
+                            >{option}</button>
+                          ))}
+                        </div>
+
+                        <div>
+                          <label htmlFor="newContribEndMonthSlider" className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
+                            End Month: {newContribEndMonth === MAX_MONTH ? 'Forever' : newContribEndMonth}
+                          </label>
+                          <input
+                            id="newContribEndMonthSlider"
+                            type="range" min={newContribStartMonth} max={MAX_MONTH}
+                            value={newContribEndMonth}
+                            onChange={(e) => setNewContribEndMonth(Number(e.target.value))}
+                            className="w-full h-2 bg-blue-200 dark:bg-blue-900 rounded-lg appearance-none cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={addOffsetContribution}
+                      className="w-full py-3 bg-cyan-600 text-white rounded-lg font-medium hover:bg-cyan-700 transition-colors"
+                    >
+                      Add Contribution
+                    </button>
+                  </div>
+                )}
+
+                {/* List of contributions */}
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {offsetContributions.map((contrib) => (
+                    <div
+                      key={contrib.id}
+                      className="flex items-center justify-between p-3 bg-gradient-to-r from-cyan-50 dark:from-cyan-950 to-blue-50 dark:to-blue-950 rounded-lg border border-cyan-200 dark:border-cyan-800"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">🔵</span>
+                          <div>
+                            <p className="font-semibold text-gray-800 dark:text-gray-100">
+                              {formatScheduleLabel(contrib)}
+                            </p>
+                            <p className="text-xs text-gray-600 dark:text-gray-300">
+                              {contrib.recurrence === 'none'
+                                ? formatMonthsDetailed(contrib.startMonth).human
+                                : `Starts in ${formatMonthsDetailed(contrib.startMonth).human}`}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="text-lg font-bold text-cyan-700 dark:text-cyan-400 mt-1 ml-7">
+                          ${contrib.amount.toLocaleString()}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => removeOffsetContribution(contrib.id)}
+                        className="ml-3 px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors text-sm"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Total scheduled */}
+                <div className="mt-3 p-3 bg-gradient-to-r from-indigo-50 dark:from-indigo-950 to-purple-50 dark:to-purple-950 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                  <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+                    📊 One-Time Contributions Total: <span className="text-indigo-700 dark:text-indigo-400 text-lg">${totalScheduledOffset.toLocaleString()}</span>
+                  </p>
+                  {recurringContributionsCount > 0 && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Plus {recurringContributionsCount} recurring contribution{recurringContributionsCount !== 1 ? 's' : ''} - applied
+                      automatically each month it's active, not counted in this total or in Cash Remaining below.
+                    </p>
+                  )}
+                  {totalScheduledOffset > 0 && (
+                    <div className="mt-1 space-y-1">
+                      {/* "% of loan balance" reads as nonsense with no loan, so drop the line entirely. */}
+                      {loanAmount > 0 && (
+                        <p className="text-xs text-gray-600 dark:text-gray-300">
+                          Reduces {safePercentage(totalScheduledOffset, loanAmount).toFixed(1)}% of loan balance
+                        </p>
+                      )}
+                      <p className="text-xs font-semibold text-green-700 dark:text-green-400">
+                        ~${Math.round(interestSaved).toLocaleString()} saved in interest
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            )}
+          </div>
+
           {/* Upfront Costs */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-5">
             <h2 className="text-xl font-bold text-gray-700 dark:text-gray-200 mb-4 flex items-center gap-2">
@@ -2259,26 +2435,60 @@ const PropertyInvestmentCalculator = () => {
 
             {showPersonalExpenses && (
             <div className="space-y-4 mt-4">
-              {/* OFFSET CONTRIBUTIONS SECTION */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-md font-bold text-gray-700 dark:text-gray-200">💰 Offset Contributions Schedule</h3>
-                  <button
-                    onClick={() => setShowAddContribution(!showAddContribution)}
-                    aria-expanded={showAddContribution}
-                    className="px-3 py-1 bg-cyan-500 text-white rounded-lg text-sm hover:bg-cyan-600 transition-colors"
-                  >
-                    {showAddContribution ? '✕ Cancel' : '+ Add'}
-                  </button>
-                </div>
+              {/* PERSONAL EXPENSES (TODO-66, merged with the former "Other
+                  Expenses" section in TODO-85) - an addable/removable list,
+                  same Schedule model as Income Sources.
+                  Groceries/Transport/Phone-Internet are just starter items here
+                  (seeded in config.default.json), not fixed fields - this
+                  section absorbs what used to be the separately-labeled
+                  "Exceptional Expenses" and "Other Expenses" cards. */}
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-md font-bold text-gray-700 dark:text-gray-200">Personal Expenses</h3>
+                <button
+                  onClick={() => setShowAddExceptExp(!showAddExceptExp)}
+                  aria-expanded={showAddExceptExp}
+                  className="px-3 py-1 bg-yellow-500 text-white rounded-lg text-sm hover:bg-yellow-600 transition-colors"
+                >
+                  {showAddExceptExp ? '✕ Cancel' : '+ Add'}
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2 mb-3">
+                Routine costs (Groceries, Transport, Bills), lifestyle
+                costs (Health, Subscriptions, Entertainment, Debt
+                Repayment) or one-off/exceptional costs (a wedding, car
+                repair) - pick a category below, or "Custom" for anything
+                else, and "One-Time" or a repeat interval for each.
+              </p>
 
-                {/* Add contribution form */}
-                {showAddContribution && (
-                  <div className="mb-3 p-3 bg-cyan-50 dark:bg-cyan-950 rounded-lg border border-cyan-200 dark:border-cyan-800 space-y-3">
+              {showAddExceptExp && (
+                <div className="mb-4 p-4 bg-yellow-50 dark:bg-yellow-950 rounded-lg border border-yellow-200 dark:border-yellow-800 text-sm">
+                  <div className="grid gap-3">
+                    <div>
+                      <label className="block font-medium text-gray-700 dark:text-gray-200 mb-1">Expense Name</label>
+                      <select
+                        value={newExpCategory}
+                        onChange={(e) => setNewExpCategory(e.target.value)}
+                        className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                      >
+                        {PERSONAL_EXPENSE_CATEGORIES.map((category) => (
+                          <option key={category}>{category}</option>
+                        ))}
+                      </select>
+                      {newExpCategory === 'Custom' && (
+                        <input
+                          type="text"
+                          value={newExpCustomName}
+                          onChange={(e) => setNewExpCustomName(e.target.value)}
+                          className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 mt-2"
+                          placeholder="e.g. Pet Expenses, Childcare, Gym"
+                        />
+                      )}
+                    </div>
+
                     <NumberSliderField
-                      label="Amount ($)"
-                      value={newContribAmount}
-                      onChange={setNewContribAmount}
+                      label="Monthly Amount ($)"
+                      value={newExpAmount}
+                      onChange={setNewExpAmount}
                       min={0}
                       max={500000}
                       prefix="$"
@@ -2288,264 +2498,78 @@ const PropertyInvestmentCalculator = () => {
                     <label className="flex items-center gap-2 text-xs font-medium text-gray-700 dark:text-gray-200">
                       <input
                         type="checkbox"
-                        checked={newContribOneTime}
-                        onChange={(e) => setNewContribOneTime(e.target.checked)}
-                        className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-cyan-600 dark:text-cyan-400 focus:ring-cyan-500"
+                        checked={newExpOneTime}
+                        onChange={(e) => setNewExpOneTime(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-yellow-600 dark:text-yellow-400 focus:ring-yellow-500"
                       />
                       One-Time (occurs once, doesn't repeat)
                     </label>
 
                     <div>
-                      <label htmlFor="newContribStartMonthSlider" className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
-                        {newContribOneTime ? `Occurs at Month: ${newContribStartMonth}` : `Start Month: ${newContribStartMonth}`}
+                      <label htmlFor="newExpStartMonthSlider" className="block font-medium text-gray-700 dark:text-gray-200 mb-1">
+                        {newExpOneTime ? `Occurs at Month: ${newExpStartMonth}` : `Start Month: ${newExpStartMonth}`}
                       </label>
                       <input
-                        id="newContribStartMonthSlider"
+                        id="newExpStartMonthSlider"
                         type="range" min="1" max={MAX_MONTH}
-                        value={newContribStartMonth}
-                        onChange={(e) => setNewContribStartMonth(Number(e.target.value))}
-                        className="w-full h-2 bg-cyan-200 dark:bg-cyan-900 rounded-lg appearance-none cursor-pointer"
+                        value={newExpStartMonth}
+                        onChange={(e) => setNewExpStartMonth(Number(e.target.value))}
+                        className="w-full h-2 bg-yellow-200 dark:bg-yellow-900 rounded-lg appearance-none cursor-pointer"
                       />
                     </div>
 
-                    {!newContribOneTime && (
+                    {!newExpOneTime && (
                       <div className="space-y-3">
                         <div className="flex gap-2 text-xs">
                           {['monthly', 'quarterly', 'yearly'].map((option) => (
                             <button
                               key={option}
-                              onClick={() => setNewContribRecurrence(option)}
-                              className={`flex-1 py-1 rounded border capitalize text-gray-800 dark:text-gray-100 ${newContribRecurrence === option ? 'bg-blue-200 dark:bg-blue-900 border-blue-400 dark:border-blue-700 font-bold' : 'bg-white dark:bg-gray-800'}`}
+                              onClick={() => setNewExpRecurrence(option)}
+                              className={`flex-1 py-1 rounded border capitalize text-gray-800 dark:text-gray-100 ${newExpRecurrence === option ? 'bg-orange-200 dark:bg-orange-900 border-orange-400 dark:border-orange-700 font-bold' : 'bg-white dark:bg-gray-800'}`}
                             >{option}</button>
                           ))}
                         </div>
 
                         <div>
-                          <label htmlFor="newContribEndMonthSlider" className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
-                            End Month: {newContribEndMonth === MAX_MONTH ? 'Forever' : newContribEndMonth}
+                          <label htmlFor="newExpEndMonthSlider" className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
+                            End Month: {newExpEndMonth === MAX_MONTH ? 'Forever' : newExpEndMonth}
                           </label>
                           <input
-                            id="newContribEndMonthSlider"
-                            type="range" min={newContribStartMonth} max={MAX_MONTH}
-                            value={newContribEndMonth}
-                            onChange={(e) => setNewContribEndMonth(Number(e.target.value))}
-                            className="w-full h-2 bg-blue-200 dark:bg-blue-900 rounded-lg appearance-none cursor-pointer"
+                            id="newExpEndMonthSlider"
+                            type="range" min={newExpStartMonth} max={MAX_MONTH}
+                            value={newExpEndMonth}
+                            onChange={(e) => setNewExpEndMonth(Number(e.target.value))}
+                            className="w-full h-2 bg-orange-200 dark:bg-orange-900 rounded-lg appearance-none cursor-pointer"
                           />
                         </div>
                       </div>
                     )}
 
                     <button
-                      onClick={addOffsetContribution}
-                      className="w-full py-3 bg-cyan-600 text-white rounded-lg font-medium hover:bg-cyan-700 transition-colors"
+                      onClick={addPersonalExpense}
+                      className="w-full py-2 bg-yellow-600 text-white rounded font-bold hover:bg-yellow-700"
                     >
-                      Add Contribution
+                      Add Expense
                     </button>
                   </div>
-                )}
-
-                {/* List of contributions */}
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {offsetContributions.map((contrib) => (
-                    <div
-                      key={contrib.id}
-                      className="flex items-center justify-between p-3 bg-gradient-to-r from-cyan-50 dark:from-cyan-950 to-blue-50 dark:to-blue-950 rounded-lg border border-cyan-200 dark:border-cyan-800"
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xl">🔵</span>
-                          <div>
-                            <p className="font-semibold text-gray-800 dark:text-gray-100">
-                              {formatScheduleLabel(contrib)}
-                            </p>
-                            <p className="text-xs text-gray-600 dark:text-gray-300">
-                              {contrib.recurrence === 'none'
-                                ? formatMonthsDetailed(contrib.startMonth).human
-                                : `Starts in ${formatMonthsDetailed(contrib.startMonth).human}`}
-                            </p>
-                          </div>
-                        </div>
-                        <p className="text-lg font-bold text-cyan-700 dark:text-cyan-400 mt-1 ml-7">
-                          ${contrib.amount.toLocaleString()}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => removeOffsetContribution(contrib.id)}
-                        className="ml-3 px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors text-sm"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
                 </div>
+              )}
 
-                {/* Total scheduled */}
-                <div className="mt-3 p-3 bg-gradient-to-r from-indigo-50 dark:from-indigo-950 to-purple-50 dark:to-purple-950 rounded-lg border border-indigo-200 dark:border-indigo-800">
-                  <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">
-                    📊 One-Time Contributions Total: <span className="text-indigo-700 dark:text-indigo-400 text-lg">${totalScheduledOffset.toLocaleString()}</span>
-                  </p>
-                  {recurringContributionsCount > 0 && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Plus {recurringContributionsCount} recurring contribution{recurringContributionsCount !== 1 ? 's' : ''} - applied
-                      automatically each month it's active, not counted in this total or in Cash Remaining below.
-                    </p>
-                  )}
-                  {totalScheduledOffset > 0 && (
-                    <div className="mt-1 space-y-1">
-                      {/* "% of loan balance" reads as nonsense with no loan, so drop the line entirely. */}
-                      {loanAmount > 0 && (
-                        <p className="text-xs text-gray-600 dark:text-gray-300">
-                          Reduces {safePercentage(totalScheduledOffset, loanAmount).toFixed(1)}% of loan balance
-                        </p>
-                      )}
-                      <p className="text-xs font-semibold text-green-700 dark:text-green-400">
-                        ~${Math.round(interestSaved).toLocaleString()} saved in interest
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {personalExpenseItems.length === 0 && !showAddExceptExp && (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 italic text-center">No personal expenses added.</p>
+                )}
+                {personalExpenseItems.map(exp => (
+                  <div key={exp.id} className="flex justify-between items-center p-2 bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded text-sm">
+                    <div>
+                      <p className="font-bold text-gray-800 dark:text-gray-100">{exp.name}</p>
+                      <p className="text-xs text-gray-600 dark:text-gray-300">
+                        ${exp.amount} • {formatScheduleLabel(exp)}
                       </p>
                     </div>
-                  )}
-                </div>
-              </div>
-
-              {/* PERSONAL EXPENSES (TODO-66, merged with the former "Other
-                  Expenses" section in TODO-85) - an addable/removable list,
-                  same Schedule model as Income Sources.
-                  Groceries/Transport/Phone-Internet are just starter items here
-                  (seeded in config.default.json), not fixed fields - this
-                  section absorbs what used to be the separately-labeled
-                  "Exceptional Expenses" and "Other Expenses" cards. */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-5 border-t-4 border-yellow-400 dark:border-yellow-700">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-bold text-gray-700 dark:text-gray-200 flex items-center gap-2">
-                    <TrendingDown size={24} className="text-yellow-600 dark:text-yellow-400" />
-                    Personal Expenses
-                  </h2>
-                  <button
-                    onClick={() => setShowAddExceptExp(!showAddExceptExp)}
-                    aria-expanded={showAddExceptExp}
-                    className="px-3 py-1 bg-yellow-500 text-white rounded-lg text-sm hover:bg-yellow-600 transition-colors"
-                  >
-                    {showAddExceptExp ? '✕ Cancel' : '+ Add'}
-                  </button>
-                </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2 mb-3">
-                  Routine costs (Groceries, Transport, Bills), lifestyle
-                  costs (Health, Subscriptions, Entertainment, Debt
-                  Repayment) or one-off/exceptional costs (a wedding, car
-                  repair) - pick a category below, or "Custom" for anything
-                  else, and "One-Time" or a repeat interval for each.
-                </p>
-
-                {showAddExceptExp && (
-                  <div className="mb-4 p-4 bg-yellow-50 dark:bg-yellow-950 rounded-lg border border-yellow-200 dark:border-yellow-800 text-sm">
-                    <div className="grid gap-3">
-                      <div>
-                        <label className="block font-medium text-gray-700 dark:text-gray-200 mb-1">Expense Name</label>
-                        <select
-                          value={newExpCategory}
-                          onChange={(e) => setNewExpCategory(e.target.value)}
-                          className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                        >
-                          {PERSONAL_EXPENSE_CATEGORIES.map((category) => (
-                            <option key={category}>{category}</option>
-                          ))}
-                        </select>
-                        {newExpCategory === 'Custom' && (
-                          <input
-                            type="text"
-                            value={newExpCustomName}
-                            onChange={(e) => setNewExpCustomName(e.target.value)}
-                            className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 mt-2"
-                            placeholder="e.g. Pet Expenses, Childcare, Gym"
-                          />
-                        )}
-                      </div>
-
-                      <NumberSliderField
-                        label="Monthly Amount ($)"
-                        value={newExpAmount}
-                        onChange={setNewExpAmount}
-                        min={0}
-                        max={500000}
-                        prefix="$"
-                        hideSlider
-                      />
-
-                      <label className="flex items-center gap-2 text-xs font-medium text-gray-700 dark:text-gray-200">
-                        <input
-                          type="checkbox"
-                          checked={newExpOneTime}
-                          onChange={(e) => setNewExpOneTime(e.target.checked)}
-                          className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-yellow-600 dark:text-yellow-400 focus:ring-yellow-500"
-                        />
-                        One-Time (occurs once, doesn't repeat)
-                      </label>
-
-                      <div>
-                        <label htmlFor="newExpStartMonthSlider" className="block font-medium text-gray-700 dark:text-gray-200 mb-1">
-                          {newExpOneTime ? `Occurs at Month: ${newExpStartMonth}` : `Start Month: ${newExpStartMonth}`}
-                        </label>
-                        <input
-                          id="newExpStartMonthSlider"
-                          type="range" min="1" max={MAX_MONTH}
-                          value={newExpStartMonth}
-                          onChange={(e) => setNewExpStartMonth(Number(e.target.value))}
-                          className="w-full h-2 bg-yellow-200 dark:bg-yellow-900 rounded-lg appearance-none cursor-pointer"
-                        />
-                      </div>
-
-                      {!newExpOneTime && (
-                        <div className="space-y-3">
-                          <div className="flex gap-2 text-xs">
-                            {['monthly', 'quarterly', 'yearly'].map((option) => (
-                              <button
-                                key={option}
-                                onClick={() => setNewExpRecurrence(option)}
-                                className={`flex-1 py-1 rounded border capitalize text-gray-800 dark:text-gray-100 ${newExpRecurrence === option ? 'bg-orange-200 dark:bg-orange-900 border-orange-400 dark:border-orange-700 font-bold' : 'bg-white dark:bg-gray-800'}`}
-                              >{option}</button>
-                            ))}
-                          </div>
-
-                          <div>
-                            <label htmlFor="newExpEndMonthSlider" className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
-                              End Month: {newExpEndMonth === MAX_MONTH ? 'Forever' : newExpEndMonth}
-                            </label>
-                            <input
-                              id="newExpEndMonthSlider"
-                              type="range" min={newExpStartMonth} max={MAX_MONTH}
-                              value={newExpEndMonth}
-                              onChange={(e) => setNewExpEndMonth(Number(e.target.value))}
-                              className="w-full h-2 bg-orange-200 dark:bg-orange-900 rounded-lg appearance-none cursor-pointer"
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      <button
-                        onClick={addPersonalExpense}
-                        className="w-full py-2 bg-yellow-600 text-white rounded font-bold hover:bg-yellow-700"
-                      >
-                        Add Expense
-                      </button>
-                    </div>
+                    <button onClick={() => removePersonalExpense(exp.id)} className="text-red-500 font-bold px-2">✕</button>
                   </div>
-                )}
-
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {personalExpenseItems.length === 0 && !showAddExceptExp && (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 italic text-center">No personal expenses added.</p>
-                  )}
-                  {personalExpenseItems.map(exp => (
-                    <div key={exp.id} className="flex justify-between items-center p-2 bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded text-sm">
-                      <div>
-                        <p className="font-bold text-gray-800 dark:text-gray-100">{exp.name}</p>
-                        <p className="text-xs text-gray-600 dark:text-gray-300">
-                          ${exp.amount} • {formatScheduleLabel(exp)}
-                        </p>
-                      </div>
-                      <button onClick={() => removePersonalExpense(exp.id)} className="text-red-500 font-bold px-2">✕</button>
-                    </div>
-                  ))}
-                </div>
+                ))}
               </div>
             </div>
             )}

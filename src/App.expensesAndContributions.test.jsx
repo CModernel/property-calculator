@@ -13,12 +13,16 @@ async function openPersonalExpenses(user) {
   await user.click(screen.getByRole('button', { name: /Personal expenses breakdown/ }));
 }
 
-// Each of the two "Add" panels (Offset Contributions/Personal Expenses -
-// the latter merged with the former "Other Expenses" section in TODO-85)
-// has its own heading immediately followed by a "+ Add" button sharing the
-// same flex container - scope through that heading rather than a bare
-// "+ Add" query, since both panels render simultaneously once Personal
-// Expenses is expanded.
+// TODO-115: Offset Contributions moved into its own card, with its own
+// independent toggle - no longer shares showPersonalExpenses.
+async function openOffsetContributions(user) {
+  await user.click(screen.getByRole('button', { name: /Offset contributions breakdown/ }));
+}
+
+// Each "Add" panel (Offset Contributions/Personal Expenses - the latter
+// merged with the former "Other Expenses" section in TODO-85) has its own
+// heading immediately followed by a "+ Add" button sharing the same flex
+// container - scope through that heading rather than a bare "+ Add" query.
 function sectionContainer(headingText) {
   return screen.getByText(headingText).parentElement;
 }
@@ -117,7 +121,7 @@ describe('Offset Contributions', () => {
   it('adding with the all-defaults form succeeds and updates the One-Time Contributions Total', async () => {
     const user = userEvent.setup();
     render(<App />);
-    await openPersonalExpenses(user);
+    await openOffsetContributions(user);
     await openAddForm(user, '💰 Offset Contributions Schedule');
     await user.click(screen.getByRole('button', { name: 'Add Contribution' }));
 
@@ -127,7 +131,7 @@ describe('Offset Contributions', () => {
   it('a second one-time contribution manually set to an already-used month triggers the duplicate-month alert', async () => {
     const user = userEvent.setup();
     render(<App />);
-    await openPersonalExpenses(user);
+    await openOffsetContributions(user);
     await openAddForm(user, '💰 Offset Contributions Schedule');
     await user.click(screen.getByRole('button', { name: 'Add Contribution' })); // month 1, one-time
 
@@ -144,7 +148,7 @@ describe('Offset Contributions', () => {
   it('two independent recurring contributions on the same month do not trigger the duplicate-month alert', async () => {
     const user = userEvent.setup();
     render(<App />);
-    await openPersonalExpenses(user);
+    await openOffsetContributions(user);
 
     for (let i = 0; i < 2; i++) {
       await openAddForm(user, '💰 Offset Contributions Schedule');
@@ -158,7 +162,7 @@ describe('Offset Contributions', () => {
   it('invalid amount silently does nothing (no alert, no row added)', async () => {
     const user = userEvent.setup();
     render(<App />);
-    await openPersonalExpenses(user);
+    await openOffsetContributions(user);
     await openAddForm(user, '💰 Offset Contributions Schedule');
 
     fireEvent.change(screen.getByLabelText('Amount ($)'), { target: { value: '0' } });
@@ -172,7 +176,7 @@ describe('Offset Contributions', () => {
   it('an inverted schedule range triggers the month-order alert', async () => {
     const user = userEvent.setup();
     render(<App />);
-    await openPersonalExpenses(user);
+    await openOffsetContributions(user);
     await openAddForm(user, '💰 Offset Contributions Schedule');
     await user.click(screen.getByLabelText("One-Time (occurs once, doesn't repeat)")); // uncheck -> reveals End Month
 
@@ -188,18 +192,18 @@ describe('Offset Contributions', () => {
   it('add/remove round-trip shows the "Plus N recurring contribution(s)" helper text', async () => {
     const user = userEvent.setup();
     render(<App />);
-    await openPersonalExpenses(user);
+    await openOffsetContributions(user);
     await openAddForm(user, '💰 Offset Contributions Schedule');
     await user.click(screen.getByLabelText("One-Time (occurs once, doesn't repeat)")); // uncheck -> recurring
     await user.click(screen.getByRole('button', { name: 'Add Contribution' }));
 
     expect(screen.getByText(/Plus 1 recurring contribution - applied/)).toBeInTheDocument();
 
-    // Personal Expenses now ships with 3 seeded items (Groceries/Transport/
-    // Phone-Internet, TODO-66), each with their own "✕" - scope to the
-    // whole Offset Contributions section (two levels up from its own
-    // heading: past the header row, to the section's outer container that
-    // also holds the contribution list) rather than a bare "✕" query.
+    // Offset Contributions now lives on its own card (TODO-115) - scope to
+    // its section (two levels up from its own heading: past the header row,
+    // to the section's outer container that also holds the contribution
+    // list) rather than a bare "✕" query, since removing a contribution
+    // shouldn't accidentally hit an unrelated "✕" elsewhere on the page.
     const offsetSection = screen.getByText('💰 Offset Contributions Schedule').parentElement.parentElement;
     await user.click(within(offsetSection).getByRole('button', { name: '✕' }));
     expect(screen.queryByText(/Plus 1 recurring contribution/)).not.toBeInTheDocument();
