@@ -14,7 +14,7 @@ describe('calculateLoanWithOffset', () => {
       monthlyRate: 0.005,
       monthlyPayment: 500,
     });
-    expect(result).toEqual({ years: 999, months: 360, totalInterest: 999999, totalSavingsInterest: 0, monthlyData: [] });
+    expect(result).toEqual({ years: 999, months: 360, totalInterest: 999999, totalSavingsInterest: 0, totalNegativeGearingBenefit: 0, monthlyData: [] });
   });
 
   it('always reports a numeric months, on the sentinel path too', () => {
@@ -1656,6 +1656,87 @@ describe('ETF losses (negative expectedEtfReturn)', () => {
     const naive = [1000, 2000, 3000];
     result.monthlyData.forEach((d, i) => expect(d.etf).toBeLessThanOrEqual(naive[i]));
     expect(result.monthlyData[2].etf).toBeLessThan(naive[2]);
+  });
+});
+
+describe('negative gearing tax benefit (isInvestmentProperty, TODO-129)', () => {
+  // Shared loss-making setup for several tests below: rental income
+  // ($433.33/mo) is well under property expenses ($1000/mo) + interest
+  // ($500/mo in month 1), so the property is cash-flow negative every month.
+  const lossMakingShared = {
+    contributions: [],
+    personalExpenseItems: [],
+    incomeSources: [{ id: 1, name: 'House Rent', amount: 100, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
+    expenseFields: {
+      strataFees: { base: 0, changes: [] },
+      utilities: { base: 1000, changes: [] },
+      councilRates: { base: 0, changes: [] },
+      insurance: { base: 0, changes: [] },
+      maintenance: { base: 0, changes: [] },
+      waterRates: { base: 0, changes: [] },
+      landTax: { base: 0, changes: [] },
+      propertyManagement: { base: 0, changes: [] },
+    },
+    monthlyToOffset: 0,
+    loanAmount: 100_000,
+    monthlyRate: 0.005,
+    monthlyPayment: 100,
+    effectiveTaxRate: 30,
+    maxMonths: 2,
+  };
+
+  it('matches the plain path exactly when isInvestmentProperty is false/omitted, even with a real loss', () => {
+    const withDefault = calculateLoanWithOffset(lossMakingShared);
+    const withExplicitFalse = calculateLoanWithOffset({ ...lossMakingShared, isInvestmentProperty: false });
+    expect(withExplicitFalse).toEqual(withDefault);
+    // Confirms this scenario really is loss-making (netMonthlyDeposit clamps
+    // to 0 every month, so offset never grows on its own) - isolating
+    // isInvestmentProperty as the only thing that could add to it.
+    expect(withDefault.monthlyData.map(d => d.offset)).toEqual([0, 0]);
+    expect(withDefault.totalNegativeGearingBenefit).toBe(0);
+  });
+
+  it('credits the tax benefit into offsetBalance starting the FOLLOWING month, not the loss month itself', () => {
+    const result = calculateLoanWithOffset({ ...lossMakingShared, isInvestmentProperty: true });
+    // Month 1: rentalIncome 433.33 - expenses 1000 - interest (100000*0.005=500)
+    // = -1066.67 loss -> benefit = 1066.67 * 0.30 = ~320, added to offsetBalance
+    // AFTER month 1's own effectiveOffset (0) was already fixed - so month 1's
+    // own `offset` field is untouched, only month 2 onward reflects it.
+    expect(result.monthlyData[0].offset).toBe(0);
+    expect(result.monthlyData[1].offset).toBeCloseTo(320, 0);
+    expect(result.totalNegativeGearingBenefit).toBeGreaterThan(0);
+  });
+
+  it('applies no benefit when the property is cash-flow POSITIVE that month', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [{ id: 1, name: 'House Rent', amount: 1000, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
+      expenseFields: {
+        strataFees: { base: 0, changes: [] },
+        utilities: { base: 100, changes: [] },
+        councilRates: { base: 0, changes: [] },
+        insurance: { base: 0, changes: [] },
+        maintenance: { base: 0, changes: [] },
+        waterRates: { base: 0, changes: [] },
+        landTax: { base: 0, changes: [] },
+        propertyManagement: { base: 0, changes: [] },
+      },
+      monthlyToOffset: 0,
+      loanAmount: 10_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      effectiveTaxRate: 30,
+      isInvestmentProperty: true,
+      maxMonths: 1,
+    });
+    expect(result.totalNegativeGearingBenefit).toBe(0);
+  });
+
+  it('yields exactly zero benefit when effectiveTaxRate is 0, even with a real loss', () => {
+    const result = calculateLoanWithOffset({ ...lossMakingShared, effectiveTaxRate: 0, isInvestmentProperty: true });
+    expect(result.totalNegativeGearingBenefit).toBe(0);
+    expect(result.monthlyData.map(d => d.offset)).toEqual([0, 0]);
   });
 });
 

@@ -582,6 +582,7 @@ const PropertyInvestmentCalculator = () => {
     vacancyWeeksPerYear: realisticVacancyWeeksPerYear,
     expenseGrowthRate: realisticExpenseGrowthRate,
     effectiveTaxRate: realisticEffectiveTaxRate,
+    isInvestmentProperty,
     etfAllocationPct: etfInvestingActive ? etfAllocationPct : 0,
     expectedEtfReturn,
     switchThresholdPct,
@@ -607,6 +608,7 @@ const PropertyInvestmentCalculator = () => {
     vacancyWeeksPerYear: realisticVacancyWeeksPerYear,
     expenseGrowthRate: realisticExpenseGrowthRate,
     effectiveTaxRate: realisticEffectiveTaxRate,
+    isInvestmentProperty,
     etfAllocationPct: etfInvestingActive ? etfAllocationPct : 0,
     expectedEtfReturn,
     switchThresholdPct,
@@ -1593,6 +1595,7 @@ const PropertyInvestmentCalculator = () => {
                   vacancyWeeksPerYear: realisticVacancyWeeksPerYear,
                   expenseGrowthRate: realisticExpenseGrowthRate,
                   effectiveTaxRate: realisticEffectiveTaxRate,
+                  isInvestmentProperty,
                   expectedEtfReturn,
                   maxMonths: totalMonths,
                 };

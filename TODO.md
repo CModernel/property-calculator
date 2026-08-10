@@ -3898,6 +3898,50 @@ optionally reuse in the commit message when you implement it.
   All 5 of the above (`npm test -- --run` 495/495, `npm run lint`, `npm run
   build` clean, Spanish-text sweep clean): pure copy/tooltip additions plus
   TODO-131's one-line formula change - no other calculation logic touched.
+
+- [x] **TODO-129: Modeled negative gearing (investment property losses offsetting other taxable income)**
+  Fully automatic, no new checkbox (confirmed with the user) - applies
+  whenever `isInvestmentProperty` is true and the property is cash-flow
+  negative that month; naturally zero otherwise (no rental income, no
+  loss, or `effectiveTaxRate: 0`).
+  `offsetSimulation.js`: new `isInvestmentProperty = false` param. Each
+  month, right after `monthlyInterest` is computed: a SECOND, independent
+  computation of `rentalIncomeThisMonth` (the same sub-expression already
+  inlined into the existing combined `monthlyIncomeThisMonth` sum - not
+  extracted from it, to avoid floating-point drift across every other test
+  in the file) is compared against `monthlyExpensesForMonth +
+  monthlyInterest`. If negative, the loss × the FULL `effectiveTaxRate`
+  (not TODO-131's 50%-CGT-discounted rate - this is ordinary-income relief,
+  not a capital gain) is credited directly into `offsetBalance`, bypassing
+  `offsetAllocationPct`/`etfAllocationPct` entirely (same bypass pattern as
+  one-time Offset Contributions). Applied AFTER this month's own
+  `monthlyInterest`/`effectiveOffset` are already fixed, so the benefit
+  affects next month's offset onward, never retroactively this month's -
+  avoids circularity, matches the same "one-month lag" idiom already used
+  for savings-interest/ETF-growth accrual. New `totalNegativeGearingBenefit`
+  return field (also added to the early-out sentinel).
+  `App.jsx`: `isInvestmentProperty` added to all THREE
+  `calculateLoanWithOffset`/`runStrategyGrid` call sites (`loanSimulation`,
+  `baselineSimulation`, and the Strategy Comparison grid's `gridBaseParams`
+  - the third one is easy to miss and matters, otherwise the Pareto-front
+  table would silently exclude the benefit while the main results include
+  it).
+  Tests: new `describe('negative gearing tax benefit (isInvestmentProperty,
+  TODO-129)', ...)` in `offsetSimulation.test.js` - parity when
+  false/omitted even with a real loss, hand-computed benefit landing in
+  `offsetBalance` starting the FOLLOWING month (not the loss month itself),
+  no benefit when cash-flow positive, zero benefit at `effectiveTaxRate: 0`
+  despite a real loss. Also fixed one pre-existing test's hardcoded sentinel
+  object (`toEqual({ years: 999, ... })`) to include the new
+  `totalNegativeGearingBenefit: 0` field.
+  Design validated via a Plan-Mode sub-agent that read the full simulation
+  file before implementation - it caught two things worth noting: (1) the
+  floating-point-drift risk of naively splitting the existing combined
+  income sum (avoided by duplicating the computation instead), (2) the
+  third `gridBaseParams` call site, which the original TODO write-up hadn't
+  mentioned.
+  `npm test -- --run` (499/499), `npm run lint`, `npm run build` clean.
+  Spanish-text sweep clean.
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -4078,46 +4122,6 @@ optionally reuse in the commit message when you implement it.
   overrides defined once in a stylesheet). Should be an opt-in prop (e.g.
   `splitColor`), not the default for all ~20+ existing sliders using this
   component - most don't want or need this.
-
-- [ ] **TODO-129: Model negative gearing (investment property losses offsetting other taxable income)**
-  Split out from the original TODO-127 for a cleaner difficulty read (the
-  user asked specifically how hard each part would be, and these two are
-  very different). Negative gearing - an investment property's losses
-  (expenses + loan interest exceeding rental income) reducing the
-  investor's OTHER taxable income, a very common real scenario for AU
-  property investors - isn't modeled at all today; the current flat-rate
-  `effectiveTaxRate` conversion can only ever reduce income, never
-  represent a net tax BENEFIT from a negatively-geared property.
-  **Difficulty: REVISED to low-medium (correcting the medium-high estimate
-  above)**. User pushed back on whether this needs anything "complicated
-  like re-calculating the property's value" - it doesn't, and re-checking
-  `offsetSimulation.js` line-by-line shows the original "two cleanly
-  separate domains" framing was wrong: all three ingredients are already
-  local variables inside the SAME loop iteration, not in separate systems.
-  `rentalIncomeSources`' own contribution is already summed at line 224
-  (currently inlined into a combined income total - just needs pulling out
-  into its own named const); `monthlyExpensesForMonth` is fully resolved by
-  line 266; `monthlyInterest` is computed at line 322. Negative gearing is
-  a pure CASH-FLOW comparison (rental income vs. expenses + interest that
-  same month) - it has nothing to do with property VALUE/capital gains, so
-  that specific worry doesn't apply here at all. The new code is roughly:
-  `if (rentalIncomeThisMonth - monthlyExpensesForMonth - monthlyInterest < 0)`
-  → credit the shortfall back into that month's surplus at some tax rate,
-  gated on `isInvestmentProperty` (already exists) and naturally a no-op
-  when there's no rental income source at all.
-  **Not exaggerated or unnecessary** - negative gearing is one of the most-
-  discussed real considerations for AU property investors, and this
-  simplified cash-flow version (no dynamic valuation, no loss-carryforward
-  across years, just "was this property cash-flow negative this month")
-  fits the stated balance of realism without modeling complexity. Two
-  design decisions worth a short Plan Mode pass before building: (1) which
-  rate to apply to the benefit - reuse `effectiveTaxRate` FULL, unadjusted
-  (ties back to TODO-127's marginal-vs-average question) - this is
-  ordinary-income relief, not a capital gain, so TODO-131's 50% CGT
-  discount does NOT apply here; worth flagging explicitly since the two
-  TODOs sit next to each other and use similarly-named rates for different
-  reasons, (2) whether it needs its own toggle or just activates
-  automatically once Realistic Mode + Investment Property are both on.
 
 - [ ] **TODO-130 (Decided, not yet built): Remove the ongoing "Savings" allocation concept - repurpose Offset Allocation as a direct Offset-vs-ETF split**
   Evolves/supersedes TODO-124's narrower framing. User's reasoning: taking

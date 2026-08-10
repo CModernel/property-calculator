@@ -94,6 +94,15 @@ export function calculateLoanWithOffset({
   // that omits this keeps working unchanged - isGross items only exist if
   // a caller explicitly adds them.
   effectiveTaxRate = 0,
+  // TODO-129: negative gearing - when this investment property's own cash
+  // flow (rental income minus property expenses minus loan interest) is
+  // negative some month, the loss reduces the investor's OTHER taxable
+  // income at effectiveTaxRate, a real tax BENEFIT credited back into the
+  // offset (see the loop below). Fully automatic once true - no separate
+  // opt-in, matching how Land Tax/Property Management already auto-apply
+  // on this same flag. false (default) means every existing caller/test
+  // that omits this keeps working unchanged.
+  isInvestmentProperty = false,
   // TODO-96: what share of the OFFSET's OWN portion of the surplus
   // instead goes to a growing ETF balance (the savings share, via
   // offsetAllocationPct's remainder, is untouched) - the actual
@@ -133,7 +142,7 @@ export function calculateLoanWithOffset({
     contributions.reduce((s, c) => s + c.amount, 0) === 0 &&
     !(initialSavingsBalance > 0 && savingsInterestRate > 0)
   ) {
-    return { years: 999, months: maxMonths, totalInterest: 999999, totalSavingsInterest: 0, monthlyData: [] };
+    return { years: 999, months: maxMonths, totalInterest: 999999, totalSavingsInterest: 0, totalNegativeGearingBenefit: 0, monthlyData: [] };
   }
 
   // TODO-90/91: split once outside the loop (incomeSources itself never
@@ -158,6 +167,7 @@ export function calculateLoanWithOffset({
   let etfBalance = 0;
   let totalInterest = 0;
   let totalSavingsInterest = 0;
+  let totalNegativeGearingBenefit = 0;
   let months = 0;
   const monthlyData = [];
   const savingsMonthlyRate = calculateMonthlyRate(savingsInterestRate);
@@ -327,6 +337,35 @@ export function calculateLoanWithOffset({
     const monthlyInterest = effectiveBalance * currentMonthlyRate;
     totalInterest += monthlyInterest;
 
+    // TODO-129: negative gearing - a SECOND, independent computation of the
+    // same rental-income sub-expression already inlined into
+    // monthlyIncomeThisMonth above (not extracted from it) - refactoring
+    // that combined calculateMonthlyFromWeekly(a+b+c) call into three
+    // separate calls would risk sub-cent floating-point drift across every
+    // other describe block in this file, for no benefit.
+    if (isInvestmentProperty) {
+      const rentalIncomeThisMonth = calculateMonthlyFromWeekly(
+        getActiveAmountWithGrowth(rentalIncomeSources, months, rentGrowthRate, effectiveTaxRate) * vacancyFactor
+      );
+      // Compares the PROPERTY's own income against its own deductible costs
+      // (property expenses + loan interest) - personal expenses deliberately
+      // play no part, same as real negative gearing.
+      const propertyCashFlow = rentalIncomeThisMonth - monthlyExpensesForMonth - monthlyInterest;
+      if (propertyCashFlow < 0) {
+        // Full effectiveTaxRate, NOT TODO-131's 50%-CGT-discounted rate -
+        // that discount is specific to capital gains; this is ordinary-
+        // income relief. Added directly to offsetBalance, bypassing
+        // offsetAllocationPct/etfAllocationPct entirely, same as one-time
+        // Offset Contributions above - and only AFTER this month's own
+        // monthlyInterest/effectiveOffset are already fixed, so the benefit
+        // affects next month's offset onward, never this month's (avoids a
+        // circular dependency on the interest figure it's derived from).
+        const negativeGearingBenefit = -propertyCashFlow * (effectiveTaxRate / 100);
+        offsetBalance += negativeGearingBenefit;
+        totalNegativeGearingBenefit += negativeGearingBenefit;
+      }
+    }
+
     // Pay the installment (interest + principal)
     const principalPayment = currentMonthlyPayment - monthlyInterest;
     balance = Math.max(0, balance - principalPayment);
@@ -357,6 +396,7 @@ export function calculateLoanWithOffset({
     months: months,
     totalInterest: totalInterest,
     totalSavingsInterest: totalSavingsInterest,
+    totalNegativeGearingBenefit: totalNegativeGearingBenefit,
     monthlyData: monthlyData
   };
 }
