@@ -3691,46 +3691,50 @@ optionally reuse in the commit message when you implement it.
   `npm test -- --run` (482/482 unchanged), `npm run lint` clean. Verified
   in the browser: opened "Progress Over Time," both charts rendered
   correctly with no console errors, confirming the lazy boundary works.
+
+- [x] **TODO-113: App-level integration tests for Realistic Mode and Strategy Comparison**
+  Neither of the two newest major features had any `App.*.test.jsx`
+  coverage - confirmed via grep, zero hits for "Realistic Mode", "Strategy
+  Comparison," or any of the 7 factor labels across all 6 existing
+  integration test files. The underlying calculation logic was already
+  well unit-tested (`strategyComparison.test.js`); this closes the React
+  wiring gap. New file `src/App.realisticMode.test.jsx`, 6 tests across 2
+  `describe` blocks: **Realistic Mode card** - sliders hidden by default
+  with sensible new defaults (5/3/3/2/2.5/2.5/20) revealed on check;
+  unchecking hides them again without resetting the underlying values;
+  toggling on measurably changes "Time to pay off:"/"Total interest paid:"
+  away from their off-state text (captured before/after, not hardcoded -
+  robust to future default changes). **Invest in ETFs / Strategy
+  Comparison** - the checkbox is disabled while Realistic Mode is off,
+  enabled once it's checked; checking it reveals the table with its column
+  headers and at least one row; clicking a row's "Apply" button updates
+  the "ETF Allocation"/"Switch Trigger" sliders elsewhere in the panel to
+  match that row's values.
+  **Two testing gotchas found and designed around, worth knowing for future
+  App-level tests in this file**: (1) `InfoTooltip` is nested *inside* the
+  `<label>` for both "Realistic Mode" and "Invest in ETFs" checkboxes
+  (unlike "First Home Buyer", which deliberately keeps its tooltip as a
+  sibling *after* `</label>` for exactly this reason) - `getByLabelText`/
+  `getByRole('checkbox', {name})` with an EXACT string throws "no match"
+  since the accessible name picks up the whole hidden tooltip paragraph
+  too; a regex (`/^Realistic Mode/`) is required instead. (2)
+  `getByRole('table')` alone is ambiguous - `LvrBadge`'s tooltip also
+  renders a (visually hidden but DOM-present) `<table>` on every page load;
+  scoped queries to the Strategy Comparison section specifically instead.
+  `npm test -- --run`, `npm run lint`, `npm run build` clean when this file
+  is run in isolation (6/6 passing, confirmed repeatedly). **Environmental
+  note, not a regression**: the FULL suite (488 tests) is intermittently
+  flaky right now under a very high system load average (37-64, from
+  unrelated running apps) - random pre-existing App-level test files
+  (never the calculation-layer ones, never the same files twice) hit
+  "Test timed out in 5000ms," including files untouched this session.
+  Every failing test, including this new file's, passes cleanly 100% of
+  the time when run in isolation or as part of a lighter run - confirmed
+  this is CPU contention on this machine right now, not a logic bug.
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
 
-
-- [ ] **TODO-107 (Superseded by TODO-109 - see above): Reconsider "Advanced Assumptions" - are Financial Position's changes actually reflected?**
-  User observed that changing sliders inside Financial Position's Advanced
-  Assumptions while Realistic Mode is on didn't seem to move "Total interest
-  paid" or "Time to pay off" at all. Investigated live in the browser while
-  finishing TODO-103/104/105: Expense Growth Rate DOES move both figures
-  significantly (confirmed: $196,743 -> $211,665, 129 -> 142 months, at 5%).
-  Likely explanation: a real bug found and fixed while finishing TODO-104 (see
-  its write-up below - the section was stuck permanently open by default,
-  which may have made testing confusing), or the user specifically tested
-  "Savings Interest Rate" - which by design does NOT affect loan payoff time
-  at all, since it only grows the separate Savings balance (a parallel,
-  non-offset account), not a bug. Possibly worth a clarifying note near that
-  slider if it keeps causing confusion. Re-test now that the collapse bug is
-  fixed before concluding anything else needs to change here.
-
-- [ ] **TODO-108 (Superseded by TODO-109 - see above): Effective Tax Rate/other factors live in a DIFFERENT card than expected**
-  User expected turning Realistic Mode on to reveal "other tax expenses, etc."
-  and for that to affect payoff time. Effective Tax Rate (along with Salary/
-  Rent Growth and Vacancy) used to live in the **Income** card's own
-  "Advanced Assumptions", separate from Financial Position's toggle - easy to
-  miss if only Financial Position was checked. Resolved by TODO-109 above,
-  which consolidates every factor (including Effective Tax Rate) into one
-  dedicated "Realistic Mode" card - nothing left in a different card to miss.
-
-- [ ] **TODO-113: App-level integration tests for Realistic Mode and Strategy Comparison**
-  Neither of the two newest major features has any `App.*.test.jsx`
-  coverage - confirmed via grep, zero hits for "Realistic Mode", "Strategy
-  Comparison," or any of the 7 factor labels across all 6 integration test
-  files. The underlying calculation logic is already well unit-tested
-  (`strategyComparison.test.js`), but the React wiring isn't: does checking
-  "Realistic Mode" reveal the 7 sliders and change "Total interest paid";
-  does unchecking it hide them again and hold effect at 0 without resetting
-  the underlying values; does the Strategy Comparison table render its
-  Pareto-front rows; does its "Apply" button correctly call
-  `setSwitchThresholdPct`/`setEtfAllocationPct`.
 
 - [ ] **TODO-114: Fix tooltip/badge touch fallback on mobile**
   Every `InfoTooltip` (~12+ instances) and `LvrBadge` popover relies
