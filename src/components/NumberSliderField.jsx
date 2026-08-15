@@ -12,6 +12,16 @@ const TRACK_CLASSES = {
   purple: 'bg-purple-200 dark:bg-purple-900',
 };
 
+// Split tracks are opt-in because most sliders have one meaningful direction.
+// The CSS variables behind this class are overridden by `.dark` in index.css,
+// so the inline gradient below stays theme-aware without requiring a theme prop.
+const SPLIT_TRACK_CLASSES = {
+  etf: 'range-slider-split-etf',
+};
+const SPLIT_TRACK_LEGENDS = {
+  etf: { before: 'Offset-bound', after: 'ETF allocation' },
+};
+
 // A number field paired with a slider. The number field is the source of truth
 // and accepts any value inside [min, max]; the slider only covers a typical
 // range (labelled underneath) for quick exploration.
@@ -30,6 +40,7 @@ const NumberSliderField = ({
   formatValue = (v) => v.toLocaleString(),
   formatBound,
   hideSlider = false,
+  splitColor,
   children,
 }) => {
   const id = useId();
@@ -50,6 +61,16 @@ const NumberSliderField = ({
 
   const belowRange = preview < sliderMin;
   const aboveRange = preview > safeSliderMax;
+  const splitTrackClass = SPLIT_TRACK_CLASSES[splitColor];
+  const splitLegend = SPLIT_TRACK_LEGENDS[splitColor];
+  const sliderPosition = safeSliderMax === sliderMin
+    ? 0
+    : ((clampToRange(preview, sliderMin, safeSliderMax) - sliderMin) / (safeSliderMax - sliderMin)) * 100;
+  const sliderStyle = splitTrackClass
+    ? {
+        backgroundImage: `linear-gradient(to right, var(--slider-split-before) 0%, var(--slider-split-before) ${sliderPosition}%, var(--slider-split-after) ${sliderPosition}%, var(--slider-split-after) 100%)`,
+      }
+    : undefined;
 
   const commit = () => {
     if (draft === null) return;
@@ -124,8 +145,22 @@ const NumberSliderField = ({
             // React/DOM divergence is what let the deposit outgrow the price.
             value={clampToRange(preview, sliderMin, safeSliderMax)}
             onChange={handleSliderChange}
-            className={`w-full h-2 mt-2 rounded-lg appearance-none cursor-pointer ${TRACK_CLASSES[color]}`}
+            style={sliderStyle}
+            aria-describedby={splitLegend ? `${id}-split-legend` : undefined}
+            className={`w-full h-2 mt-2 rounded-lg appearance-none cursor-pointer ${TRACK_CLASSES[color]} ${splitTrackClass ?? ''}`}
           />
+
+          {splitLegend && (
+            <div
+              id={`${id}-split-legend`}
+              role="group"
+              className="flex justify-between text-[11px] text-gray-500 dark:text-gray-400 mt-1"
+              aria-label={`${splitLegend.before} and ${splitLegend.after} slider legend`}
+            >
+              <span><span className="text-indigo-500 dark:text-indigo-300">●</span> {splitLegend.before}</span>
+              <span>{splitLegend.after} <span className="text-purple-500 dark:text-purple-300">●</span></span>
+            </div>
+          )}
 
           <div className="flex justify-between text-xs text-gray-400 mt-1 tabular-nums">
             <span className={belowRange ? 'text-amber-600 dark:text-amber-400 font-medium' : undefined}>

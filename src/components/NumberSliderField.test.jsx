@@ -70,10 +70,27 @@ describe('NumberSliderField', () => {
     expect(screen.getByText('<10')).toHaveClass('text-amber-600');
   });
 
-  it('shows the amber above-range indicator when the value is over sliderMax', () => {
+  it('renders an opt-in, value-positioned split gradient and accessible legend', () => {
     render(
-      <NumberSliderField label="Test" value={95} onChange={() => {}} min={0} max={100} sliderMin={10} sliderMax={90} />
+      <NumberSliderField
+        label="ETF Allocation"
+        value={40}
+        onChange={() => {}}
+        min={0}
+        max={100}
+        sliderMin={0}
+        sliderMax={100}
+        splitColor="etf"
+        suffix="%"
+      />
     );
-    expect(screen.getByText('90+')).toHaveClass('text-amber-600');
+
+    const slider = screen.getByLabelText('ETF Allocation slider');
+    expect(slider).toHaveClass('range-slider-split-etf');
+    expect(slider.style.backgroundImage).toContain('var(--slider-split-before) 40%');
+    expect(slider.style.backgroundImage).toContain('var(--slider-split-after) 40%');
+    expect(screen.getByLabelText('Offset-bound and ETF allocation slider legend')).toBeInTheDocument();
+    expect(screen.getByText('Offset-bound')).toBeInTheDocument();
+    expect(screen.getByText('ETF allocation')).toBeInTheDocument();
   });
 });

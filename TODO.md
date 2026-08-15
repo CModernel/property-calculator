@@ -3942,6 +3942,84 @@ optionally reuse in the commit message when you implement it.
   mentioned.
   `npm test -- --run` (499/499), `npm run lint`, `npm run build` clean.
   Spanish-text sweep clean.
+
+- [x] **TODO-141: Removed the "Realistic Mode" on/off gate - projection assumptions are now always active**
+  The prerequisite for TODO-135. `realisticModeEnabled` gated seven
+  assumptions (property/salary/rent/expense growth, vacancy, inflation,
+  effective tax rate), which meant a UI toggle silently switched the
+  FINANCIAL MODEL, not just what was on screen - directly contradicting
+  TODO-135's "one model, two presentations" promise. The name was a second
+  problem: it implied turning it off produced a worse calculation, when it
+  produced an unrealistic one.
+  Deleted the `realisticModeEnabled` state and all seven `realistic*`
+  derived consts (`realisticModeEnabled ? x : 0`); every one of the ~31
+  consumption sites now reads the raw state directly. The card is renamed
+  **Projection Assumptions** - "Advanced Assumptions" was rejected because
+  Financial Position already has an expander by exactly that name, which
+  `getByRole('button', { name: /Advanced Assumptions/ })` in the test suite
+  relies on.
+  **Three decisions locked with the user before implementing:**
+  (1) *Legacy scenarios* - a scenario saved with the mode OFF still stored
+  live non-zero rates that were inert at the time, so loading them as-is
+  would have silently changed a projection the user had already seen. New
+  module-scope `legacyFlatBaseline` (`config.realisticModeEnabled === false`,
+  strict `===` so a fresh session's `undefined` is unaffected) makes the
+  seven rate initializers fall back to 0 for exactly those scenarios. NO
+  `SCHEMA_VERSION` bump: the payload shape isn't changing, only one boolean
+  stops being written, and bumping would have discarded users' entire
+  scenarios (price, expenses, income) over one field. The branch decays on
+  its own - a re-saved scenario no longer carries the flag - and can be
+  deleted whenever TODO-136 bumps the version for its own reasons.
+  (2) *New-session defaults* - the TODO-106 values (5/3/3/2.5/2.5/2wk/20)
+  are now active from the first render. Default results are slower and more
+  expensive than before, and honest.
+  (3) *Card naming* - Projection Assumptions, as above.
+  **Copy replaced rather than deleted.** The Loan Simulation banner used to
+  fire on `!realisticModeEnabled`; it now fires on a new
+  `projectionIsFlatBaseline` derived const and describes what the numbers
+  ARE ("Every growth, vacancy and tax assumption is set to 0 - these figures
+  are a flat baseline...") instead of which switch is off. That const
+  deliberately excludes `propertyGrowthRate` and `inflationRate`: neither
+  changes payoff time or total interest (property growth only feeds
+  `propertyValue` inside `offsetSimulation.js`; inflation is applied after
+  the simulation per TODO-93), so including them would make the claim wrong
+  in both directions. This is what makes TODO-141's "a zero value can be a
+  valid flat baseline, but it must be labeled as such" true in the UI.
+  Also dropped the now-impossible first branch of the "Invest in ETFs"
+  helper ladder and re-pointed the remaining one at the renamed card. The
+  ETF checkbox keeps its `effectiveTaxRate > 0` condition - comparing a
+  pre-tax ETF return against the offset's tax-free return is dishonest
+  whatever put the rate at 0 - it just fires rarely now.
+  **Made the card collapsible (default collapsed), which TODO-141 didn't
+  ask for**: removing the gate turned a one-checkbox card into seven
+  always-visible sliders, a real density regression against this project's
+  repeatedly-affirmed collapse-by-default pattern (TODO-20/24/132, and
+  TODO-140 for Health Check). Uses the same `show*` + `▸/▾` idiom, with
+  `showProjectionAssumptions` persisted alongside its siblings (additive,
+  so still no version bump).
+  **Fixed pre-existing stale copy found en route**: all six slider
+  descriptions claimed "0% (default)" while the real defaults were
+  5/3/3/2/2.5/2.5, and a comment claimed the mode defaulted to `true` when
+  it was `false`.
+  Tests: `App.realisticMode.test.jsx` renamed to
+  `App.projectionAssumptions.test.jsx` and reworked - the two tests that
+  encoded the on/off concept were replaced by ones that matter more under
+  the new design: **expanding/collapsing the card leaves every result
+  byte-identical** (the core "presentation only" promise), and the flat-
+  baseline banner appears only once all five simulation-affecting
+  assumptions are 0. Four new legacy/migration tests in
+  `App.persistence.test.jsx` cover the mode-OFF flat-baseline load, the
+  mode-ON intact load, a fresh session's non-zero defaults, and that
+  re-saving stops writing the dead flag. Added the new card to
+  `App.collapsiblePanels.test.jsx`'s shared toggle table.
+  Also corrected two now-stale plans elsewhere in this file: TODO-122's
+  auto-fill trigger (it hung off the Realistic Mode on/off transition, which
+  no longer exists - flagged as needing a new trigger decision rather than
+  silently inventing one) and TODO-133's framing (the gap now affects every
+  user by default, not only those who opted in).
+  `npm test -- --run` (509/509), `npm run lint`, `npm run build` clean.
+  Spanish-text sweep clean. Verified no `realistic*` identifier and no
+  user-visible "Realistic Mode" string remains in `src/`.
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -3964,7 +4042,7 @@ optionally reuse in the commit message when you implement it.
   ATO progressive tax brackets based on annual income, the way real
   Australian income tax works? **Answer, as currently implemented: no** -
   `effectiveTaxRate` is a single flat percentage the user manually types in
-  (`App.jsx`'s Realistic Mode card), applied via `getNetAmount` in
+  (`App.jsx`'s Projection Assumptions card), applied via `getNetAmount` in
   `src/calculations/recurringAmount.js:27-29` to every Gross-marked income
   item independently, every month - it is NOT derived from the user's actual
   entered income, and does NOT model any bracket structure. **This directly
@@ -3995,14 +4073,20 @@ optionally reuse in the commit message when you implement it.
   Gross-marked income only") rather than silently ignoring net-entered
   income sources.
   **Second refinement (both behaviors wanted, not either/or)**: (1)
-  auto-fill the slider with the suggested value exactly ONCE, at the moment
-  Realistic Mode transitions from off to on (a plain closure check inside
-  the checkbox's own `onChange` - `const turningOn = e.target.checked &&
-  !realisticModeEnabled`, same "seed once" shape already used elsewhere,
-  e.g. Property Type -> Strata seeding). After that single moment the field
-  is a completely normal, freely-editable slider - manually changing it, or
-  toggling Realistic Mode off and on again, doesn't re-lock or re-suggest
-  anything beyond that one trigger point. (2) SEPARATELY, always show a
+  auto-fill the slider with the suggested value exactly ONCE, then leave it
+  a completely normal, freely-editable slider - manually changing it doesn't
+  re-lock or re-suggest anything.
+  **STALE, needs a new decision (TODO-141, 2026-08-15)**: this used to
+  trigger at the moment Realistic Mode transitioned from off to on, checking
+  `e.target.checked && !realisticModeEnabled` inside the checkbox's
+  `onChange`. That checkbox no longer exists - assumptions are always
+  active, and Effective Tax Rate now simply defaults to 20. So the
+  "seed once" trigger point has to be re-chosen before implementing:
+  candidates are seeding on first render only when no scenario is saved, an
+  explicit "use the suggested rate" button next to the live hint, or
+  dropping the auto-fill entirely and shipping only behavior (2). Pick one
+  during TODO-122's own planning session; do not assume the old trigger.
+  (2) SEPARATELY, always show a
   live-recalculating hint/tooltip (e.g. "Right now, ATO brackets would
   suggest ~23% based on your current income") so that if the user changes
   income or other values afterward, they can check whether the suggestion
@@ -4017,7 +4101,7 @@ optionally reuse in the commit message when you implement it.
   average - these can differ meaningfully. Negative gearing (investment
   losses reducing OTHER taxable income) isn't modeled at all either.
 
-- [ ] **TODO-124 (Analysis only, no code): Should "Invest in ETFs" divert from Savings instead of from the Offset's own share?**
+- [ ] **TODO-124 (Superseded by TODO-136/137/138 — do not implement independently): Should "Invest in ETFs" divert from Savings instead of from the Offset's own share?**
   User's proposal: instead of `etfAllocationPct` diverting a % of the
   OFFSET's own share (current design, `offsetSimulation.js` - `etfShare =
   offsetShare * (etfAllocationPct/100)`), it should divert a % of the
@@ -4056,27 +4140,27 @@ optionally reuse in the commit message when you implement it.
   exists. **Answer: yes** - the CURRENT implementation (ETF diverts from
   the offset's own share) already is that better way; it's specifically
   what makes the Strategy Comparison/Pareto-front analysis (TODO-98)
-  meaningful at all. Recommend leaving this as-is unless/until testing the
-  current behavior surfaces a concrete problem with it - don't implement
-  the savings-sourced variant preemptively.
+  meaningful at all.  Recommend leaving this as-is unless/until testing the
+  current behavior surfaces a concrete problem with it - don't implement the
+  savings-sourced variant preemptively.
+  **Status:** superseded by TODO-136/137/138 below. The savings-sourced
+  formula should not be implemented independently; the next ETF change
+  should use the direct Offset-vs-ETF model and risk-aware comparison
+  defined there.
   Separately, the user raised a bigger, distinct point worth its own item:
+
   see new TODO-126 (a master way to fully hide ETF investing from the UI,
   for users who only care about the property/offset side).
 
-- [ ] **TODO-126: A master toggle to fully hide ETF investing from the UI**
-  User's point: ETF investing is arguably out of scope for a property
-  calculator (this is a property-focused tool, ETF investing is a
-  tangential feature) - even with "Invest in ETFs" left unchecked today, its own
-  checkbox row (with tooltip) and the separate "Compare Offset vs ETF
-  Investing" checkbox (plus, if that one's checked, the "Expected ETF
-  Return" slider and static comparison box) still take up space in
-  Financial Position's Advanced Assumptions for users who have zero
-  interest in ETFs, ever. Wants a way to hide ALL of it at once - every
-  ETF-related checkbox, slider, tooltip, tax interaction, and the Strategy
-  Comparison table - not just leave the two checkboxes unchecked. Needs
-  design: e.g. a top-level "Show ETF investing options" master checkbox
-  (default off?) gating both `useEtfInvesting`'s and `showOpportunityCost`'s
-  entire UI blocks, distinct from those two checkboxes' own on/off state.
+- [x] **TODO-126: A master toggle to fully hide ETF investing from the UI**
+  Added a persistent "Show ETF investing options" master toggle in Financial
+  Position. It defaults off for new sessions and gates every ETF-specific
+  control, tooltip, comparison table, timeline output, and simulation effect.
+  Turning it off preserves the individual ETF settings but pauses their effect;
+  turning it back on restores them. Older saved scenarios that already had
+  `useEtfInvesting` or `showOpportunityCost` enabled automatically reveal the
+  master for backward compatibility, while an explicit saved master-off value
+  still wins. Added App and persistence coverage for all of these cases.
 
 - [ ] **TODO-127: Effective Tax Rate should arguably use the MARGINAL rate for rental/investment income, not a blended average**
   Surfaced while quantifying TODO-123's estimation error, and directly
@@ -4096,34 +4180,15 @@ optionally reuse in the commit message when you implement it.
   surface as "the suggestion" (or offer both, labeled clearly) once
   TODO-122 is being built - not its own separate implementation effort.
 
-- [ ] **TODO-128: Two-color slider track for "ETF Allocation" (and maybe "Switch Trigger")**
-  User's idea, after confirming how the current split actually works
-  (`offsetAllocationPct` splits surplus into offset-bound vs. savings-
-  bound; `etfAllocationPct` then diverts a % of the OFFSET-bound share
-  specifically into ETF - e.g. at 50%/40%, of a $1000 surplus: $500 stays
-  savings-bound untouched, and of the other $500 offset-bound share, 40%
-  ($200) redirects to ETF, leaving $300 actually reaching the offset).
-  Visibility + an explanatory tooltip already exist for this slider today
-  (`App.jsx:1524-1538` - gated on `etfInvestingActive`, with clarifying
-  `children` text) - nothing to add there. The NEW ask is purely visual:
-  color the slider track differently on each side of the drag handle (e.g.
-  one color for "stays offset-bound," another for "goes to ETF"), so the
-  split reads at a glance.
-  **Feasibility: moderate, not hard, but not free either** - `NumberSliderField`
-  (`src/components/NumberSliderField.jsx`) currently applies one flat
-  Tailwind background class to the whole track (`TRACK_CLASSES[color]`,
-  line 7-13); representing a value-dependent split needs an inline CSS
-  `linear-gradient` background with a hard color stop computed from the
-  current value's position in `[sliderMin, sliderMax]` - not itself hard,
-  but Tailwind's `dark:` variant doesn't apply to inline styles, so the
-  gradient's two colors need to already be resolved per-theme somehow
-  (either real hex values switched via an `isDarkMode` prop `NumberSliderField`
-  doesn't currently take, or CSS custom properties with their own `dark:`
-  overrides defined once in a stylesheet). Should be an opt-in prop (e.g.
-  `splitColor`), not the default for all ~20+ existing sliders using this
-  component - most don't want or need this.
+- [x] **TODO-128: Two-color slider track for "ETF Allocation"**
+  Implemented as an opt-in `splitColor="etf"` mode on `NumberSliderField`.
+  The track now uses a value-positioned inline `linear-gradient`: the left
+  side represents the offset-bound share and the right side represents the
+  amount diverted to ETFs. CSS custom properties provide light/dark theme
+  colors, and a text legend keeps the meaning accessible without relying on
+  color alone. Existing sliders retain their original flat track styling.
 
-- [ ] **TODO-130 (Decided, not yet built): Remove the ongoing "Savings" allocation concept - repurpose Offset Allocation as a direct Offset-vs-ETF split**
+- [ ] **TODO-130 (Superseded by TODO-136/137/138 — do not implement independently): Remove the ongoing "Savings" allocation concept - repurpose Offset Allocation as a direct Offset-vs-ETF split**
   Evolves/supersedes TODO-124's narrower framing. User's reasoning: taking
   ETF money FROM a separate non-offset "Savings" pool doesn't make sense as
   a permanent feature, because the offset account already gives you
@@ -4199,7 +4264,532 @@ optionally reuse in the commit message when you implement it.
     not a full-suite risk.
   Meaningful enough surface area (deletes a shipped feature, not just UI
   cleanup) to warrant its own Plan Mode session if/when the user decides to
-  proceed - not implemented here.
+  proceed -  not implemented here.
+  **Status:** superseded by TODO-136/137/138 below. TODO-130's direct
+  Offset-vs-ETF direction remains the right foundation (now TODO-136's Phase
+  1), but the timeline/scenario comparison (TODO-137) and risk-analysis scope
+  (TODO-138) were split into their own entries rather than bundled as one
+  isolated slider refactor.
+
+- [ ] **TODO-139: Meaningful slider colors based on impact on final values**
+
+  Color-code sliders to visually communicate their impact on the final
+  financial outcome (e.g. time to pay off, total interest, cash remaining):
+  - **Red/orange shades**: sliders that negatively affect final values
+    when increased (e.g. Property Price, Interest Rate, Loan Term,
+    expenses like Strata/Council Rates/Utilities/Insurance/Food/Transport,
+    Land Tax, Property Management, Debt Repayments). Higher values here
+    mean more cost, longer payoff, or less cash remaining.
+  - **Green shades**: sliders that positively affect final values when
+    increased (e.g. Deposit Contribution, Available Savings, Income
+    sources, Offset Contributions, Tenants). Higher values here mean
+    more equity, faster payoff, or more cash remaining.
+  - **Neutral/violet shades**: controls that have mixed or no clear
+    directional impact (e.g. ETF Allocation, Switch Trigger, investment
+    timing and risk assumptions - context-dependent, can help or hurt
+    depending on market conditions and personal circumstances).
+  Implementation: `NumberSliderField` (`src/components/NumberSliderField.jsx`)
+  already has a `color` prop (used for dark/light track styling via
+  `TRACK_CLASSES[color]`). Extend this prop (or add a new `impactColor`
+  prop) to accept semantic color values like `'negative'`, `'positive',
+  `'neutral'` mapped to red/green/violet Tailwind classes for the slider
+  track, thumb, and value display. Each call site in `App.jsx` passes the
+  appropriate semantic color based on the field's known financial impact.
+  Consider also adding a small legend/tooltip near the slider section
+  explaining the color coding, so new users understand the convention.
+  Accessibility: ensure color alone isn't the only indicator - pair with
+  subtle icons (e.g. ⬇ for negative, ⬆ for positive, ↔ for neutral) or
+  text annotations for colorblind users.
+
+- [x] **TODO-140: Purchase Health Check should default to collapsed**
+  Changed the fallback to `config.showHealthCheck ?? false`, so the panel
+  starts collapsed while an explicit config/saved-scenario value of `true`
+  still opens it for power users. Added App-level coverage for the default
+  collapsed state and expand/collapse interaction.
+
+- [ ] **TODO-133: Analyze whether Health Check values should reflect projection assumptions**
+  The Health Check indicators (Emergency Buffer, Housing Cost Ratio,
+  Stress Test, Upfront Cost Ratio, Gearing, Vacancy Buffer, Rental
+  Yield, Mortgage-Free Age) all use "month 1 / right now" static
+  snapshots — they are computed from the base `cashRemaining`,
+  `totalPropertyCost`, `monthlyIncome`, etc. They apply the Effective Tax
+  Rate (via `weeklyIncome`/`weeklyRentalIncome`) but ignore every
+  **growth** assumption — property/salary/rent/expense growth and vacancy
+  never enter them. Since TODO-141 those assumptions are always active and
+  default to non-zero, so this gap now affects every user by default rather
+  than only those who had opted into the old Realistic Mode:
+  - A user projecting salary growing 3%/yr, rent 3%/yr and property 5%/yr
+    still sees Health Check badges that ignore all of it — the Emergency
+    Buffer might read "High risk" today even though income will outpace
+    expenses within 2 years.
+  - The Loan Simulation and Timeline Explorer beside it DO reflect that
+    growth, so the two panels can tell visibly different stories about the
+    same scenario with no explanation of why.
+  **Open question:** should the Health Check gain a projection-aware variant
+  (e.g. "Emergency Buffer at year 3" alongside "Emergency Buffer today")?
+  Or should it deliberately stay as a conservative "day one snapshot" —
+  "how exposed are you RIGHT NOW, before any growth materializes?" — with
+  the growth-modeled view left to the Timeline Explorer?
+  Scope: needs user decision before any code changes. A middle ground is
+  possible: show the "month 1" values always (conservative) and add a
+  second row for "projected at year N", labelling each clearly.
+
+- [ ] **TODO-134: Health Check indicators that depend on income don't reflect future income sources**
+  Several Health Check indicators are computed via
+  `getActiveAmount(incomeSources, 1, ...)` — a month-1 snapshot — so
+  income sources that start after month 1 are completely invisible.
+  **Affected indicators:**
+  - **Housing Cost Ratio** (`monthlyIncome + monthlyRentalIncome` at month 1)
+  - **Stress Test** (re-amortizes at higher rates using month-1 income;
+    future income increases would let it survive more rate rises)
+  - **Gearing** (`monthlyRentalIncome - payment - expenses` at month 1;
+    investment properties only)
+  - **Rental Yield** (`weeklyRentalIncome / propertyPrice` at month 1;
+    investment properties only)
+  **Partially affected** (depend on `cashRemaining`, which is inherently
+  a day-1 settlement figure, but also on expenses that have scheduled
+  changes via TODO-19):
+  - **Emergency Buffer** (`cashRemaining / monthlyOutgoings`)
+  - **Vacancy Buffer** (`cashRemaining / monthlyPropertyCosts`)
+  **NOT affected** (inherently day-1 measures, or already use the full
+  simulation):
+  - **Upfront Cost Ratio** (stamp duty + fees at settlement — no time dimension)
+  - **Mortgage-Free Age** (uses `loanSimulation.years` which already runs
+    the full month-by-month simulation including all scheduled changes)
+
+  **Recommended approach for Housing Cost Ratio (and generally):**
+  Show TWO values per affected indicator:
+  1. **"Day 1"** — the current month-1 snapshot (unchanged). This is the
+     conservative "how exposed are you RIGHT NOW" reading.
+  2. **"Stabilized"** — the value once all scheduled income/expense
+     changes have taken effect (i.e. the "steady state" ratio). This
+     answers "what does my finances look like once the salary increase
+     kicks in / the tenant moves in / etc."?
+
+  **Why not a time-weighted average?** An average (e.g. mean ratio over
+  30 years) dilutes the signal: 55% for year 1 then 25% for years 2-30
+  averages to ~31% ("Good"), hiding the real year-1 squeeze. The user
+  needs to see BOTH the immediate pressure AND the eventual steady state.
+  **Why not just the peak (worst) value?** Too conservative — a user
+  with 55% month 1 that drops to 25% by month 13 would permanently see
+  "High risk" even though the tight period is short and survivable.
+  **Classification:** use the WORSE of the two values for the color/symbol
+  (conservative — always flags real risk), but show both numbers so the
+  user can see the trajectory. A small annotation like "improves to 25%"
+  or "↘ stabilizes at 25%" next to the Day 1 value conveys the full
+  picture.
+
+  For **Emergency Buffer** and **Vacancy Buffer**, the same two-value
+  approach applies but with a twist: the "Day 1" buffer is naturally
+  the tightest (lowest savings + highest early expenses), and the
+  "Stabilized" buffer grows as income increases and expenses are
+  covered. Showing both tells the user "you have 2.1 months today,
+  but this grows to 5.8 months once the salary increase kicks in."
+
+  Scope: needs user decision before implementation. Related to
+  TODO-133's broader question about whether Health Check indicators
+  should reflect projection assumptions — those now live in the
+  "Projection Assumptions" card and are always active (TODO-141), so both
+  TODOs are asking the same question about one consistent model rather
+  than about a mode that can be switched off.
+
+- [ ] **TODO-135 (Analysis only, large scope): Simple vs. Advanced UI modes — presentation only**
+  The app currently shows everything at once — 8 collapsible input cards
+  (Purchase Details, Financial Position, Projection Assumptions, Property
+  Expenses, Income, Offset Contributions, Exceptional Expenses, Other
+  Expenses / Personal Expenses), plus 4 results/output panels (Property
+  Balance, Loan Simulation, Timeline Explorer, Strategy Comparison) and
+  the Health Check. This is powerful for power users but can be
+  **overwhelming** for someone who just wants to answer "can I afford
+  this property?" — the cognitive load of 30+ fields, multiple
+  collapsible sub-sections, and several analytical tools is high.
+
+  **Proposed solution:** two UI modes — **Simple** and **Advanced** —
+  with a toggle in the header. This is a presentation layer only: both
+  modes use the same financial model and the same active assumptions. Simple
+  must not silently calculate a less-realistic scenario merely because it
+  hides advanced controls.
+
+  The current UI is the baseline for **Advanced**, but it is not the final
+  Advanced architecture. New features should initially be implemented in
+  Advanced and then evaluated for a contextual, reduced Simple presentation.
+  The ETF/risk work belongs in a dedicated Advanced-only
+  **Extra Investments & Strategies** card (TODO-136/137/138), not in the
+  basic Financial Position card.
+
+  ### Simple mode ("Can I afford this?")
+  Shows only the essential inputs and a contextual affordability answer,
+  not disconnected numbers:
+  - **Purchase inputs:** Property Price, Deposit Contribution, Loan Amount,
+    Interest Rate, Loan Term, Available Savings, and the relevant upfront
+    costs/liquidity summary.
+  - **Monthly position:** a compact income → property costs → personal costs
+    → repayments → surplus/shortfall breakdown. Multiple existing income
+    sources and commitments must not be silently ignored merely because their
+    detailed editors are hidden; show a compact "N sources included" or
+    "N commitments included" summary with a link to Advanced.
+  - **Results:** affordability status (illustrative, not a lending approval),
+    Monthly Repayments, Total Cash Required, Remaining Savings, Monthly Cash
+    Flow, Housing Cost Ratio, and Emergency Buffer. Each number should explain
+    what question it answers and what inputs are included.
+  - **Health Check:** a contextual subset of Housing Cost Ratio, Stress Test,
+    Emergency Buffer, and any Day 1/Stabilized distinction resolved by
+    TODO-133/134. The full indicator set remains in Advanced.
+  - **Hidden by default:** detailed schedules, Offset Contributions,
+    Exceptional Expenses, detailed expense lists, Timeline Explorer,
+    Strategy Comparison, ETF/risk scenarios, and editable projection
+    assumptions. Hidden controls must still remain active in the same model if
+    the saved scenario contains them; Simple must show a clear notice when an
+    Advanced strategy materially affects the result.
+  - **Goal:** answer "can I afford this and what is driving the answer?" in a
+    small number of connected cards, rather than displaying 5-8 unexplained
+    fields or a falsely precise yes/no verdict.
+
+  ### Advanced mode ("Optimize my strategy")
+  Starts from today's full interface: all input cards, detailed schedules,
+  complete Health Check, Loan Simulation, Timeline Explorer, Strategy
+  Comparison, projection-assumption controls, and the dedicated Extra
+  Investments & Strategies card. This is the current UI classified as
+  Advanced, while later work may reorganize it into focused components.
+
+  ### Open questions for analysis:
+  1. **Mode toggle UX:** persistent toggle in header? Or a one-time
+     choice on first visit (saved to localStorage)? If the user starts
+     in Simple mode and later clicks "Advanced", does the transition
+     feel seamless or jarring?
+  2. **Projection assumptions in Simple:** resolved by TODO-141 - there is
+     no on/off toggle left to duplicate, and the Projection Assumptions card
+     already models the pattern Simple should follow (its collapse toggle
+     hides the editors without touching the model). Simple may hide the
+     editors the same way, but it should disclose that projection
+     assumptions are active and provide an Advanced link/summary so the
+     result is not based on invisible rules.
+  3. **Progressive disclosure within Simple:** instead of a binary
+     Simple/Advanced split, should Simple mode have its own
+     "show more" expander per section (e.g. "Show offset
+     contributions" inside Financial Position)? This avoids a hard
+     mode switch but still reduces default complexity.
+  4. **Saved scenarios:** UI mode should be a user preference, not part of
+     the financial scenario payload. Loading a scenario must not unexpectedly
+     switch the user's interface complexity; the saved financial inputs and
+     active advanced settings must remain intact.
+  5. **Migration path:** many features were added incrementally
+     (TODO-1 through TODO-140). Every future TODO should identify its
+     Advanced implementation first and then decide whether Simple needs a
+     summary, a reduced editor, or no exposure at all. Simple should never
+     drop already-entered financial data from the calculation.
+  6. **Existing collapsible cards:** the app already has many collapsible
+     sections. They can remain useful inside Advanced, but Simple should not
+     be implemented as a pile of permanently hidden existing cards. Prefer a
+     small guided summary view with explicit "View details in Advanced"
+     transitions and shared calculation components.
+
+  **Scope/order:** define the presentation contract now, but implement the
+  actual Simple/Advanced shell after TODO-136/137/138 and TODO-133/134 have
+  stabilized the model and the most important outputs. It is intentionally a
+  late implementation task, not an unplanned final rewrite. TODO-141 must be
+  resolved first because it defines how projection assumptions behave in both
+  views. Tagged as "(Analysis only, large scope)" to signal that this entry
+  records product/architecture decisions and does not authorize code changes.
+
+- [ ] **TODO-136 (Analysis/design): Direct Offset-vs-ETF monthly split (replaces the two-step Offset/Savings/ETF model)**
+  **Relationship to TODO-124 and TODO-130:** this item replaces both. TODO-124
+  proposed changing where ETF money is sourced while preserving the existing
+  Offset/Savings intermediary. TODO-130 identified the better product model:
+  remove the ongoing Savings allocation and split monthly surplus directly
+  between Offset and ETF. The user confirmed that a generic Savings destination
+  does not make sense for this calculator because money in the Offset remains
+  accessible while also reducing mortgage interest. Do not implement TODO-124
+  separately; the direct model below (TODO-136), its comparison UI (TODO-137),
+  and its risk/timing scenarios (TODO-138) supersede it.
+
+  **Goal:** make the default and easiest strategy "send surplus to Offset",
+  while allowing the user to opt into ETF investing without pretending that the
+  calculator can know the universally best investment date or percentage.
+
+  ### Phase 1 — Direct Offset/ETF cash-flow model
+
+  Replace the current two-step ongoing allocation with one direct control:
+
+  - Remove the ongoing monthly role of `offsetAllocationPct` as a separate
+    Offset-versus-Savings slider.
+  - Use one clearly named **ETF Allocation** percentage to split positive
+    monthly surplus directly:
+    ```
+    monthly surplus > 0
+    ├── ETF allocation                 → ETF contribution
+    └── 100% - ETF allocation         → Offset contribution
+    ```
+  - At 0%, all positive surplus goes to Offset. This should be the safe,
+    simplest default and the natural representation of the user's preference.
+  - Do not send ETF contributions when the month's cash flow is negative.
+    The direct model should use signed cash flow: a deficit first reduces the
+    Offset balance (never below zero), and any remaining deficit is surfaced as
+    a cash shortfall instead of being silently discarded by the current
+    `Math.max(0, ...)` behavior. Automatically drawing the separate initial
+    Available Savings balance to cover that shortfall is out of this phase
+    unless explicitly chosen, because it changes the user's emergency-reserve
+    assumption.
+  - Keep `initialSavingsBalance` / **Available Savings** as the user's
+    pre-existing cash and settlement-liquidity position. Removing the ongoing
+    Savings destination must not remove or rename this initial-liquidity input.
+  - Keep `savingsInterestRate` and compounding of the initial savings balance
+    unchanged in this phase, as already decided in TODO-130. It models the
+    starting cash position only; no future monthly surplus is deposited into
+    that balance. If that remaining starting-cash projection is later judged
+    confusing, it should become a separate follow-up rather than being changed
+    implicitly during the Offset/ETF refactor.
+  - Keep one-time or scheduled **Offset Contributions** independent from the
+    recurring ETF allocation. Sale, inheritance, or other extraordinary
+    proceeds should default to the Offset and must not silently become ETF
+    contributions.
+  - **Keep `switchThresholdPct`**, reframed to gate the new direct split
+    instead of the old etfShare-carve-out: ETF Allocation stays inactive
+    (100% of surplus goes to Offset regardless of the configured %) until
+    the Offset balance reaches this % of the remaining loan balance, then
+    turns on for good (same monotonic, stateless check as today - see
+    `offsetSimulation.js`'s existing `etfSwitchActive` calculation, which
+    the direct model reuses unchanged). This preserves the "protect first,
+    then invest" behavior external financial-planning research (a 2026-08-13
+    session) independently identified as the right approach - it isn't a new
+    concept, this app already had it via TODO-98.
+
+  **Required naming/copy change:** the UI must explain that the slider controls
+  the percentage of *future positive monthly surplus* invested in ETFs; the
+  remainder goes to Offset. It must no longer describe ETFs as being carved out
+  of the Offset's own share or imply that Savings is a third ongoing destination.
+
+  **UI boundary:** ETF controls are not part of the basic Financial Position
+  card after this work. They belong in a dedicated Advanced-only
+  **Extra Investments & Strategies** card. TODO-126's master visibility toggle
+  remains the compatibility/opt-in guard, but the card itself becomes the
+  home for ETF settings, comparisons and future risk tools. If an advanced ETF
+  strategy is active while Simple is selected, Simple must disclose that fact
+  rather than silently changing or ignoring the strategy.
+
+  ### Phase 2 — Persistence (decided: version bump, not a migration formula)
+
+  A 2026-08-12 analysis session checked `scenarioStorage.js`'s actual history:
+  every one of its 9 prior `SCHEMA_VERSION` bumps handled a breaking shape
+  change by rejecting the mismatched old payload outright
+  (`parsed?.version !== expectedVersion -> return null`, resetting to
+  defaults) - never by transforming old fields into new ones. There is no
+  precedent anywhere in this codebase for a deterministic field-migration
+  function, and the file's own comment states the design philosophy
+  explicitly: "a half-migrated state is worse than starting from defaults."
+  Decided: follow that same established precedent here, not a new formula.
+
+  - Bump `SCHEMA_VERSION` in `scenarioStorage.js` once the old
+    `offsetAllocationPct`/`etfAllocationPct` shape is removed.
+  - Old saved scenarios simply fail the version check and reset to defaults,
+    exactly like every prior breaking change - no `oldOffsetAllocationPct *
+    oldEtfAllocationPct / 100` conversion formula, no new migration
+    machinery.
+  - Preserve unrelated ETF settings, including the TODO-126 master visibility
+    toggle and any Strategy Comparison settings, where their meaning remains
+    valid (these aren't part of the removed shape, so a fresh-default reset
+    only needs to re-apply where the removed fields actually were).
+  - When TODO-126's ETF master toggle is off, the configured ETF percentage is
+    preserved for re-enabling but the simulation must use an effective 0% ETF
+    allocation, sending all positive surplus to Offset and hiding ETF outputs.
+
+  **Dependencies/coordination:** TODO-8 (Timeline snapshot), TODO-32
+  (scheduled Offset Contributions), TODO-126 (ETF visibility toggle), and
+  TODO-127 (tax-rate semantics, unaffected by this split). See TODO-137
+  (Timeline comparison UI) and TODO-138 (risk/timing scenarios) - split out
+  from this item during the same 2026-08-12 analysis session because they
+  need materially new UI/scenario logic, not simple reuse of what exists
+  today.
+
+  ### Acceptance criteria
+
+  - A new session with ETF Allocation at 0% sends all positive recurring
+    surplus to Offset and has no ongoing Savings diversion.
+  - Changing ETF Allocation changes the direct Offset/ETF split without
+    changing the user's initial Available Savings or scheduled one-time Offset
+    Contributions.
+  - A negative-cash-flow month does not create a synthetic ETF contribution;
+    it reduces Offset up to the available balance and exposes any remaining
+    shortfall rather than silently flooring the deficit to zero.
+  - Turning off the ETF master toggle produces the same financial path as 0%
+    ETF allocation while preserving the configured ETF percentage for later.
+  - Old saved scenarios using the previous Offset/Savings/ETF model fail the
+    version check and reset to defaults, consistent with every prior
+    `SCHEMA_VERSION` bump - not a migrated/transformed value.
+  - Tests cover the direct allocation formula, zero/100% boundaries, negative
+    surplus, and the version-bump reset behavior for old scenarios.
+
+  This is a multi-step implementation and should be planned as a dedicated
+  session; this entry records the product direction only and does not
+  authorize code changes by itself.
+
+- [ ] **TODO-137 (Analysis/design, depends on TODO-136): Dedicated Advanced strategy-comparison panel (100% Offset vs Custom vs 100% ETF)**
+  Split out from the original single-entry TODO-136 during a 2026-08-12
+  analysis session: a code-validation pass found there is no standalone
+  Timeline Explorer component (it's inlined in `App.jsx`) and no existing
+  multi-scenario overlay UI - `LoanBalanceChart`/`PrincipalInterestChart`
+  each take exactly one `monthlyData` array and aren't designed for 3-way
+  comparison. "Reuse the existing Timeline Explorer" understated this
+  phase's real scope, so it now has its own ID.
+
+  Reuse the existing monthly simulation (`calculateLoanWithOffset`) rather
+  than creating a second time engine. Compare at least:
+
+  1. **100% Offset** (reference strategy),
+  2. **Custom Offset/ETF allocation**, and
+  3. **100% ETF** (comparison boundary, not a recommendation).
+
+  For a selected month and at the end of the projection, show the differences
+  in:
+
+  - Loan balance and effective balance after Offset,
+  - Offset balance,
+  - ETF contributions and projected ETF balance,
+  - Interest paid and estimated time to pay off,
+  - Remaining liquidity / Emergency Buffer,
+  - Estimated net worth and property equity.
+
+  The comparison should make clear that ETF value is a projection while the
+  mortgage-interest reduction from Offset is modeled as the more predictable
+  reference. It should not collapse these into one falsely precise "best"
+  answer.
+
+  **UI approach (decided):** a dedicated new comparison component (table/
+  panel), not an extension of `LoanBalanceChart`/`PrincipalInterestChart` -
+  those stay untouched. Running 3 full simulations is computationally
+  trivial (the app already runs `calculateLoanWithOffset` twice for
+  `baselineSimulation` and 441 times for Strategy Comparison), so the real
+  cost here is new UI/component work, not performance - most likely reusing
+  `getTimelineSnapshot` once per scenario and rendering a diff table rather
+  than merging 3 `monthlyData` arrays into the existing charts.
+
+  **Table first, chart deferred (decided, 2026-08-13):** the year-by-year
+  diff table above is the actual deliverable and gives exact figures; an
+  overlaid line chart (to visually spot the "crossover point" where the ETF
+  line pulls ahead of Offset) is a nice-to-have, not required for this TODO
+  - only build it later if the table alone proves hard to read.
+
+  **Granularity edge case:** default to yearly rows, but a loan with under
+  12 months remaining (or a short custom projection window) needs monthly
+  rows instead - don't silently render a table with 0 or 1 row for a
+  sub-1-year loan.
+
+  Render this panel inside the Advanced-only **Extra Investments & Strategies**
+  card. It must not be required for the Simple affordability answer; Simple may
+  expose only a short notice/link that advanced strategies are available.
+
+  Depends on TODO-136 (needs the direct-model % to frame "Custom" cleanly
+  against the 100%/0% boundaries).
+
+- [ ] **TODO-138 (Analysis/design, depends on TODO-136, pairs with TODO-137): Advanced ETF timing/risk scenario comparisons**
+  Split out from the original single-entry TODO-136 during the same
+  2026-08-12 analysis session, as the most product-judgment-heavy and
+  distinct piece of that original write-up.
+
+  Use deterministic scenario paths first, matching the app's existing
+  month-by-month design; this phase is not a Monte Carlo engine - consistent
+  with this app's established TODO-94 design philosophy ("if the user needs
+  to understand it to trust it, don't build it that way"). Each path must
+  document its return assumptions, contribution timing, tax treatment, and
+  any drawdown shock so that two runs are reproducible. Add user-controlled
+  comparisons rather than an automatic financial recommendation:
+
+  - Compare starting ETF contributions immediately versus after a configurable
+    delay (for example, after 12, 24, or 60 months).
+  - Optionally compare waiting until the Offset reaches a chosen emergency-
+    reserve target before beginning ETF contributions.
+  - Show at least conservative, central, and favorable ETF-return scenarios.
+  - Add a configurable market-drop stress test (for example, a 20%, 30%, or
+    40% fall after ETF investing begins), and show whether the user still has
+    adequate liquidity and can continue servicing the loan.
+  - Surface a break-even or hurdle-return view: what ETF return would be
+    needed to compensate for the interest benefit forgone by sending that
+    surplus to the ETF instead of the Offset. Label this as an illustrative
+    comparison, not a guaranteed return or personal advice.
+  - Keep property-equity/net-worth outputs tied to the currently modeled
+    property. A future property-sale or inheritance-liquidation event must
+    remove the asset and model its net proceeds separately; it is not silently
+    included in this ETF-allocation TODO.
+  - Decide separately how dividends, capital gains, tax, volatility, and
+    sequence-of-returns risk are represented. Coordinate with TODO-127 rather
+    than implying that the current flat tax rate is a complete ETF tax model
+    - confirmed a real dependency: ETF returns already share the same
+    `effectiveTaxRate` field (with the CGT-discount halving) that TODO-127
+    would change the meaning of.
+
+  **Validated feasibility note:** `calculateEtfCrashSurvivedPct`/
+  `classifyEtfCrash` (`strategyComparison.js`) are already decoupled from the
+  current split model and directly reusable for the stress test above -
+  confirmed via code review, not just assumed.
+
+  **On the "break-even/hurdle-return" formula (note added 2026-08-13):**
+  external financial-planning material the user found frames this as
+  `ETF return × (1 - tax rate) - mortgage rate = risk premium`, applying a
+  single flat tax haircut to the whole ETF return. Our model is already
+  more precise than that simplification: `offsetSimulation.js`'s
+  `etfMonthlyRate` (TODO-131) applies the AU 50% CGT discount specifically,
+  not a flat `(1 - tax)` on the entire return - it doesn't conflate
+  dividend income (taxed in full) with long-term capital gains (taxed at
+  half rate) the way the simplified online formula does. Do not "fix" this
+  to match the simpler formula; the existing treatment is the more correct
+  one. This phase's hurdle-return view should build on the existing
+  `etfMonthlyRate` calculation, not reimplement the naive version.
+
+  **UI boundary:** this belongs inside the Advanced-only **Extra Investments &
+  Strategies** card. It should be hidden from the Simple editor/results by
+  default, while any active advanced strategy must be disclosed if it changes
+  the numbers shown there.
+
+  **Out of scope:** an optimizer that tells the user the exact best ETF
+  percentage, market-timing advice, a guarantee that ETF returns exceed the
+  mortgage rate, or a full portfolio/asset-allocation adviser. The feature is
+  for transparent scenario comparison and education.
+
+- [ ] **TODO-142 (Analysis/design, pairs with TODO-138): Risk-tolerance profile reference points (Conservative/Moderate/Aggressive) - educational only, not an auto-apply preset**
+  Surfaced from external financial-planning material the user researched
+  (2026-08-13): planners commonly frame the Offset-vs-ETF decision using a
+  risk-tolerance profile (Conservative/Moderate/Aggressive) mapped to a
+  typical starting split (e.g. roughly 80/20, 50/50, 20/80), plus a "safety
+  floor" (emergency-fund months that must stay in Offset regardless of
+  profile) and a tax-bracket input. **Decided (2026-08-13): add this as pure
+  educational reference content, not a feature that sets anything for the
+  user** - it does not get its own quiz, button, or "apply my %" action that
+  writes to the ETF Allocation slider.
+
+  **Why the careful boundary:** TODO-138 already explicitly lists "an
+  optimizer that tells the user the exact best ETF percentage" as out of
+  scope, consistent with this app's TODO-94 design philosophy (no feature
+  that could read as personalized financial advice). A profile-driven
+  auto-set control would cross that line; a labeled reference table does
+  not, provided the copy stays in the register of "investors who describe
+  themselves as X typically consider a range around Y" rather than "you
+  should do Y."
+
+  **Scope:**
+  - A small reference block (likely inside the Advanced-only Extra
+    Investments & Strategies card, near TODO-138's scenario comparisons) -
+    three rows/cards (Conservative/Moderate/Aggressive) each showing an
+    illustrative starting-point RANGE (not a single precise number) and a
+    one-line rationale (time horizon, tolerance for a market drop, reliance
+    on the mortgage rate environment).
+  - Explicit, visible disclaimer that these are illustrative starting
+    points from general financial-planning practice, not personal advice,
+    and that the user's own ETF Allocation slider (TODO-136) is unaffected
+    by anything shown here - no auto-fill, no "Apply" button.
+  - The "safety floor" concept (minimum months of expenses that should stay
+    in Offset before any ETF allocation) overlaps with the Health Check's
+    existing Emergency Buffer indicator (TODO-133/134) - reuse that
+    figure/language rather than inventing a second "safety floor" number
+    with different math.
+  - Does not require new simulation logic - this is a static reference
+    panel, not a calculator. If it later needs to *react* to the user's own
+    numbers (e.g. "your current Emergency Buffer already covers your
+    Conservative floor"), that upgrade should be considered as a distinct,
+    later follow-up decision, not assumed as part of this scope.
+
+  **Out of scope (same boundary as TODO-138):** no button that sets the ETF
+  Allocation slider, no quiz that computes "your profile is X", no claim
+  that any percentage is optimal for the specific user's situation.
 
 ---
 

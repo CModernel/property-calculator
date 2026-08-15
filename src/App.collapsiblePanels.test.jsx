@@ -12,6 +12,10 @@ const TOGGLE_CASES = [
   ['Offset contributions breakdown', () => screen.getByText('💰 Offset Contributions Schedule')],
   ['Property expenses breakdown', () => screen.getByLabelText('Utilities (monthly)')],
   ['Closing costs breakdown', () => screen.getByLabelText('Conveyancing')],
+  // TODO-141: the former "Realistic Mode" card. Its toggle is now presentation
+  // only - the assumptions apply either way (proven in
+  // App.projectionAssumptions.test.jsx); this case only covers the ▸/▾ mechanics.
+  ['Projection assumptions', () => screen.getByLabelText('Property Growth Rate')],
 ];
 
 describe.each(TOGGLE_CASES)('input-panel toggle: %s', (buttonNameRegex, getContent) => {
@@ -29,6 +33,22 @@ describe.each(TOGGLE_CASES)('input-panel toggle: %s', (buttonNameRegex, getConte
     await user.click(screen.getByRole('button', { name: new RegExp(buttonNameRegex) }));
     expect(screen.getByRole('button', { name: new RegExp(buttonNameRegex) })).toHaveTextContent('▸');
     expect(() => getContent()).toThrow();
+  });
+});
+
+describe('Purchase Health Check panel', () => {
+  it('starts collapsed and reveals its indicators when opened', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const heading = screen.getByText('🩺 Purchase Health Check');
+    const toggle = within(heading.parentElement).getByRole('button', { name: '▸ Show' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Emergency Buffer')).not.toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(within(heading.parentElement).getByRole('button', { name: '▾ Hide' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Emergency Buffer')).toBeInTheDocument();
   });
 });
 

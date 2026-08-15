@@ -5,8 +5,21 @@
 /* The page content is capped at max-w-7xl and centered (src/App.jsx), so on
    wider viewports/aspect ratios there's empty space outside it - html/body
    need their own themed background (TODO-47) or that space stays the
-   browser's default white regardless of dark mode. */
-html,
+   browser's default white regardless of dark mode. */html,
 body {
   @apply bg-slate-50 dark:bg-slate-900;
+}
+
+/* TODO-128: the ETF slider's left side represents money staying offset-bound,
+   while its right side represents money diverted to ETFs. The range input's
+   gradient is inline because its stop moves with the current value; these
+   variables keep the colors readable in both themes. */
+.range-slider-split-etf {
+  --slider-split-before: #c7d2fe;
+  --slider-split-after: #e9d5ff;
+}
+
+.dark .range-slider-split-etf {
+  --slider-split-before: #3730a3;
+  --slider-split-after: #6b21a8;
 }
