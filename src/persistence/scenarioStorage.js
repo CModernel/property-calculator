@@ -35,7 +35,14 @@ const STORAGE_KEY = 'propertyCalculator.scenario';
 // picklist. Same discard-not-migrate reasoning as every bump above: a
 // saved `otherExpenseItems` array could hold real user data that can't be
 // safely folded into the merged list automatically.
-const SCHEMA_VERSION = 9;
+// Bumped to 10 in TODO-136: `offsetAllocationPct` was retired - the monthly
+// surplus no longer splits between the offset and a separate savings
+// balance, it splits directly between the offset and ETF investing via
+// `etfAllocationPct`. Same discard-not-migrate reasoning: a saved
+// offsetAllocationPct below 100 described a strategy this app can no longer
+// express, and silently reinterpreting it would change the user's projection
+// without telling them.
+const SCHEMA_VERSION = 10;
 
 // A version mismatch means the saved shape no longer matches what this
 // version of the app expects - discard rather than attempt a migration,

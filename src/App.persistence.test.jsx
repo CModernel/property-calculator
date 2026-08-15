@@ -187,3 +187,45 @@ describe('legacy Realistic Mode scenarios (TODO-141)', () => {
     expect(saved).not.toHaveProperty('realisticModeEnabled');
   });
 });
+
+// TODO-136 removed the offset-vs-savings split and made a deficit month real
+// instead of silently flooring it to zero. These cover the wiring from the
+// simulation's new outputs through to the DOM.
+describe('direct Offset/ETF split and cash shortfall (TODO-136)', () => {
+  async function renderWith(scenario) {
+    localStorage.setItem(STORAGE_KEY, serializeScenarioPayload(scenario));
+    vi.resetModules();
+    const { default: FreshApp } = await import('./App');
+    render(<FreshApp />);
+  }
+
+  it('stops writing the retired offsetAllocationPct when a scenario is saved', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: '💾 Save' }));
+
+    const saved = parseScenarioPayload(localStorage.getItem(STORAGE_KEY));
+    expect(saved).not.toHaveProperty('offsetAllocationPct');
+  });
+
+  it('shows no shortfall warning for a scenario that stays in surplus', async () => {
+    await renderWith({ incomeSources: [{ id: 1, name: 'Salary/Wages', amount: 1614, startMonth: 1, recurrence: 'monthly', endMonth: 360 }] });
+    expect(screen.queryByText(/Cash shortfall:/)).not.toBeInTheDocument();
+  });
+
+  it('warns about a shortfall that only emerges later in the projection', async () => {
+    // Month 1 is comfortably in surplus, so the Total Summary's own
+    // "Need $X/month extra" status stays green - this warning is the only
+    // thing that catches the one-off expense at month 24.
+    await renderWith({
+      incomeSources: [{ id: 1, name: 'Salary/Wages', amount: 1614, startMonth: 1, recurrence: 'monthly', endMonth: 360 }],
+      personalExpenseItems: [
+        { id: 1, name: 'Groceries', amount: 433, startMonth: 1, recurrence: 'monthly', endMonth: 360 },
+        { id: 2, name: 'Custom', customName: 'Renovation', amount: 900000, startMonth: 24, recurrence: 'none', endMonth: 24 },
+      ],
+    });
+
+    expect(screen.getByText(/✅ Income covers all expenses/)).toBeInTheDocument();
+    expect(screen.getByText(/⚠️ Cash shortfall: \$[\d,]+ across 1 month$/)).toBeInTheDocument();
+  });
+});

@@ -14,7 +14,7 @@ describe('calculateLoanWithOffset', () => {
       monthlyRate: 0.005,
       monthlyPayment: 500,
     });
-    expect(result).toEqual({ years: 999, months: 360, totalInterest: 999999, totalSavingsInterest: 0, totalNegativeGearingBenefit: 0, monthlyData: [] });
+    expect(result).toEqual({ years: 999, months: 360, totalInterest: 999999, totalSavingsInterest: 0, totalNegativeGearingBenefit: 0, totalCashShortfall: 0, monthsWithShortfall: 0, monthlyData: [] });
   });
 
   it('always reports a numeric months, on the sentinel path too', () => {
@@ -661,8 +661,12 @@ describe('scheduled/variable interest rate changes (interestRateField, TODO-57)'
   });
 });
 
-describe('offset vs. savings split (offsetAllocationPct/initialSavingsBalance, TODO-49)', () => {
-  it('defaults to sending 100% of the surplus to the offset, savings stays at 0', () => {
+// TODO-136 deleted the ongoing offset-vs-savings split (offsetAllocationPct).
+// Surplus now goes to the offset and the ETF only; `initialSavingsBalance` is
+// a settlement-time cash position that compounds on its own and never
+// receives monthly deposits.
+describe('surplus goes to the offset, never to an ongoing savings pool (TODO-136)', () => {
+  it('sends 100% of the surplus to the offset, leaving savings untouched', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
       personalExpenseItems: [],
@@ -676,7 +680,7 @@ describe('offset vs. savings split (offsetAllocationPct/initialSavingsBalance, T
     expect(result.monthlyData.map(d => d.savings)).toEqual([0, 0, 0]);
   });
 
-  it('splits the monthly surplus between offset and savings by offsetAllocationPct', () => {
+  it('leaves an initialSavingsBalance completely flat with no interest rate - no surplus ever lands in it', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
       personalExpenseItems: [],
@@ -684,43 +688,12 @@ describe('offset vs. savings split (offsetAllocationPct/initialSavingsBalance, T
       loanAmount: 10_000_000,
       monthlyRate: 0,
       monthlyPayment: 100,
-      offsetAllocationPct: 70,
-      maxMonths: 3,
-    });
-    expect(result.monthlyData.map(d => d.offset)).toEqual([700, 1400, 2100]);
-    expect(result.monthlyData.map(d => d.savings)).toEqual([300, 600, 900]);
-  });
-
-  it('seeds the running savings balance from initialSavingsBalance and accumulates on top', () => {
-    const result = calculateLoanWithOffset({
-      contributions: [],
-      personalExpenseItems: [],
-      monthlyToOffset: 1000,
-      loanAmount: 10_000_000,
-      monthlyRate: 0,
-      monthlyPayment: 100,
-      offsetAllocationPct: 0,
       initialSavingsBalance: 5000,
       maxMonths: 3,
     });
-    // Every dollar of surplus goes to savings, none to the offset.
-    expect(result.monthlyData.map(d => d.offset)).toEqual([0, 0, 0]);
-    expect(result.monthlyData.map(d => d.savings)).toEqual([6000, 7000, 8000]);
-  });
-
-  it('passing offsetAllocationPct: 100 explicitly matches omitting it entirely', () => {
-    const shared = {
-      contributions: [],
-      personalExpenseItems: [],
-      monthlyToOffset: 1000,
-      loanAmount: 10_000_000,
-      monthlyRate: 0,
-      monthlyPayment: 100,
-      maxMonths: 3,
-    };
-    const withDefault = calculateLoanWithOffset(shared);
-    const withExplicit100 = calculateLoanWithOffset({ ...shared, offsetAllocationPct: 100, initialSavingsBalance: 0 });
-    expect(withExplicit100).toEqual(withDefault);
+    // Every dollar of surplus reaches the offset; the starting cash just sits.
+    expect(result.monthlyData.map(d => d.offset)).toEqual([1000, 2000, 3000]);
+    expect(result.monthlyData.map(d => d.savings)).toEqual([5000, 5000, 5000]);
   });
 });
 
@@ -733,7 +706,6 @@ describe('savings interest accrual (savingsInterestRate, TODO-50)', () => {
       loanAmount: 10_000_000,
       monthlyRate: 0,
       monthlyPayment: 100,
-      offsetAllocationPct: 70,
       initialSavingsBalance: 5000,
       maxMonths: 3,
     };
@@ -750,13 +722,12 @@ describe('savings interest accrual (savingsInterestRate, TODO-50)', () => {
       loanAmount: 10_000_000,
       monthlyRate: 0,
       monthlyPayment: 100,
-      offsetAllocationPct: 100, // every dollar of surplus goes to offset, none to savings
       initialSavingsBalance: 10000,
       savingsInterestRate: 12, // -> exactly 1%/month via calculateMonthlyRate
       maxMonths: 3,
     });
-    // No deposits reach savings (offsetAllocationPct: 100) - growth is pure
-    // interest: 10000 -> 10100 -> 10201 -> 10303.01 (rounded to 10303).
+    // No deposits ever reach savings (TODO-136) - growth is pure interest:
+    // 10000 -> 10100 -> 10201 -> 10303.01 (rounded to 10303).
     expect(result.monthlyData.map(d => d.savings)).toEqual([10100, 10201, 10303]);
     expect(result.totalSavingsInterest).toBeCloseTo(303.01, 2);
   });
@@ -1188,7 +1159,6 @@ describe('ETF investing (etfAllocationPct/expectedEtfReturn, TODO-96)', () => {
       loanAmount: 10_000_000,
       monthlyRate: 0,
       monthlyPayment: 100,
-      offsetAllocationPct: 70,
       maxMonths: 3,
     };
     const withDefault = calculateLoanWithOffset(shared);
@@ -1197,7 +1167,7 @@ describe('ETF investing (etfAllocationPct/expectedEtfReturn, TODO-96)', () => {
     expect(withDefault.monthlyData.map(d => d.etf)).toEqual([0, 0, 0]);
   });
 
-  it("diverts etfAllocationPct out of the offset's own share, leaving the savings share untouched - the actual offset-vs-ETF trade-off", () => {
+  it('splits the whole surplus directly between ETF and offset, with nothing going to savings (TODO-136)', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
       personalExpenseItems: [],
@@ -1205,17 +1175,15 @@ describe('ETF investing (etfAllocationPct/expectedEtfReturn, TODO-96)', () => {
       loanAmount: 10_000_000,
       monthlyRate: 0,
       monthlyPayment: 100,
-      offsetAllocationPct: 50,
       etfAllocationPct: 40,
+      initialSavingsBalance: 5000,
       maxMonths: 2,
     });
-    // offsetShare = 500/mo; etfShare = 500*0.4 = 200; offset gets 500-200=300.
-    // savings is entirely unaffected by etfAllocationPct - it still gets the
-    // full non-offset half (500/mo) exactly as offsetAllocationPct alone
-    // would produce.
-    expect(result.monthlyData.map(d => d.offset)).toEqual([300, 600]);
-    expect(result.monthlyData.map(d => d.savings)).toEqual([500, 1000]);
-    expect(result.monthlyData.map(d => d.etf)).toEqual([200, 400]);
+    // 40% of the FULL 1000 surplus goes to ETF, the other 60% to the offset -
+    // no intermediate offset-vs-savings step. The starting cash is inert.
+    expect(result.monthlyData.map(d => d.etf)).toEqual([400, 800]);
+    expect(result.monthlyData.map(d => d.offset)).toEqual([600, 1200]);
+    expect(result.monthlyData.map(d => d.savings)).toEqual([5000, 5000]);
   });
 
   it("grows the ETF balance at expectedEtfReturn net of HALF effectiveTaxRate (TODO-131: AU 50% CGT discount), compounding on the running balance before each month's deposit", () => {
@@ -1226,8 +1194,7 @@ describe('ETF investing (etfAllocationPct/expectedEtfReturn, TODO-96)', () => {
       loanAmount: 10_000_000,
       monthlyRate: 0,
       monthlyPayment: 100,
-      offsetAllocationPct: 100, // the entire surplus would otherwise go to offset
-      etfAllocationPct: 100, // ...all of which instead goes to ETF
+      etfAllocationPct: 100, // the entire surplus goes to ETF instead of the offset
       expectedEtfReturn: 24,
       effectiveTaxRate: 50, // net rate: 24 * (1 - 0.5*0.5) = 18% p.a. -> exactly 1.5%/month
       maxMonths: 3,
@@ -1244,7 +1211,6 @@ describe('ETF investing (etfAllocationPct/expectedEtfReturn, TODO-96)', () => {
       loanAmount: 10_000_000,
       monthlyRate: 0,
       monthlyPayment: 100,
-      offsetAllocationPct: 100,
       etfAllocationPct: 100,
       expectedEtfReturn: 12, // effectiveTaxRate omitted -> full 12% p.a. -> 1%/month
       maxMonths: 2,
@@ -1252,7 +1218,7 @@ describe('ETF investing (etfAllocationPct/expectedEtfReturn, TODO-96)', () => {
     expect(result.monthlyData.map(d => d.etf)).toEqual([1000, 2010]);
   });
 
-  it('composes correctly with offsetAllocationPct - offset + savings + etf sums back to the full surplus', () => {
+  it('conserves the surplus - offset + etf sums back to exactly what came in (TODO-136)', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
       personalExpenseItems: [],
@@ -1260,17 +1226,16 @@ describe('ETF investing (etfAllocationPct/expectedEtfReturn, TODO-96)', () => {
       loanAmount: 10_000_000,
       monthlyRate: 0,
       monthlyPayment: 100,
-      offsetAllocationPct: 50,
       etfAllocationPct: 25,
       maxMonths: 1,
     });
-    // offsetShare = 500; etfShare = 500*0.25 = 125; offset gets 500-125=375;
-    // savings gets the untouched non-offset half (500).
+    // Two destinations now, not three: 25% to ETF, the remaining 75% to the
+    // offset, and nothing lost to a savings pool in between.
     const { offset, savings, etf } = result.monthlyData[0];
-    expect(offset).toBe(375);
-    expect(savings).toBe(500);
-    expect(etf).toBe(125);
-    expect(offset + savings + etf).toBe(1000);
+    expect(etf).toBe(250);
+    expect(offset).toBe(750);
+    expect(savings).toBe(0);
+    expect(offset + etf).toBe(1000);
   });
 });
 
@@ -1283,7 +1248,6 @@ describe('ETF switch trigger (switchThresholdPct, TODO-98)', () => {
       loanAmount: 10_000_000,
       monthlyRate: 0,
       monthlyPayment: 100,
-      offsetAllocationPct: 100,
       etfAllocationPct: 100,
       expectedEtfReturn: 24,
       effectiveTaxRate: 50,
@@ -1305,7 +1269,6 @@ describe('ETF switch trigger (switchThresholdPct, TODO-98)', () => {
       loanAmount: 10_000,
       monthlyRate: 0,
       monthlyPayment: 100,
-      offsetAllocationPct: 100,
       etfAllocationPct: 100,
       switchThresholdPct: 10,
       maxMonths: 3,
@@ -1331,7 +1294,6 @@ describe('ETF switch trigger (switchThresholdPct, TODO-98)', () => {
       loanAmount: 10_000_000,
       monthlyRate: 0,
       monthlyPayment: 100,
-      offsetAllocationPct: 100,
       etfAllocationPct: 100,
       switchThresholdPct: 90, // effectively unreachable in 3 months at this scale
       maxMonths: 3,
@@ -1340,11 +1302,14 @@ describe('ETF switch trigger (switchThresholdPct, TODO-98)', () => {
     expect(result.monthlyData.map(d => d.offset)).toEqual([100, 200, 300]);
   });
 
-  it('combines with offsetAllocationPct < 100 - a slower-accumulating offset delays when the threshold is crossed', () => {
+  // TODO-136: the old version of this test slowed the offset's climb with
+  // offsetAllocationPct. That knob is gone, so a smaller surplus is now the
+  // only way to delay the crossing - which is the same underlying property:
+  // the threshold tracks how fast the offset actually accumulates.
+  it('a smaller surplus accumulates the offset more slowly and delays when the threshold is crossed', () => {
     const shared = {
       contributions: [],
       personalExpenseItems: [],
-      monthlyToOffset: 1000,
       loanAmount: 10_000,
       monthlyRate: 0,
       monthlyPayment: 100,
@@ -1352,31 +1317,12 @@ describe('ETF switch trigger (switchThresholdPct, TODO-98)', () => {
       switchThresholdPct: 10,
       maxMonths: 2,
     };
-    // At offsetAllocationPct: 100 the threshold is already crossed by month 2
-    // (see the test above this one). Halving the share reaching the offset
-    // each month slows the ratio's climb, so the same threshold must still
-    // be untriggered at that same month.
-    const fullOffset = calculateLoanWithOffset({ ...shared, offsetAllocationPct: 100 });
-    const halfOffset = calculateLoanWithOffset({ ...shared, offsetAllocationPct: 50 });
-    expect(fullOffset.monthlyData[1].etf).toBeGreaterThan(0);
-    expect(halfOffset.monthlyData[1].etf).toBe(0);
-  });
-
-  it("leaves etf at 0 the whole time when offsetAllocationPct is 0 - the offset has nothing of its own to divert", () => {
-    const result = calculateLoanWithOffset({
-      contributions: [],
-      personalExpenseItems: [],
-      monthlyToOffset: 1000,
-      loanAmount: 10_000_000,
-      monthlyRate: 0,
-      monthlyPayment: 100,
-      offsetAllocationPct: 0,
-      etfAllocationPct: 100,
-      switchThresholdPct: 0,
-      maxMonths: 3,
-    });
-    expect(result.monthlyData.map(d => d.etf)).toEqual([0, 0, 0]);
-    expect(result.monthlyData.map(d => d.savings)).toEqual([1000, 2000, 3000]);
+    // At 1000/mo the threshold is already crossed by month 2 (see the test
+    // above this one). Halving the surplus keeps the ratio under 10% there.
+    const bigSurplus = calculateLoanWithOffset({ ...shared, monthlyToOffset: 1000 });
+    const smallSurplus = calculateLoanWithOffset({ ...shared, monthlyToOffset: 500 });
+    expect(bigSurplus.monthlyData[1].etf).toBeGreaterThan(0);
+    expect(smallSurplus.monthlyData[1].etf).toBe(0);
   });
 });
 
@@ -1425,7 +1371,11 @@ describe('additional interestRateField scenarios (TODO-57)', () => {
     expect(result.monthlyData[11].balance).toBe(0);
   });
 
-  it('splits the delta-correction term across offset/savings by offsetAllocationPct, not just into the offset', () => {
+  // TODO-136: this used to prove the correction term was split across
+  // offset/savings rather than special-cased into the offset. With savings
+  // gone, the equivalent property is that it's split with the ETF like any
+  // other surplus dollar - not routed straight to the offset.
+  it('feeds the delta-correction term through the normal ETF/offset split, not straight into the offset', () => {
     const loanAmount = 100000;
     const initialRate = 9;
     const initialMonthlyRate = calculateMonthlyRate(initialRate);
@@ -1442,21 +1392,20 @@ describe('additional interestRateField scenarios (TODO-57)', () => {
       // A steep rate DROP so the correction (initial payment - new, lower
       // payment) is unambiguously positive from month 6 on.
       interestRateField: { base: initialRate, changes: [{ startMonth: 6, amount: 2 }] },
-      offsetAllocationPct: 50,
+      etfAllocationPct: 50,
       maxMonths: 12,
     });
 
     // Before the change, there's no surplus at all (no monthlyToOffset, no
-    // income) - offset and savings both stay at 0 through month 5.
+    // income) - offset and etf both stay at 0 through month 5.
     expect(result.monthlyData[4].offset).toBe(0);
-    expect(result.monthlyData[4].savings).toBe(0);
+    expect(result.monthlyData[4].etf).toBe(0);
     // From month 6, the ONLY surplus is the correction term itself - if it
-    // were special-cased to always flow straight to the offset (bypassing
-    // offsetAllocationPct), savings would stay at 0. Instead it's split
-    // evenly, same as any other surplus dollar.
+    // were special-cased straight to the offset, etf would stay at 0.
+    // Instead it splits evenly, same as any other surplus dollar.
     const month6 = result.monthlyData[5];
-    expect(month6.savings).toBeGreaterThan(0);
-    expect(Math.abs(month6.offset - month6.savings)).toBeLessThanOrEqual(1);
+    expect(month6.etf).toBeGreaterThan(0);
+    expect(Math.abs(month6.offset - month6.etf)).toBeLessThanOrEqual(1);
   });
 });
 
@@ -1644,7 +1593,6 @@ describe('ETF losses (negative expectedEtfReturn)', () => {
       loanAmount: 10_000_000,
       monthlyRate: 0,
       monthlyPayment: 100,
-      offsetAllocationPct: 100,
       etfAllocationPct: 100,
       expectedEtfReturn: -12, // -1%/month via calculateMonthlyRate
       maxMonths: 3,
@@ -1689,22 +1637,43 @@ describe('negative gearing tax benefit (isInvestmentProperty, TODO-129)', () => 
     const withDefault = calculateLoanWithOffset(lossMakingShared);
     const withExplicitFalse = calculateLoanWithOffset({ ...lossMakingShared, isInvestmentProperty: false });
     expect(withExplicitFalse).toEqual(withDefault);
-    // Confirms this scenario really is loss-making (netMonthlyDeposit clamps
-    // to 0 every month, so offset never grows on its own) - isolating
-    // isInvestmentProperty as the only thing that could add to it.
+    // Confirms this scenario really is loss-making - the offset never grows
+    // on its own, isolating isInvestmentProperty as the only thing that
+    // could add to it.
     expect(withDefault.monthlyData.map(d => d.offset)).toEqual([0, 0]);
     expect(withDefault.totalNegativeGearingBenefit).toBe(0);
   });
 
-  it('credits the tax benefit into offsetBalance starting the FOLLOWING month, not the loss month itself', () => {
+  // TODO-136 changed this one. It used to assert the month-1 credit was still
+  // sitting in the offset at month 2 (~320), which was only true because a
+  // deficit month was silently floored to zero. Now the same deficit that
+  // caused the loss also consumes the credit it earned - the honest result:
+  // a tax benefit softens a loss-making property, it doesn't fund it.
+  it('lets an ongoing cash deficit consume the gearing credit it earned, surfacing the rest as a shortfall', () => {
     const result = calculateLoanWithOffset({ ...lossMakingShared, isInvestmentProperty: true });
-    // Month 1: rentalIncome 433.33 - expenses 1000 - interest (100000*0.005=500)
-    // = -1066.67 loss -> benefit = 1066.67 * 0.30 = ~320, added to offsetBalance
-    // AFTER month 1's own effectiveOffset (0) was already fixed - so month 1's
-    // own `offset` field is untouched, only month 2 onward reflects it.
-    expect(result.monthlyData[0].offset).toBe(0);
-    expect(result.monthlyData[1].offset).toBeCloseTo(320, 0);
+    // Every month: rent 433.33 - utilities 1000 = -566.67 cash flow.
+    // Month 1: nothing in the offset to draw on -> the full 566.67 is short.
+    //   Then gearing credits ~320 (loss of 1066.67 incl. 500 interest, x30%).
+    // Month 2: the 566.67 deficit drains that ~320 to zero, leaving ~247 short.
+    expect(result.monthlyData.map(d => d.offset)).toEqual([0, 0]);
+    expect(result.monthlyData[0].cashShortfall).toBeCloseTo(567, 0);
+    expect(result.monthlyData[1].cashShortfall).toBeCloseTo(247, 0);
     expect(result.totalNegativeGearingBenefit).toBeGreaterThan(0);
+  });
+
+  // The one-month lag TODO-129 established is still real - it's just only
+  // observable when the household can actually cover the property's deficit,
+  // which is the realistic negative-gearing case (salary funds the shortfall).
+  it('still applies the credit a month late when the household covers the property deficit', () => {
+    const covered = { ...lossMakingShared, monthlyToOffset: 2000, maxMonths: 3 };
+    const geared = calculateLoanWithOffset({ ...covered, isInvestmentProperty: true });
+    const plain = calculateLoanWithOffset(covered);
+
+    expect(geared.totalCashShortfall).toBe(0);
+    // Month 1 is identical - the credit lands after that month's offset is
+    // already fixed. Only month 2 onward diverges.
+    expect(geared.monthlyData[0].offset).toBe(plain.monthlyData[0].offset);
+    expect(geared.monthlyData[1].offset).toBeGreaterThan(plain.monthlyData[1].offset);
   });
 
   it('applies no benefit when the property is cash-flow POSITIVE that month', () => {
@@ -1740,8 +1709,79 @@ describe('negative gearing tax benefit (isInvestmentProperty, TODO-129)', () => 
   });
 });
 
+// TODO-136: a deficit month used to be wrapped in Math.max(0, ...) and simply
+// vanish. It now draws down the offset and, once that's empty, is reported.
+describe('cash shortfall on deficit months (TODO-136)', () => {
+  // Surplus of +1000/mo for 2 months, then a one-time 3000 expense in month 3
+  // -> a 2000 deficit against a 2000 offset balance, draining it to exactly 0.
+  const deficitShared = {
+    contributions: [],
+    personalExpenseItems: [{ id: 1, name: 'Custom', amount: 3000, startMonth: 3, recurrence: 'none', endMonth: 3 }],
+    monthlyToOffset: 1000,
+    loanAmount: 10_000_000,
+    monthlyRate: 0,
+    monthlyPayment: 100,
+    maxMonths: 3,
+  };
+
+  it('reports no shortfall at all when every month is in surplus', () => {
+    const result = calculateLoanWithOffset({ ...deficitShared, personalExpenseItems: [] });
+    expect(result.totalCashShortfall).toBe(0);
+    expect(result.monthsWithShortfall).toBe(0);
+    expect(result.monthlyData.map(d => d.cashShortfall)).toEqual([0, 0, 0]);
+  });
+
+  it('absorbs a deficit out of the offset without reporting a shortfall while the offset covers it', () => {
+    const result = calculateLoanWithOffset(deficitShared);
+    // Offset reaches 2000 by month 2, then the 2000 net deficit empties it.
+    expect(result.monthlyData.map(d => d.offset)).toEqual([1000, 2000, 0]);
+    expect(result.totalCashShortfall).toBe(0);
+    expect(result.monthsWithShortfall).toBe(0);
+  });
+
+  it('reports the remainder once the deficit outlives the offset', () => {
+    const result = calculateLoanWithOffset({
+      ...deficitShared,
+      personalExpenseItems: [{ id: 1, name: 'Custom', amount: 5000, startMonth: 3, recurrence: 'none', endMonth: 3 }],
+    });
+    // Month 3: 1000 income - 5000 expense = -4000, against a 2000 offset.
+    expect(result.monthlyData.map(d => d.offset)).toEqual([1000, 2000, 0]);
+    expect(result.monthlyData.map(d => d.cashShortfall)).toEqual([0, 0, 2000]);
+    expect(result.totalCashShortfall).toBe(2000);
+    expect(result.monthsWithShortfall).toBe(1);
+  });
+
+  it('never drives the offset negative, however large the deficit', () => {
+    const result = calculateLoanWithOffset({
+      ...deficitShared,
+      personalExpenseItems: [{ id: 1, name: 'Custom', amount: 500_000, startMonth: 3, recurrence: 'none', endMonth: 3 }],
+    });
+    // The floor is load-bearing, not defensive: a negative offset would make
+    // effectiveBalance exceed the real balance and inflate interest, breaking
+    // the re-amortization guarantee that a loan pays off exactly at term end
+    // (the two multi-rate-change tests above are the regression canary).
+    result.monthlyData.forEach((d) => {
+      expect(d.offset).toBeGreaterThanOrEqual(0);
+      expect(d.effectiveBalance).toBeGreaterThanOrEqual(0);
+    });
+    expect(result.monthlyData[2].offset).toBe(0);
+    // Month 3 net = 1000 income - 500000 expense = -499000, minus the 2000
+    // the offset could cover.
+    expect(result.monthlyData[2].cashShortfall).toBe(497_000);
+  });
+
+  it('makes no ETF contribution in a deficit month - you cannot invest money you do not have', () => {
+    const result = calculateLoanWithOffset({
+      ...deficitShared,
+      etfAllocationPct: 50,
+    });
+    // Months 1-2 split 1000 evenly; month 3's deficit adds nothing to ETF.
+    expect(result.monthlyData.map(d => d.etf)).toEqual([500, 1000, 1000]);
+  });
+});
+
 describe('every knob combined at once (regression safety net)', () => {
-  it('composes effectiveTaxRate + etfAllocationPct + switchThresholdPct + offsetAllocationPct all together without crashing or producing garbage', () => {
+  it('composes effectiveTaxRate + etfAllocationPct + switchThresholdPct all together without crashing or producing garbage', () => {
     const result = calculateLoanWithOffset({
       contributions: [],
       personalExpenseItems: [],
@@ -1750,7 +1790,6 @@ describe('every knob combined at once (regression safety net)', () => {
       loanAmount: 10_000,
       monthlyRate: 0,
       monthlyPayment: 100,
-      offsetAllocationPct: 80,
       etfAllocationPct: 50,
       expectedEtfReturn: 12,
       effectiveTaxRate: 20,

@@ -19,6 +19,8 @@ describe('getTimelineSnapshot', () => {
       totalInterestPaid: 0,
       totalPrincipalPaid: 0,
       propertyValue: 0,
+      // TODO-136: no month has been lived through yet, so nothing can be short.
+      cashShortfall: 0,
     });
   });
 

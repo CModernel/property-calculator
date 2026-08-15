@@ -10,9 +10,14 @@ describe('parseScenarioPayload', () => {
     expect(parseScenarioPayload('')).toBeNull();
   });
 
+  // Uses the injectable expectedVersion rather than hardcoding the current
+  // SCHEMA_VERSION, so these stay meaningful across bumps. The literal used
+  // to be 9; TODO-136's bump to 10 made it fail, and the "data is missing"
+  // case below would have started passing for the wrong reason (version
+  // mismatch, not the missing key it claims to test).
   it('returns the data when the version matches', () => {
-    const raw = JSON.stringify({ version: 9, data: { propertyPrice: 900000 } });
-    expect(parseScenarioPayload(raw)).toEqual({ propertyPrice: 900000 });
+    const raw = JSON.stringify({ version: 42, data: { propertyPrice: 900000 } });
+    expect(parseScenarioPayload(raw, 42)).toEqual({ propertyPrice: 900000 });
   });
 
   it('returns null when the version does not match', () => {
@@ -26,8 +31,8 @@ describe('parseScenarioPayload', () => {
   });
 
   it('returns null when data is missing', () => {
-    const raw = JSON.stringify({ version: 9 });
-    expect(parseScenarioPayload(raw)).toBeNull();
+    const raw = JSON.stringify({ version: 42 });
+    expect(parseScenarioPayload(raw, 42)).toBeNull();
   });
 });
 

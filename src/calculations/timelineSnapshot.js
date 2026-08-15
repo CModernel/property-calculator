@@ -9,10 +9,12 @@ export function getTimelineSnapshot(timelineMonth, monthlyData, loanAmount, mont
     return {
       balance: loanAmount,
       offset: 0,
-      // TODO-49/80: mirrors offsetSimulation.js's own initialSavingsBalance -
-      // the actual cash sitting in the bank (cashRemaining) before any
-      // monthly surplus has been split, same "nothing has happened yet"
-      // convention as the rest of this synthetic snapshot.
+      // TODO-80/136: mirrors offsetSimulation.js's own initialSavingsBalance -
+      // the actual cash sitting in the bank (cashRemaining) at settlement,
+      // same "nothing has happened yet" convention as the rest of this
+      // synthetic snapshot. Since TODO-136 no monthly surplus is ever added
+      // to it, so this is the starting position of a balance that only
+      // compounds at its own Savings Interest Rate.
       savings: Math.round(initialSavingsBalance),
       // TODO-96: no seed input exists for this - the ETF balance always
       // starts at 0.
@@ -24,6 +26,9 @@ export function getTimelineSnapshot(timelineMonth, monthlyData, loanAmount, mont
       // TODO-89: mirrors offsetSimulation.js's own propertyValue - nothing
       // has grown yet at month 0, so it's just the purchase price.
       propertyValue: Math.round(initialPropertyValue),
+      // TODO-136: no month has been lived through yet, so nothing can be
+      // short. Present rather than undefined to match monthlyData's shape.
+      cashShortfall: 0,
     };
   }
   return monthlyData.find(d => d.month === timelineMonth) || monthlyData[monthlyData.length - 1];

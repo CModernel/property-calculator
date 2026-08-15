@@ -4020,6 +4020,72 @@ optionally reuse in the commit message when you implement it.
   `npm test -- --run` (509/509), `npm run lint`, `npm run build` clean.
   Spanish-text sweep clean. Verified no `realistic*` identifier and no
   user-visible "Realistic Mode" string remains in `src/`.
+
+- [x] **TODO-136: Direct Offset-vs-ETF monthly split (replaces the two-step Offset/Savings/ETF model)**
+  Supersedes TODO-124 and TODO-130. The monthly surplus now splits DIRECTLY
+  between the offset and ETF investing via `etfAllocationPct`; the ongoing
+  "Savings" destination and its `offsetAllocationPct` slider are gone. The
+  settled reasoning: an offset already gives you everything a savings
+  account does (fully liquid) PLUS it reduces guaranteed, effectively
+  tax-free loan interest, so "offset vs savings vs ETF" was never a real
+  decision - "offset vs ETF" is.
+  **The de-risking discovery, made before writing any code:** at
+  `offsetAllocationPct: 100` (the default) the new model is *mathematically
+  identical* to the old one - old `etfShare = (net x 100/100) x etfPct/100`,
+  new `etfShare = net x etfPct/100`. Verified empirically by capturing four
+  scenarios (default, ETF 30%, ETF 30% + 25% threshold, ETF 100%) before the
+  change and diffing after: byte-identical months/interest/offset/etf/
+  savings. So nobody who left the slider alone sees any change at all, and
+  every test passing 100 or omitting it kept its exact numbers.
+  **Signed cash flow - the real behaviour change.** `netMonthlyDeposit` was
+  wrapped in `Math.max(0, ...)`, so a deficit month silently cost nothing.
+  It's now `netMonthlyCashFlow`, signed: a deficit draws down the offset
+  and, once that's empty, the remainder is recorded as a real cash
+  shortfall (`cashShortfall` per month, `totalCashShortfall` /
+  `monthsWithShortfall` on the result). The zero floor on the drawdown is
+  load-bearing, not defensive - a negative offset would make
+  `effectiveBalance` exceed `balance`, inflating interest and breaking the
+  TODO-57 guarantee that a re-amortized loan still pays off exactly at term
+  end. Two existing multi-rate-change tests silently depended on that and
+  are now the regression canary for it. A deficit month also makes no ETF
+  contribution: you can't invest money you don't have.
+  **Surfacing (decided with the user):** a per-month `⚠️ Short: $X` row in
+  the Timeline Explorer plus a summary warning in the Loan Simulation card.
+  That warning deliberately complements rather than duplicates the existing
+  "❌ Need $X/month extra" status in Total Summary - that one catches a
+  month-1 shortfall from static figures, this one catches shortfalls that
+  only emerge DURING the projection (scheduled expenses, a rate change,
+  expense growth outpacing income), which nothing surfaced before.
+  **Persistence:** `SCHEMA_VERSION` 9 -> 10. Old scenarios carrying
+  `offsetAllocationPct` fail the version check and reset to defaults - the
+  established discard-not-migrate precedent, and TODO-136 Phase 2's own
+  decision. While there, rewrote the two `scenarioStorage.test.js` cases
+  that hardcoded the version literal to use the injectable `expectedVersion`
+  instead, so they stay meaningful across future bumps; one of them would
+  otherwise have started passing for the wrong reason (version mismatch
+  rather than the missing key it claims to test).
+  **Copy rewritten, not just unhooked** - six places described the
+  offset-vs-savings split and had become factually wrong: the page subtitle,
+  the Savings Interest Rate helper ("plus whatever isn't sent to the offset
+  each month"), the ETF Allocation helper, the results heading ternary, the
+  "To Offset / To Savings" panel (now "To Offset / To ETF", gated on ETF
+  being active), and the Timeline savings-row comment.
+  **The card move to "Extra Investments & Strategies" was deliberately
+  deferred to TODO-137**, where it gains its second occupant - moving the
+  ETF block now would have been a pure relocation with no user-visible
+  benefit, doubling an already-large diff.
+  Tests: rewrote the whole `offset vs. savings split (TODO-49)` describe
+  block and eight semantics-dependent ETF/switch-trigger cases; added five
+  new cash-shortfall tests (no shortfall in surplus, offset absorbs a
+  deficit, remainder reported once the offset is dry, never goes negative,
+  no ETF contribution in a deficit month) and three App-level ones. The
+  TODO-129 negative-gearing lag test changed meaning honestly: the deficit
+  that caused the loss now also consumes the gearing credit it earned, so
+  the lag is re-proven in a separate test where the household actually
+  covers the property's deficit (the realistic negative-gearing case).
+  `npm test -- --run` (515/515), `npm run lint`, `npm run build` clean.
+  Spanish-text sweep clean. Verified no `offsetAllocationPct` identifier and
+  no "Offset Allocation" string remains in `src/`.
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -4333,6 +4399,14 @@ optionally reuse in the commit message when you implement it.
   Scope: needs user decision before any code changes. A middle ground is
   possible: show the "month 1" values always (conservative) and add a
   second row for "projected at year N", labelling each clearly.
+  **Related wrinkle from TODO-136 (2026-08-16):** "Offset Utilisation (this
+  month)" reads `snapshot.offset`, which can now go DOWN over time - a
+  deficit month draws the offset balance down. Every band label it uses
+  ("Building", "Early days") assumes monotonic progress. Worth resolving
+  alongside the Day 1 / projected question rather than separately. The
+  simulation also now reports `totalCashShortfall`/`monthsWithShortfall`,
+  which no Health Check indicator consumes yet - `classifyByBands` is the
+  shared mechanism if one is wanted.
 
 - [ ] **TODO-134: Health Check indicators that depend on income don't reflect future income sources**
   Several Health Check indicators are computed via
@@ -4492,137 +4566,6 @@ optionally reuse in the commit message when you implement it.
   views. Tagged as "(Analysis only, large scope)" to signal that this entry
   records product/architecture decisions and does not authorize code changes.
 
-- [ ] **TODO-136 (Analysis/design): Direct Offset-vs-ETF monthly split (replaces the two-step Offset/Savings/ETF model)**
-  **Relationship to TODO-124 and TODO-130:** this item replaces both. TODO-124
-  proposed changing where ETF money is sourced while preserving the existing
-  Offset/Savings intermediary. TODO-130 identified the better product model:
-  remove the ongoing Savings allocation and split monthly surplus directly
-  between Offset and ETF. The user confirmed that a generic Savings destination
-  does not make sense for this calculator because money in the Offset remains
-  accessible while also reducing mortgage interest. Do not implement TODO-124
-  separately; the direct model below (TODO-136), its comparison UI (TODO-137),
-  and its risk/timing scenarios (TODO-138) supersede it.
-
-  **Goal:** make the default and easiest strategy "send surplus to Offset",
-  while allowing the user to opt into ETF investing without pretending that the
-  calculator can know the universally best investment date or percentage.
-
-  ### Phase 1 — Direct Offset/ETF cash-flow model
-
-  Replace the current two-step ongoing allocation with one direct control:
-
-  - Remove the ongoing monthly role of `offsetAllocationPct` as a separate
-    Offset-versus-Savings slider.
-  - Use one clearly named **ETF Allocation** percentage to split positive
-    monthly surplus directly:
-    ```
-    monthly surplus > 0
-    ├── ETF allocation                 → ETF contribution
-    └── 100% - ETF allocation         → Offset contribution
-    ```
-  - At 0%, all positive surplus goes to Offset. This should be the safe,
-    simplest default and the natural representation of the user's preference.
-  - Do not send ETF contributions when the month's cash flow is negative.
-    The direct model should use signed cash flow: a deficit first reduces the
-    Offset balance (never below zero), and any remaining deficit is surfaced as
-    a cash shortfall instead of being silently discarded by the current
-    `Math.max(0, ...)` behavior. Automatically drawing the separate initial
-    Available Savings balance to cover that shortfall is out of this phase
-    unless explicitly chosen, because it changes the user's emergency-reserve
-    assumption.
-  - Keep `initialSavingsBalance` / **Available Savings** as the user's
-    pre-existing cash and settlement-liquidity position. Removing the ongoing
-    Savings destination must not remove or rename this initial-liquidity input.
-  - Keep `savingsInterestRate` and compounding of the initial savings balance
-    unchanged in this phase, as already decided in TODO-130. It models the
-    starting cash position only; no future monthly surplus is deposited into
-    that balance. If that remaining starting-cash projection is later judged
-    confusing, it should become a separate follow-up rather than being changed
-    implicitly during the Offset/ETF refactor.
-  - Keep one-time or scheduled **Offset Contributions** independent from the
-    recurring ETF allocation. Sale, inheritance, or other extraordinary
-    proceeds should default to the Offset and must not silently become ETF
-    contributions.
-  - **Keep `switchThresholdPct`**, reframed to gate the new direct split
-    instead of the old etfShare-carve-out: ETF Allocation stays inactive
-    (100% of surplus goes to Offset regardless of the configured %) until
-    the Offset balance reaches this % of the remaining loan balance, then
-    turns on for good (same monotonic, stateless check as today - see
-    `offsetSimulation.js`'s existing `etfSwitchActive` calculation, which
-    the direct model reuses unchanged). This preserves the "protect first,
-    then invest" behavior external financial-planning research (a 2026-08-13
-    session) independently identified as the right approach - it isn't a new
-    concept, this app already had it via TODO-98.
-
-  **Required naming/copy change:** the UI must explain that the slider controls
-  the percentage of *future positive monthly surplus* invested in ETFs; the
-  remainder goes to Offset. It must no longer describe ETFs as being carved out
-  of the Offset's own share or imply that Savings is a third ongoing destination.
-
-  **UI boundary:** ETF controls are not part of the basic Financial Position
-  card after this work. They belong in a dedicated Advanced-only
-  **Extra Investments & Strategies** card. TODO-126's master visibility toggle
-  remains the compatibility/opt-in guard, but the card itself becomes the
-  home for ETF settings, comparisons and future risk tools. If an advanced ETF
-  strategy is active while Simple is selected, Simple must disclose that fact
-  rather than silently changing or ignoring the strategy.
-
-  ### Phase 2 — Persistence (decided: version bump, not a migration formula)
-
-  A 2026-08-12 analysis session checked `scenarioStorage.js`'s actual history:
-  every one of its 9 prior `SCHEMA_VERSION` bumps handled a breaking shape
-  change by rejecting the mismatched old payload outright
-  (`parsed?.version !== expectedVersion -> return null`, resetting to
-  defaults) - never by transforming old fields into new ones. There is no
-  precedent anywhere in this codebase for a deterministic field-migration
-  function, and the file's own comment states the design philosophy
-  explicitly: "a half-migrated state is worse than starting from defaults."
-  Decided: follow that same established precedent here, not a new formula.
-
-  - Bump `SCHEMA_VERSION` in `scenarioStorage.js` once the old
-    `offsetAllocationPct`/`etfAllocationPct` shape is removed.
-  - Old saved scenarios simply fail the version check and reset to defaults,
-    exactly like every prior breaking change - no `oldOffsetAllocationPct *
-    oldEtfAllocationPct / 100` conversion formula, no new migration
-    machinery.
-  - Preserve unrelated ETF settings, including the TODO-126 master visibility
-    toggle and any Strategy Comparison settings, where their meaning remains
-    valid (these aren't part of the removed shape, so a fresh-default reset
-    only needs to re-apply where the removed fields actually were).
-  - When TODO-126's ETF master toggle is off, the configured ETF percentage is
-    preserved for re-enabling but the simulation must use an effective 0% ETF
-    allocation, sending all positive surplus to Offset and hiding ETF outputs.
-
-  **Dependencies/coordination:** TODO-8 (Timeline snapshot), TODO-32
-  (scheduled Offset Contributions), TODO-126 (ETF visibility toggle), and
-  TODO-127 (tax-rate semantics, unaffected by this split). See TODO-137
-  (Timeline comparison UI) and TODO-138 (risk/timing scenarios) - split out
-  from this item during the same 2026-08-12 analysis session because they
-  need materially new UI/scenario logic, not simple reuse of what exists
-  today.
-
-  ### Acceptance criteria
-
-  - A new session with ETF Allocation at 0% sends all positive recurring
-    surplus to Offset and has no ongoing Savings diversion.
-  - Changing ETF Allocation changes the direct Offset/ETF split without
-    changing the user's initial Available Savings or scheduled one-time Offset
-    Contributions.
-  - A negative-cash-flow month does not create a synthetic ETF contribution;
-    it reduces Offset up to the available balance and exposes any remaining
-    shortfall rather than silently flooring the deficit to zero.
-  - Turning off the ETF master toggle produces the same financial path as 0%
-    ETF allocation while preserving the configured ETF percentage for later.
-  - Old saved scenarios using the previous Offset/Savings/ETF model fail the
-    version check and reset to defaults, consistent with every prior
-    `SCHEMA_VERSION` bump - not a migrated/transformed value.
-  - Tests cover the direct allocation formula, zero/100% boundaries, negative
-    surplus, and the version-bump reset behavior for old scenarios.
-
-  This is a multi-step implementation and should be planned as a dedicated
-  session; this entry records the product direction only and does not
-  authorize code changes by itself.
-
 - [ ] **TODO-137 (Analysis/design, depends on TODO-136): Dedicated Advanced strategy-comparison panel (100% Offset vs Custom vs 100% ETF)**
   Split out from the original single-entry TODO-136 during a 2026-08-12
   analysis session: a code-validation pass found there is no standalone
@@ -4677,6 +4620,24 @@ optionally reuse in the commit message when you implement it.
   Render this panel inside the Advanced-only **Extra Investments & Strategies**
   card. It must not be required for the Simple affordability answer; Simple may
   expose only a short notice/link that advanced strategies are available.
+  **This TODO now also OWNS CREATING that card** - TODO-136 deliberately
+  deferred it here (2026-08-16) rather than shipping a pure relocation with
+  no second occupant. The ETF block is a clean contiguous extraction from
+  Financial Position's Advanced Assumptions expander; non-ETF content sits
+  before it (Savings Interest Rate, Credit Card) and after it (Mortgage-Free
+  Age) and must stay behind. `financialPositionAdvancedCustomized` in
+  `App.jsx` has an ETF clause that needs dropping when the block leaves.
+
+  **Two semantic wrinkles TODO-136 introduced, to resolve here:**
+  - `strategyComparison.js`'s `riskScore` is `etf / (etf + offset)`. Now that
+    a deficit month can DRAIN the offset, that ratio conflates "invested
+    heavily" with "ran out of cash" - two very different situations that
+    would render identically in the Pareto table.
+  - The grid surfaces no cash-shortfall signal at all, so a cell that only
+    looks good because it burned through the offset is indistinguishable
+    from a healthy one. `calculateLoanWithOffset` now returns
+    `totalCashShortfall`/`monthsWithShortfall` per run, so the data is
+    already there to use.
 
   Depends on TODO-136 (needs the direct-model % to frame "Custom" cleanly
   against the 100%/0% boundaries).

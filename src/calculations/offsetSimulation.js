@@ -36,16 +36,15 @@ export function calculateLoanWithOffset({
   // rate behavior (monthlyRate/monthlyPayment never change), so every caller
   // that doesn't pass this keeps working unchanged.
   interestRateField = null,
-  // TODO-49: what share of the monthly surplus goes to the loan offset vs.
-  // a separately-tracked savings balance. 100 (the default) means every
-  // existing caller/test that omits this keeps the old all-to-offset
-  // behavior byte-for-byte.
-  offsetAllocationPct = 100,
-  // TODO-80: the savings side needs a starting point to accumulate from -
-  // the real caller seeds this with cashRemaining (the static "Remaining
+  // TODO-80/136: the user's pre-existing cash position at settlement - the
+  // real caller seeds this with cashRemaining (the static "Remaining
   // Savings" figure, src/calculations/totalCashRequired.js), the actual
   // cash sitting in the bank right after settlement. Defaults to 0 so
   // existing tests that don't care about it are unaffected.
+  // TODO-136 removed the ONGOING savings destination (the old
+  // offsetAllocationPct split): monthly surplus now goes to the offset and
+  // the ETF only, never to a third savings pool. This balance is a starting
+  // position that compounds on its own, not somewhere new money lands.
   initialSavingsBalance = 0,
   // TODO-50: annual % interest on the savings balance, compounded monthly.
   // 0 (the default) means every existing caller/test that omits this keeps
@@ -103,12 +102,15 @@ export function calculateLoanWithOffset({
   // on this same flag. false (default) means every existing caller/test
   // that omits this keeps working unchanged.
   isInvestmentProperty = false,
-  // TODO-96: what share of the OFFSET's OWN portion of the surplus
-  // instead goes to a growing ETF balance (the savings share, via
-  // offsetAllocationPct's remainder, is untouched) - the actual
-  // offset-vs-ETF trade-off, not a further split of savings. 0 (default)
-  // means every existing caller/test that omits this keeps working
-  // unchanged - the offset gets its full share, byte-for-byte.
+  // TODO-96/136: what share of the month's POSITIVE surplus goes to a
+  // growing ETF balance instead of the offset - the offset takes the
+  // remainder. TODO-136 made this a direct split of the whole surplus;
+  // it used to carve a slice out of the offset's own share after an
+  // offsetAllocationPct offset-vs-savings split ran first. At that
+  // parameter's old 100 default the two are arithmetically identical
+  // (100% of surplus reached the offset, so a % of it was a % of the
+  // whole), so this is not a behavior change for anyone who left it
+  // alone. 0 (default) sends the entire surplus to the offset.
   etfAllocationPct = 0,
   // TODO-96: annual % expected ETF return, taxed by effectiveTaxRate
   // before being applied (an untaxed ETF return compared against the
@@ -142,7 +144,7 @@ export function calculateLoanWithOffset({
     contributions.reduce((s, c) => s + c.amount, 0) === 0 &&
     !(initialSavingsBalance > 0 && savingsInterestRate > 0)
   ) {
-    return { years: 999, months: maxMonths, totalInterest: 999999, totalSavingsInterest: 0, totalNegativeGearingBenefit: 0, monthlyData: [] };
+    return { years: 999, months: maxMonths, totalInterest: 999999, totalSavingsInterest: 0, totalNegativeGearingBenefit: 0, totalCashShortfall: 0, monthsWithShortfall: 0, monthlyData: [] };
   }
 
   // TODO-90/91: split once outside the loop (incomeSources itself never
@@ -168,6 +170,11 @@ export function calculateLoanWithOffset({
   let totalInterest = 0;
   let totalSavingsInterest = 0;
   let totalNegativeGearingBenefit = 0;
+  // TODO-136: months where the deficit outlived the offset balance - real
+  // money the plan doesn't cover, which the old Math.max(0, ...) floor used
+  // to swallow silently.
+  let totalCashShortfall = 0;
+  let monthsWithShortfall = 0;
   let months = 0;
   const monthlyData = [];
   const savingsMonthlyRate = calculateMonthlyRate(savingsInterestRate);
@@ -281,9 +288,9 @@ export function calculateLoanWithOffset({
       monthlyExpensesForMonth *= expenseGrowthMultiplier;
     }
 
-    // Add regular monthly deposit to offset (this month's income, minus this
-    // month's property/personal expenses and exceptional expenses). We
-    // assume exceptional expenses come out of the surplus first.
+    // This month's net cash flow (income, minus property/personal expenses
+    // and exceptional expenses). We assume exceptional expenses come out of
+    // the surplus first.
     // `monthlyToOffset` here excludes income and expenseFields - both are
     // added/subtracted per month above instead, since neither can be
     // pre-collapsed into a single constant once either can change
@@ -291,11 +298,12 @@ export function calculateLoanWithOffset({
     // term corrects for a rate change (TODO-57): it's 0 whenever the payment
     // hasn't changed, and otherwise reconciles monthlyToOffset's stale baked-
     // in original payment with whatever installment is actually active now.
-    const netMonthlyDeposit = Math.max(
-      0,
-      monthlyToOffset + (initialMonthlyPayment - currentMonthlyPayment) + monthlyIncomeThisMonth - monthlyExpensesForMonth
-        - monthlyPersonalExpensesCost
-    );
+    // TODO-136: SIGNED - this used to be wrapped in Math.max(0, ...), which
+    // silently pretended a deficit month cost nothing. A shortfall is real
+    // money the plan doesn't cover, so it's now drawn from the offset and,
+    // once that's empty, reported (see the branch below).
+    const netMonthlyCashFlow = monthlyToOffset + (initialMonthlyPayment - currentMonthlyPayment)
+      + monthlyIncomeThisMonth - monthlyExpensesForMonth - monthlyPersonalExpensesCost;
     // TODO-50: interest accrues on last month's ending balance BEFORE this
     // month's deposit is added - matches how a real bank statement works
     // (existing balance earns interest, new deposits start earning next
@@ -307,25 +315,37 @@ export function calculateLoanWithOffset({
     // deposit" convention as savings above - a no-op at the 0% default.
     etfBalance += etfBalance * etfMonthlyRate;
 
-    // TODO-49: only offsetAllocationPct of the surplus reaches the offset -
-    // the rest builds the separately-tracked savings balance instead.
-    const offsetShare = netMonthlyDeposit * (offsetAllocationPct / 100);
-    savingsBalance += netMonthlyDeposit - offsetShare;
     // TODO-98: switchThresholdPct gates when etfAllocationPct actually
     // kicks in - a stateless check using THIS month's offsetBalance
     // (already includes any contributions above) against last month's
     // ending balance is enough, since the ratio only ever grows.
     const etfSwitchActive = (offsetBalance / balance) * 100 >= switchThresholdPct;
     const effectiveEtfAllocationPct = etfSwitchActive ? etfAllocationPct : 0;
-    // TODO-96: effectiveEtfAllocationPct diverts a share of the OFFSET's
-    // OWN portion into the ETF balance instead - this is the actual
-    // "offset vs ETF" trade-off TODO-52's analysis was about (slower
-    // payoff, potentially higher return), not a further split of the
-    // savings side. 0% (default) means offsetBalance gets offsetShare in
-    // full, byte-for-byte unchanged.
-    const etfShare = offsetShare * (effectiveEtfAllocationPct / 100);
-    offsetBalance += offsetShare - etfShare;
-    etfBalance += etfShare;
+    // TODO-136: the direct Offset-vs-ETF split. A surplus month divides
+    // between the two; there is no third savings destination any more (the
+    // offset already gives you everything a savings account does - fully
+    // liquid - PLUS it reduces guaranteed, effectively tax-free interest).
+    let cashShortfallThisMonth = 0;
+    if (netMonthlyCashFlow >= 0) {
+      const etfShare = netMonthlyCashFlow * (effectiveEtfAllocationPct / 100);
+      offsetBalance += netMonthlyCashFlow - etfShare;
+      etfBalance += etfShare;
+    } else {
+      // A deficit draws down the offset first, and NEVER below zero. That
+      // floor is load-bearing, not defensive: a negative offsetBalance would
+      // make effectiveBalance exceed balance below, inflating interest and
+      // breaking the re-amortization guarantee that a loan still pays off
+      // exactly at term end. Deliberately no ETF contribution in a deficit
+      // month - you cannot invest money you don't have.
+      const deficit = -netMonthlyCashFlow;
+      const drawnFromOffset = Math.min(deficit, offsetBalance);
+      offsetBalance -= drawnFromOffset;
+      cashShortfallThisMonth = deficit - drawnFromOffset;
+      if (cashShortfallThisMonth > 0) {
+        totalCashShortfall += cashShortfallThisMonth;
+        monthsWithShortfall++;
+      }
+    }
 
     // Offset cannot exceed loan balance
     const effectiveOffset = Math.min(offsetBalance, balance);
@@ -354,8 +374,8 @@ export function calculateLoanWithOffset({
       if (propertyCashFlow < 0) {
         // Full effectiveTaxRate, NOT TODO-131's 50%-CGT-discounted rate -
         // that discount is specific to capital gains; this is ordinary-
-        // income relief. Added directly to offsetBalance, bypassing
-        // offsetAllocationPct/etfAllocationPct entirely, same as one-time
+        // income relief. Added directly to offsetBalance, bypassing the
+        // etfAllocationPct split entirely, same as one-time
         // Offset Contributions above - and only AFTER this month's own
         // monthlyInterest/effectiveOffset are already fixed, so the benefit
         // affects next month's offset onward, never this month's (avoids a
@@ -381,7 +401,10 @@ export function calculateLoanWithOffset({
       monthlyInterestPaid: Math.round(monthlyInterest),
       totalInterestPaid: Math.round(totalInterest),
       totalPrincipalPaid: Math.round(loanAmount - balance),
-      propertyValue: Math.round(calculateCompoundedValue(propertyPrice, propertyGrowthRate, months))
+      propertyValue: Math.round(calculateCompoundedValue(propertyPrice, propertyGrowthRate, months)),
+      // TODO-136: 0 in any month the cash flow covered itself (or the offset
+      // absorbed the deficit) - only positive once the offset ran dry.
+      cashShortfall: Math.round(cashShortfallThisMonth)
     });
 
     // If offset >= remaining balance, we're done
@@ -397,6 +420,8 @@ export function calculateLoanWithOffset({
     totalInterest: totalInterest,
     totalSavingsInterest: totalSavingsInterest,
     totalNegativeGearingBenefit: totalNegativeGearingBenefit,
+    totalCashShortfall: totalCashShortfall,
+    monthsWithShortfall: monthsWithShortfall,
     monthlyData: monthlyData
   };
 }
