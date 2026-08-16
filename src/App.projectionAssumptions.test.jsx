@@ -167,10 +167,25 @@ describe('Invest in ETFs / Strategy Comparison', () => {
     expect(screen.getByText('🔍 Strategy Comparison')).toBeInTheDocument();
     // "ETF Balance" is skipped here - it nests its own InfoTooltip inside the
     // <th>, same accessible-name gotcha as the checkboxes above.
-    for (const header of ['Switch', 'Allocation', 'Interest Paid', 'Risk', 'Crash Test']) {
+    for (const header of ['Switch', 'Allocation', 'Interest Paid', 'Risk', 'Crash Test', 'Cash Shortfall']) {
       expect(screen.getByText(header)).toBeInTheDocument();
     }
     expect(screen.getAllByRole('button', { name: /^(Apply|Applied)$/ }).length).toBeGreaterThan(0);
+  });
+
+  // TODO-143: the default scenario has no deficit month anywhere, so every
+  // Pareto row should read "None" - the red-flagged path is covered precisely
+  // at the calculation layer (strategyComparison.test.js), this just proves
+  // the column is wired up and defaults to the honest, unflagged reading.
+  it('shows no cash shortfall flag for a scenario with no deficit months', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openEtfSection(user);
+    await user.click(screen.getByRole('checkbox', INVEST_IN_ETFS_CHECKBOX));
+
+    const strategySection = screen.getByText('🔍 Strategy Comparison').closest('div');
+    expect(screen.queryByText(/⚠️.*over.*mo/)).not.toBeInTheDocument();
+    expect(within(strategySection).getAllByText('None').length).toBeGreaterThan(0);
   });
 
   it('clicking Apply on a table row updates the ETF Allocation and Switch Trigger sliders to match that row', async () => {

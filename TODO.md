@@ -4155,6 +4155,48 @@ optionally reuse in the commit message when you implement it.
   already-large diff.
   `npm test -- --run` (538/538), `npm run lint`, `npm run build` clean.
   Spanish-text sweep clean.
+
+- [x] **TODO-143: Surfaced cash shortfall in the Pareto Strategy Comparison**
+  Split out of TODO-137 (2026-08-16) before implementing it - a correctness/
+  honesty fix in already-shipped UI, not a new feature. Since TODO-136 made
+  deficit months real (a shortfall drains the offset instead of being
+  silently floored to zero), `selectParetoFront` had a real gap: it optimises
+  only two objectives (total interest paid, ETF balance), so a grid cell that
+  achieves both **by running out of cash** was selected as Pareto-optimal and
+  presented as attractive, with nothing indicating it wasn't actually
+  affordable. Compounding it, `riskScore = 100*etf/(etf+offset)` read
+  identically whether the offset was low from a deliberate high ETF
+  allocation or from a shortfall draining it.
+  **Decided (already settled when TODO-143 was written): flag, don't
+  exclude.** A shortfall-affected strategy stays in the comparison - its
+  numbers are still real - but now gets a visible warning. Deliberately did
+  NOT touch the `riskScore` formula itself: the new column explains *why* a
+  row's riskScore might be misleadingly high, which is what actually
+  resolves the complaint, with far less risk than changing a formula every
+  existing test already asserts exact values for.
+  `runStrategyGrid` (`strategyComparison.js`) now captures
+  `totalCashShortfall`/`monthsWithShortfall` from `calculateLoanWithOffset`'s
+  result (already returned since TODO-136 - no new simulation work needed).
+  `selectParetoFront`'s dedupe key gained a `hasShortfall` boolean
+  (`` `${totalInterestPaid}-${etfBalance}-${shortfall>0}` ``) so two cells
+  sharing interest/ETF balance no longer silently collapse into whichever one
+  happened to sort first when one of them only got there by running dry -
+  dominance itself stays 2-objective, unchanged.
+  New "Cash Shortfall" column in `App.jsx`'s Pareto table, **appended** after
+  "Crash Test" (never inserted before "Allocation" - the Apply-button test
+  reads cells positionally). Reuses the exact `⚠️ $X over N mo` wording and
+  `text-red-600 dark:text-red-400` styling TODO-136/137 already shipped in
+  three other places, so a user who sees more than one of these panels reads
+  the same convention every time.
+  Tests: extended `toMatchObject`/sentinel assertions for the two new fields;
+  a new test proving a shortfall cell and an otherwise-identical healthy cell
+  both survive the dedupe fix (they used to collapse to one); a new
+  end-to-end `runStrategyGrid` test with a real scheduled expense proving the
+  fields actually flow through, not just discarded-then-zeroed; the App-level
+  header loop and Apply-button test updated for the new column; one new smoke
+  test confirming the default (no-deficit) scenario reads "None" everywhere.
+  `npm test -- --run` (541/541), `npm run lint`, `npm run build` clean.
+  Spanish-text sweep clean.
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -4750,49 +4792,6 @@ optionally reuse in the commit message when you implement it.
   **Out of scope (same boundary as TODO-138):** no button that sets the ETF
   Allocation slider, no quiz that computes "your profile is X", no claim
   that any percentage is optimal for the specific user's situation.
-
-- [ ] **TODO-143: The Pareto Strategy Comparison can recommend a strategy that runs out of cash, with no signal**
-  Split out of TODO-137 (2026-08-16) before implementing it, so the card/panel
-  work stayed reviewable. This is a correctness/honesty problem in ALREADY
-  SHIPPED UI, not a new feature - arguably higher priority than it looks.
-  **The core problem, found during TODO-137's exploration and worse than the
-  note TODO-136 originally left:** `selectParetoFront`
-  (`strategyComparison.js:44-77`) optimises only two objectives, total
-  interest paid and ETF balance. Since TODO-136 made deficit months real, a
-  strategy can score well on BOTH by draining the offset and running a cash
-  shortfall - and it is then selected as Pareto-optimal and presented to the
-  user as an attractive option, with nothing anywhere indicating it isn't
-  actually affordable.
-  **The related `riskScore` problem:** `riskScore = 100*etf/(etf+offset)`
-  (`:31`). An offset drained to zero by shortfalls, with any ETF balance at
-  all, yields `riskScore: 100` - indistinguishable from a deliberate
-  100%-ETF strategy. Two very different situations rendering identically.
-  **The dedupe wrinkle:** the front's dedupe key is
-  `` `${totalInterestPaid}-${etfBalance}` `` (`:63`), so two cells differing
-  only in shortfall can collapse into one representative - and nothing
-  guarantees the survivor is the healthy one.
-  **What makes this cheap to fix:** `runStrategyGrid` (`:15-36`) already
-  calls `calculateLoanWithOffset`, which since TODO-136 returns
-  `totalCashShortfall` and `monthsWithShortfall` on the result object. The
-  grid currently discards everything except the last `monthlyData` entry and
-  `totalInterest` (`:20-32`), so surfacing them is a few lines. There is no
-  new simulation work needed at all.
-  **Design decisions to make:** whether a shortfall cell should be excluded
-  from the front outright (risky - could empty it), merely flagged with a
-  column and band colouring (honest, keeps "show the spread, not a winner"),
-  or made a third dominance objective. Recommend flagging over excluding.
-  `classifyByBands` (`purchaseHealthCheck.js:9-11`) is the shared mechanism a
-  new shortfall band would use, and TODO-136's shipped shortfall wording and
-  `text-red-600 dark:text-red-400` styling (`App.jsx`, the Loan Simulation
-  banner and the Timeline row) are the precedent to match.
-  **Test impact, already mapped:** `toMatchObject`
-  (`strategyComparison.test.js:25`) tolerates new row fields, but six
-  hand-built `selectParetoFront` fixtures (`:84-86`, `:156-158`, `:166-173`,
-  `:180-187`) construct rows without them and would need updating if the
-  front's own logic starts reading the new field. In the App tests, cells are
-  read POSITIONALLY (`App.projectionAssumptions.test.jsx`, the Apply test), so
-  a new column must be APPENDED after "Crash Test", never inserted before
-  "Allocation"; and renaming the "Risk" header breaks the header loop.
 
 ---
 

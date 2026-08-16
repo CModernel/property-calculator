@@ -29,9 +29,13 @@ describe('runStrategyGrid', () => {
         etfBalance: expect.any(Number),
         offsetBalance: expect.any(Number),
         riskScore: expect.any(Number),
+        totalCashShortfall: expect.any(Number),
+        monthsWithShortfall: expect.any(Number),
       });
       expect(row.riskScore).toBeGreaterThanOrEqual(0);
       expect(row.riskScore).toBeLessThanOrEqual(100);
+      expect(row.totalCashShortfall).toBeGreaterThanOrEqual(0);
+      expect(row.monthsWithShortfall).toBeGreaterThanOrEqual(0);
     }
   });
 
@@ -81,13 +85,28 @@ describe('selectParetoFront', () => {
 
   it('deduplicates identical outcomes down to a small explicit example', () => {
     const results = [
-      { switchThresholdPct: 0, etfAllocationPct: 0, totalInterestPaid: 100, etfBalance: 0, offsetBalance: 500, riskScore: 0 },
-      { switchThresholdPct: 50, etfAllocationPct: 0, totalInterestPaid: 100, etfBalance: 0, offsetBalance: 500, riskScore: 0 },
-      { switchThresholdPct: 0, etfAllocationPct: 50, totalInterestPaid: 150, etfBalance: 200, offsetBalance: 300, riskScore: 40 },
+      { switchThresholdPct: 0, etfAllocationPct: 0, totalInterestPaid: 100, etfBalance: 0, offsetBalance: 500, riskScore: 0, totalCashShortfall: 0 },
+      { switchThresholdPct: 50, etfAllocationPct: 0, totalInterestPaid: 100, etfBalance: 0, offsetBalance: 500, riskScore: 0, totalCashShortfall: 0 },
+      { switchThresholdPct: 0, etfAllocationPct: 50, totalInterestPaid: 150, etfBalance: 200, offsetBalance: 300, riskScore: 40, totalCashShortfall: 0 },
     ];
     const front = selectParetoFront(results);
     expect(front).toHaveLength(2);
     expect(front[0]).toMatchObject({ switchThresholdPct: 0, etfAllocationPct: 0 });
+  });
+
+  // TODO-143: two cells sharing interest/ETF balance used to collapse into
+  // one via the dedupe key - if one of them only got there by running out of
+  // cash, the dedupe could silently keep the unhealthy one and drop the
+  // healthy one (or vice versa). The key now treats shortfall status as part
+  // of what makes an outcome distinct.
+  it('does not dedupe a shortfall-affected cell into an otherwise-identical healthy one', () => {
+    const results = [
+      { switchThresholdPct: 0, etfAllocationPct: 30, totalInterestPaid: 100, etfBalance: 200, offsetBalance: 300, riskScore: 40, totalCashShortfall: 0 },
+      { switchThresholdPct: 50, etfAllocationPct: 30, totalInterestPaid: 100, etfBalance: 200, offsetBalance: 300, riskScore: 40, totalCashShortfall: 500 },
+    ];
+    const front = selectParetoFront(results);
+    expect(front).toHaveLength(2);
+    expect(front.map(r => r.totalCashShortfall).sort()).toEqual([0, 500]);
   });
 });
 
@@ -143,7 +162,30 @@ describe('runStrategyGrid - offset-sim sentinel path', () => {
       expect(row.offsetBalance).toBe(0);
       expect(row.totalInterestPaid).toBe(999999);
       expect(row.riskScore).toBe(0);
+      expect(row.totalCashShortfall).toBe(0);
+      expect(row.monthsWithShortfall).toBe(0);
     }
+  });
+
+  // TODO-143: end-to-end proof the shortfall fields actually flow from the
+  // simulation through the grid, not just a discard-then-add of zeros.
+  it('surfaces a real cash shortfall through to the grid row', () => {
+    const results = runStrategyGrid({
+      contributions: [],
+      personalExpenseItems: [
+        { id: 1, name: 'Custom', amount: 50_000, startMonth: 6, recurrence: 'none', endMonth: 6 },
+      ],
+      monthlyToOffset: 1000,
+      loanAmount: 500_000,
+      monthlyRate: 0.005,
+      monthlyPayment: 3000,
+      expectedEtfReturn: 8,
+      effectiveTaxRate: 30,
+      maxMonths: 24,
+    });
+    const shortfallRows = results.filter((r) => r.totalCashShortfall > 0);
+    expect(shortfallRows.length).toBeGreaterThan(0);
+    shortfallRows.forEach((row) => expect(row.monthsWithShortfall).toBeGreaterThan(0));
   });
 });
 
@@ -154,8 +196,8 @@ describe('selectParetoFront - additional boundary/dominance cases', () => {
 
   it('excludes a row that is strictly dominated by another (same etfBalance, worse interest)', () => {
     const results = [
-      { switchThresholdPct: 0, etfAllocationPct: 0, totalInterestPaid: 100, etfBalance: 100, offsetBalance: 400, riskScore: 20 },
-      { switchThresholdPct: 50, etfAllocationPct: 50, totalInterestPaid: 200, etfBalance: 100, offsetBalance: 300, riskScore: 25 },
+      { switchThresholdPct: 0, etfAllocationPct: 0, totalInterestPaid: 100, etfBalance: 100, offsetBalance: 400, riskScore: 20, totalCashShortfall: 0 },
+      { switchThresholdPct: 50, etfAllocationPct: 50, totalInterestPaid: 200, etfBalance: 100, offsetBalance: 300, riskScore: 25, totalCashShortfall: 0 },
     ];
     const front = selectParetoFront(results);
     expect(front).toHaveLength(1);
@@ -170,6 +212,7 @@ describe('selectParetoFront - additional boundary/dominance cases', () => {
       etfBalance: i * 25,
       offsetBalance: 500 - i * 25,
       riskScore: i * 25,
+      totalCashShortfall: 0,
     }));
     const front = selectParetoFront(results);
     expect(front).toHaveLength(5);
@@ -184,6 +227,7 @@ describe('selectParetoFront - additional boundary/dominance cases', () => {
       etfBalance: i * 20,
       offsetBalance: 500 - i * 20,
       riskScore: i * 20,
+      totalCashShortfall: 0,
     }));
     const front = selectParetoFront(results);
     expect(front).toHaveLength(5);

@@ -1742,6 +1742,7 @@ const PropertyInvestmentCalculator = () => {
                       <InfoTooltip label="What is this searching?">
                         <p>Searches 441 combinations of when to start investing (Switch Trigger) and how much to divert (ETF Allocation) once switched on, in 5% steps - holding everything else the same. Shows the non-dominated (Pareto-optimal) strategies below: for each, no other strategy has both a lower total interest paid AND a higher ETF balance.</p>
                         <p className="mt-2">There's no single "best" - which one to pick depends on how you personally weigh certainty (offset) against expected but risky growth (ETF). "Apply" sets the sliders above to that row's values.</p>
+                        <p className="mt-2">A row flagged with a cash shortfall only reached these numbers by running out of money in some months - its interest/ETF figures assume income it didn't actually have, not a free win over the others.</p>
                       </InfoTooltip>
                     </p>
                     <div className="overflow-x-auto">
@@ -1762,6 +1763,7 @@ const PropertyInvestmentCalculator = () => {
                             </th>
                             <th className="pr-2 pb-1 font-medium whitespace-nowrap">Risk</th>
                             <th className="pr-2 pb-1 font-medium whitespace-nowrap">Crash Test</th>
+                            <th className="pr-2 pb-1 font-medium whitespace-nowrap">Cash Shortfall</th>
                             <th className="pb-1 font-medium" />
                           </tr>
                         </thead>
@@ -1778,6 +1780,15 @@ const PropertyInvestmentCalculator = () => {
                                 <td className="pr-2 py-1 whitespace-nowrap text-gray-700 dark:text-gray-200">${row.etfBalance.toLocaleString()}</td>
                                 <td className="pr-2 py-1 whitespace-nowrap text-gray-700 dark:text-gray-200">{row.riskScore}</td>
                                 <td className={`pr-2 py-1 whitespace-nowrap font-medium ${crashClass.textClass}`}>{crashClass.symbol} {crashSurvived}%</td>
+                                <td
+                                  className={row.totalCashShortfall > 0
+                                    ? 'pr-2 py-1 whitespace-nowrap font-medium text-red-600 dark:text-red-400'
+                                    : 'pr-2 py-1 whitespace-nowrap text-gray-700 dark:text-gray-200'}
+                                >
+                                  {row.totalCashShortfall > 0
+                                    ? `⚠️ $${row.totalCashShortfall.toLocaleString()} over ${row.monthsWithShortfall} mo`
+                                    : 'None'}
+                                </td>
                                 <td className="py-1 whitespace-nowrap">
                                   <button
                                     onClick={() => { setSwitchThresholdPct(row.switchThresholdPct); setEtfAllocationPct(row.etfAllocationPct); }}

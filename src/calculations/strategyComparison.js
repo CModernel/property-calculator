@@ -29,6 +29,13 @@ export function runStrategyGrid(baseParams) {
         // Purely descriptive 0-100 read of realized exposure
         // (Offset=0/ETF=100) - never fed back into the search itself.
         riskScore: etfBalance + offsetBalance === 0 ? 0 : Math.round((100 * etfBalance) / (etfBalance + offsetBalance)),
+        // TODO-143: since TODO-136, a deficit month can drain the offset
+        // instead of being silently floored to zero - so a low offsetBalance
+        // (and therefore a high riskScore above) doesn't necessarily mean a
+        // deliberate high ETF allocation. Surfacing these lets the UI flag a
+        // cell that only looks attractive because it ran out of cash.
+        totalCashShortfall: Math.round(result.totalCashShortfall),
+        monthsWithShortfall: result.monthsWithShortfall,
       });
     }
   }
@@ -55,12 +62,16 @@ export function selectParetoFront(results) {
   // regardless of switchThresholdPct (there's nothing to switch on) -
   // dedupe to the simplest (lowest switchThresholdPct, then lowest
   // etfAllocationPct) representative.
+  // TODO-143: the key includes shortfall status so a cell that only matches
+  // another on interest/ETF balance because it ran out of cash never
+  // silently replaces (or gets replaced by) a healthy one - the two are
+  // treated as genuinely different outcomes, not duplicates.
   const seen = new Map();
   const sorted = [...nonDominated].sort(
     (a, b) => a.switchThresholdPct - b.switchThresholdPct || a.etfAllocationPct - b.etfAllocationPct
   );
   for (const row of sorted) {
-    const key = `${row.totalInterestPaid}-${row.etfBalance}`;
+    const key = `${row.totalInterestPaid}-${row.etfBalance}-${row.totalCashShortfall > 0}`;
     if (!seen.has(key)) seen.set(key, row);
   }
   const deduped = [...seen.values()].sort((a, b) => a.etfBalance - b.etfBalance);
