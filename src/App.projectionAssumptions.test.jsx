@@ -21,12 +21,23 @@ async function expandProjectionAssumptions(user) {
   await user.click(screen.getByRole('button', { name: /Projection assumptions/ }));
 }
 
+// TODO-137: the ETF family moved out of Financial Position's Advanced
+// Assumptions into its own "Extra Investments & Strategies" card. Two
+// separate steps on purpose: the checkbox is an opt-in that pauses the
+// simulation effect, the expander is presentation only.
 async function enableEtfOptions(user) {
   await user.click(screen.getByRole('checkbox', SHOW_ETF_OPTIONS_CHECKBOX));
 }
 
-async function expandFinancialPositionAdvanced(user) {
-  await user.click(screen.getByRole('button', { name: /Advanced Assumptions/ }));
+async function expandEtfSection(user) {
+  await user.click(screen.getByRole('button', { name: /ETF settings and strategy comparison/ }));
+}
+
+// Enabling the master toggle reveals the expander, which then has to be
+// opened before any ETF control is reachable.
+async function openEtfSection(user) {
+  await enableEtfOptions(user);
+  await expandEtfSection(user);
 }
 
 function readResults() {
@@ -112,8 +123,7 @@ describe('Invest in ETFs / Strategy Comparison', () => {
     expect(masterToggle).not.toBeChecked();
     expect(screen.queryByRole('checkbox', INVEST_IN_ETFS_CHECKBOX)).not.toBeInTheDocument();
 
-    await enableEtfOptions(user);
-    await expandFinancialPositionAdvanced(user);
+    await openEtfSection(user);
     await user.click(screen.getByRole('checkbox', INVEST_IN_ETFS_CHECKBOX));
     expect(screen.getByLabelText('ETF Allocation')).toBeInTheDocument();
     expect(screen.getByText(/📈 ETF:/)).toBeInTheDocument();
@@ -134,8 +144,7 @@ describe('Invest in ETFs / Strategy Comparison', () => {
   it('disables "Invest in ETFs" only while Effective Tax Rate is 0', async () => {
     const user = userEvent.setup();
     render(<App />);
-    await enableEtfOptions(user);
-    await expandFinancialPositionAdvanced(user);
+    await openEtfSection(user);
 
     expect(screen.getByRole('checkbox', INVEST_IN_ETFS_CHECKBOX)).toBeEnabled();
 
@@ -149,8 +158,7 @@ describe('Invest in ETFs / Strategy Comparison', () => {
   it('reveals the Strategy Comparison table once Invest in ETFs is checked', async () => {
     const user = userEvent.setup();
     render(<App />);
-    await enableEtfOptions(user);
-    await expandFinancialPositionAdvanced(user);
+    await openEtfSection(user);
 
     expect(screen.queryByText('🔍 Strategy Comparison')).not.toBeInTheDocument();
 
@@ -168,8 +176,7 @@ describe('Invest in ETFs / Strategy Comparison', () => {
   it('clicking Apply on a table row updates the ETF Allocation and Switch Trigger sliders to match that row', async () => {
     const user = userEvent.setup();
     render(<App />);
-    await enableEtfOptions(user);
-    await expandFinancialPositionAdvanced(user);
+    await openEtfSection(user);
     await user.click(screen.getByRole('checkbox', INVEST_IN_ETFS_CHECKBOX));
 
     // getByRole('table') alone is ambiguous - LvrBadge's tooltip also
@@ -188,5 +195,76 @@ describe('Invest in ETFs / Strategy Comparison', () => {
 
     expect(screen.getByLabelText('Switch Trigger')).toHaveValue(expectedSwitch);
     expect(screen.getByLabelText('ETF Allocation')).toHaveValue(expectedAllocation);
+  });
+});
+
+// TODO-137: the side-by-side panel, distinct from the Pareto search above it.
+describe('Offset vs ETF side-by-side comparison', () => {
+  const COMPARISON_HEADING = '⚖️ Offset vs ETF, side by side';
+
+  async function openComparison(user) {
+    await openEtfSection(user);
+    await user.click(screen.getByRole('checkbox', INVEST_IN_ETFS_CHECKBOX));
+  }
+
+  function comparisonSection() {
+    return screen.getByText(COMPARISON_HEADING).closest('div').parentElement;
+  }
+
+  it('appears only once ETF investing is actually on', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openEtfSection(user);
+    expect(screen.queryByText(COMPARISON_HEADING)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('checkbox', INVEST_IN_ETFS_CHECKBOX));
+    expect(screen.getByText(COMPARISON_HEADING)).toBeInTheDocument();
+  });
+
+  it('names all three strategies and labels the custom one with its own allocation', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openComparison(user);
+
+    const section = comparisonSection();
+    expect(within(section).getAllByText('Offset only').length).toBeGreaterThan(0);
+    expect(within(section).getAllByText('All to ETF').length).toBeGreaterThan(0);
+    // The default allocation is 20%, rendered alongside the "Your split" label.
+    expect(within(section).getAllByText(/\(20% ETF\)/).length).toBeGreaterThan(0);
+  });
+
+  it('switching the tracked metric re-renders the over-time table', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openComparison(user);
+
+    const selector = screen.getByLabelText('Track over time:');
+    expect(selector).toHaveValue('netWorth');
+
+    await user.selectOptions(selector, 'etf');
+    expect(selector).toHaveValue('etf');
+    // Offset-only never invests, so its column is $0 in every row.
+    const section = comparisonSection();
+    expect(within(section).getAllByText('$0').length).toBeGreaterThan(0);
+  });
+
+  // The panel and the Timeline Explorer read the same simulation through the
+  // same helpers; if they ever diverge, one of them is lying to the user.
+  it('agrees with the Timeline Explorer on the final offset balance for the chosen split', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openComparison(user);
+
+    await user.selectOptions(screen.getByLabelText('Track over time:'), 'offset');
+    const section = comparisonSection();
+    const bodyRows = within(section).getAllByRole('row');
+    const lastRow = bodyRows[bodyRows.length - 1];
+    // Columns are [month, Offset only, Your split, All to ETF].
+    const yourSplitFinal = within(lastRow).getAllByRole('cell')[2].textContent;
+
+    // Drive the Timeline Explorer to its own final month and compare.
+    const monthSlider = screen.getByLabelText('Viewing month');
+    fireEvent.change(monthSlider, { target: { value: monthSlider.max } });
+    expect(screen.getByText(new RegExp(`💰 Offset: \\${yourSplitFinal}`))).toBeInTheDocument();
   });
 });

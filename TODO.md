@@ -4086,6 +4086,75 @@ optionally reuse in the commit message when you implement it.
   `npm test -- --run` (515/515), `npm run lint`, `npm run build` clean.
   Spanish-text sweep clean. Verified no `offsetAllocationPct` identifier and
   no "Offset Allocation" string remains in `src/`.
+
+- [x] **TODO-137: "Extra Investments & Strategies" card + Offset-vs-ETF side-by-side comparison**
+  Two pieces shipped together, because the second is the first one's reason
+  to exist - TODO-136 deliberately deferred the card here rather than ship a
+  pure relocation with nothing new in it.
+  **The card.** The whole ETF block (218 contiguous lines) and the TODO-126
+  master toggle moved out of Financial Position's "Advanced Assumptions"
+  expander, which had become an unrelated grab-bag (savings rate, credit
+  card, mortgage-free age, ETF). New top-level card between Financial
+  Position and Offset Contributions, `TrendingUp` icon, matching the
+  Projection Assumptions skeleton from TODO-141.
+  **Two controls on purpose, not merged.** The checkbox is an opt-in that
+  genuinely pauses the ETF effect on the simulation; the new
+  `showExtraInvestments` collapse is presentation only and is rendered only
+  once the checkbox is on (nothing bulky to collapse otherwise). Conflating
+  them would have re-introduced exactly the bug TODO-141 removed. Also
+  dropped the now-dead ETF clause from `financialPositionAdvancedCustomized`
+  and fixed the Projection Assumptions tooltip that name-checked the ETF
+  controls' old location.
+  **Proved the move changed nothing**: captured "Time to pay off" / "Total
+  interest paid" from a rendered App before and after - byte-identical. A
+  relocation must not move a figure.
+  **The comparison panel.** New `src/calculations/strategyScenarios.js` runs
+  `calculateLoanWithOffset` three times against identical inputs, varying
+  only the allocation: Offset only (0%), Your split (the configured %), All
+  to ETF (100%). Deliberately NOT a ranking - 100% ETF is a boundary marker,
+  never a recommendation, same principle as the Pareto front's "show the
+  spread, not a winner". Distinct from `strategyComparison.js`, which
+  grid-searches 441 pairs; this answers the narrower, more legible question
+  of where YOUR chosen split sits between the extremes.
+  Rendered by a new `StrategyScenarioComparison` component as two tables,
+  per the locked decision: an end-state summary (metrics as rows, the three
+  strategies as columns) plus a year-by-year table of one selectable metric
+  (net worth by default - it's where the lines actually cross). One ~21-column
+  grid was rejected as unreadable.
+  **Three findings from exploration that changed the design:**
+  (1) TODO-137's requested "Emergency Buffer" per strategy is **impossible as
+  specified** - it derives from `cashRemaining`, a settlement-time constant,
+  so it is identical across all three. Replaced with **Accessible cash =
+  offset + savings**, which genuinely varies. The ETF balance is excluded on
+  purpose: needing to sell units, possibly at a loss, is the exact trade-off
+  the panel exists to show.
+  (2) The month axis is driven by the LONGEST-running strategy, since
+  diverting surplus slows the payoff and the three finish at different times.
+  `getTimelineSnapshot`'s existing clamp handles a finished strategy
+  correctly - it freezes, because its loan was covered.
+  (3) Writing the tests surfaced a genuinely counter-intuitive existing
+  convention: the simulation treats a loan as paid off once the OFFSET COVERS
+  the balance, so an offset-only run's final `monthlyData` entry reports
+  `balance: 167,585`, not 0. A first test assumed otherwise and failed; it
+  now asserts the real property (the figure freezes from the payoff month
+  onward) and documents the convention so the next person doesn't trip on it.
+  Tests: 18 new in `strategyScenarios.test.js` (0%/100% custom are
+  byte-identical to the boundaries, switchThresholdPct is honoured rather
+  than assumed 0, the sentinel guard, the monthly-stepping fallback for a
+  sub-2-year projection, accessible cash excludes ETF), 4 new App-level ones
+  including a **cross-check that the panel and the Timeline Explorer report
+  the same final offset balance** - they read the same simulation through the
+  same helpers, so a mismatch would mean one of them is lying. Reworked the
+  ETF setup helpers in `App.projectionAssumptions.test.jsx` (the old
+  `expandFinancialPositionAdvanced` no longer reaches ETF) and added the new
+  card to `App.collapsiblePanels.test.jsx` as its own describe, since its
+  expander only exists after the master toggle is on.
+  **Deferred to TODO-143** (split agreed before implementing): the
+  `riskScore`/cash-shortfall problems in the *existing* Pareto table. They
+  touch a different, already-shipped feature and would have tripled an
+  already-large diff.
+  `npm test -- --run` (538/538), `npm run lint`, `npm run build` clean.
+  Spanish-text sweep clean.
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -4566,82 +4635,6 @@ optionally reuse in the commit message when you implement it.
   views. Tagged as "(Analysis only, large scope)" to signal that this entry
   records product/architecture decisions and does not authorize code changes.
 
-- [ ] **TODO-137 (Analysis/design, depends on TODO-136): Dedicated Advanced strategy-comparison panel (100% Offset vs Custom vs 100% ETF)**
-  Split out from the original single-entry TODO-136 during a 2026-08-12
-  analysis session: a code-validation pass found there is no standalone
-  Timeline Explorer component (it's inlined in `App.jsx`) and no existing
-  multi-scenario overlay UI - `LoanBalanceChart`/`PrincipalInterestChart`
-  each take exactly one `monthlyData` array and aren't designed for 3-way
-  comparison. "Reuse the existing Timeline Explorer" understated this
-  phase's real scope, so it now has its own ID.
-
-  Reuse the existing monthly simulation (`calculateLoanWithOffset`) rather
-  than creating a second time engine. Compare at least:
-
-  1. **100% Offset** (reference strategy),
-  2. **Custom Offset/ETF allocation**, and
-  3. **100% ETF** (comparison boundary, not a recommendation).
-
-  For a selected month and at the end of the projection, show the differences
-  in:
-
-  - Loan balance and effective balance after Offset,
-  - Offset balance,
-  - ETF contributions and projected ETF balance,
-  - Interest paid and estimated time to pay off,
-  - Remaining liquidity / Emergency Buffer,
-  - Estimated net worth and property equity.
-
-  The comparison should make clear that ETF value is a projection while the
-  mortgage-interest reduction from Offset is modeled as the more predictable
-  reference. It should not collapse these into one falsely precise "best"
-  answer.
-
-  **UI approach (decided):** a dedicated new comparison component (table/
-  panel), not an extension of `LoanBalanceChart`/`PrincipalInterestChart` -
-  those stay untouched. Running 3 full simulations is computationally
-  trivial (the app already runs `calculateLoanWithOffset` twice for
-  `baselineSimulation` and 441 times for Strategy Comparison), so the real
-  cost here is new UI/component work, not performance - most likely reusing
-  `getTimelineSnapshot` once per scenario and rendering a diff table rather
-  than merging 3 `monthlyData` arrays into the existing charts.
-
-  **Table first, chart deferred (decided, 2026-08-13):** the year-by-year
-  diff table above is the actual deliverable and gives exact figures; an
-  overlaid line chart (to visually spot the "crossover point" where the ETF
-  line pulls ahead of Offset) is a nice-to-have, not required for this TODO
-  - only build it later if the table alone proves hard to read.
-
-  **Granularity edge case:** default to yearly rows, but a loan with under
-  12 months remaining (or a short custom projection window) needs monthly
-  rows instead - don't silently render a table with 0 or 1 row for a
-  sub-1-year loan.
-
-  Render this panel inside the Advanced-only **Extra Investments & Strategies**
-  card. It must not be required for the Simple affordability answer; Simple may
-  expose only a short notice/link that advanced strategies are available.
-  **This TODO now also OWNS CREATING that card** - TODO-136 deliberately
-  deferred it here (2026-08-16) rather than shipping a pure relocation with
-  no second occupant. The ETF block is a clean contiguous extraction from
-  Financial Position's Advanced Assumptions expander; non-ETF content sits
-  before it (Savings Interest Rate, Credit Card) and after it (Mortgage-Free
-  Age) and must stay behind. `financialPositionAdvancedCustomized` in
-  `App.jsx` has an ETF clause that needs dropping when the block leaves.
-
-  **Two semantic wrinkles TODO-136 introduced, to resolve here:**
-  - `strategyComparison.js`'s `riskScore` is `etf / (etf + offset)`. Now that
-    a deficit month can DRAIN the offset, that ratio conflates "invested
-    heavily" with "ran out of cash" - two very different situations that
-    would render identically in the Pareto table.
-  - The grid surfaces no cash-shortfall signal at all, so a cell that only
-    looks good because it burned through the offset is indistinguishable
-    from a healthy one. `calculateLoanWithOffset` now returns
-    `totalCashShortfall`/`monthsWithShortfall` per run, so the data is
-    already there to use.
-
-  Depends on TODO-136 (needs the direct-model % to frame "Custom" cleanly
-  against the 100%/0% boundaries).
-
 - [ ] **TODO-138 (Analysis/design, depends on TODO-136, pairs with TODO-137): Advanced ETF timing/risk scenario comparisons**
   Split out from the original single-entry TODO-136 during the same
   2026-08-12 analysis session, as the most product-judgment-heavy and
@@ -4696,10 +4689,16 @@ optionally reuse in the commit message when you implement it.
   one. This phase's hurdle-return view should build on the existing
   `etfMonthlyRate` calculation, not reimplement the naive version.
 
-  **UI boundary:** this belongs inside the Advanced-only **Extra Investments &
-  Strategies** card. It should be hidden from the Simple editor/results by
-  default, while any active advanced strategy must be disclosed if it changes
-  the numbers shown there.
+  **UI boundary:** this belongs inside the **Extra Investments & Strategies**
+  card, which TODO-137 built (2026-08-16) - so this is now an addition to an
+  existing home rather than something that has to create one. It should be
+  hidden from the Simple editor/results by default, while any active advanced
+  strategy must be disclosed if it changes the numbers shown there.
+  Reuse `src/calculations/strategyScenarios.js` (also from TODO-137) rather
+  than starting a fourth comparison engine: it already runs
+  `calculateLoanWithOffset` across named strategies against identical inputs
+  and builds a shared month axis, which is the same shape a delayed-start or
+  crash-scenario comparison needs.
 
   **Out of scope:** an optimizer that tells the user the exact best ETF
   percentage, market-timing advice, a guarantee that ETF returns exceed the
@@ -4751,6 +4750,49 @@ optionally reuse in the commit message when you implement it.
   **Out of scope (same boundary as TODO-138):** no button that sets the ETF
   Allocation slider, no quiz that computes "your profile is X", no claim
   that any percentage is optimal for the specific user's situation.
+
+- [ ] **TODO-143: The Pareto Strategy Comparison can recommend a strategy that runs out of cash, with no signal**
+  Split out of TODO-137 (2026-08-16) before implementing it, so the card/panel
+  work stayed reviewable. This is a correctness/honesty problem in ALREADY
+  SHIPPED UI, not a new feature - arguably higher priority than it looks.
+  **The core problem, found during TODO-137's exploration and worse than the
+  note TODO-136 originally left:** `selectParetoFront`
+  (`strategyComparison.js:44-77`) optimises only two objectives, total
+  interest paid and ETF balance. Since TODO-136 made deficit months real, a
+  strategy can score well on BOTH by draining the offset and running a cash
+  shortfall - and it is then selected as Pareto-optimal and presented to the
+  user as an attractive option, with nothing anywhere indicating it isn't
+  actually affordable.
+  **The related `riskScore` problem:** `riskScore = 100*etf/(etf+offset)`
+  (`:31`). An offset drained to zero by shortfalls, with any ETF balance at
+  all, yields `riskScore: 100` - indistinguishable from a deliberate
+  100%-ETF strategy. Two very different situations rendering identically.
+  **The dedupe wrinkle:** the front's dedupe key is
+  `` `${totalInterestPaid}-${etfBalance}` `` (`:63`), so two cells differing
+  only in shortfall can collapse into one representative - and nothing
+  guarantees the survivor is the healthy one.
+  **What makes this cheap to fix:** `runStrategyGrid` (`:15-36`) already
+  calls `calculateLoanWithOffset`, which since TODO-136 returns
+  `totalCashShortfall` and `monthsWithShortfall` on the result object. The
+  grid currently discards everything except the last `monthlyData` entry and
+  `totalInterest` (`:20-32`), so surfacing them is a few lines. There is no
+  new simulation work needed at all.
+  **Design decisions to make:** whether a shortfall cell should be excluded
+  from the front outright (risky - could empty it), merely flagged with a
+  column and band colouring (honest, keeps "show the spread, not a winner"),
+  or made a third dominance objective. Recommend flagging over excluding.
+  `classifyByBands` (`purchaseHealthCheck.js:9-11`) is the shared mechanism a
+  new shortfall band would use, and TODO-136's shipped shortfall wording and
+  `text-red-600 dark:text-red-400` styling (`App.jsx`, the Loan Simulation
+  banner and the Timeline row) are the precedent to match.
+  **Test impact, already mapped:** `toMatchObject`
+  (`strategyComparison.test.js:25`) tolerates new row fields, but six
+  hand-built `selectParetoFront` fixtures (`:84-86`, `:156-158`, `:166-173`,
+  `:180-187`) construct rows without them and would need updating if the
+  front's own logic starts reading the new field. In the App tests, cells are
+  read POSITIONALLY (`App.projectionAssumptions.test.jsx`, the Apply test), so
+  a new column must be APPENDED after "Crash Test", never inserted before
+  "Allocation"; and renaming the "Risk" header breaks the header loop.
 
 ---
 

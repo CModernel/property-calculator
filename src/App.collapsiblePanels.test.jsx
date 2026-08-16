@@ -36,6 +36,33 @@ describe.each(TOGGLE_CASES)('input-panel toggle: %s', (buttonNameRegex, getConte
   });
 });
 
+// TODO-137: not part of TOGGLE_CASES above because its expander only exists
+// once the ETF master toggle is on - there's nothing bulky to collapse
+// otherwise. The two controls are deliberately distinct: the checkbox pauses
+// the simulation effect, the expander is presentation only.
+describe('Extra Investments & Strategies panel', () => {
+  it('only offers its expander once ETF options are enabled, then flips the ▸/▾ glyph', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const SECTION_TOGGLE = { name: /ETF settings and strategy comparison/ };
+    expect(screen.queryByRole('button', SECTION_TOGGLE)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('checkbox', { name: /^Show ETF investing options/ }));
+    const toggle = screen.getByRole('button', SECTION_TOGGLE);
+    expect(toggle).toHaveTextContent('▸');
+    expect(screen.queryByRole('checkbox', { name: /^Invest in ETFs/ })).not.toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(screen.getByRole('button', SECTION_TOGGLE)).toHaveTextContent('▾');
+    expect(screen.getByRole('checkbox', { name: /^Invest in ETFs/ })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', SECTION_TOGGLE));
+    expect(screen.getByRole('button', SECTION_TOGGLE)).toHaveTextContent('▸');
+    expect(screen.queryByRole('checkbox', { name: /^Invest in ETFs/ })).not.toBeInTheDocument();
+  });
+});
+
 describe('Purchase Health Check panel', () => {
   it('starts collapsed and reveals its indicators when opened', async () => {
     const user = userEvent.setup();

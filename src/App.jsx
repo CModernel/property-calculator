@@ -1,5 +1,5 @@
 import { useState, lazy, Suspense } from 'react';
-import { DollarSign, Home, Calendar, ShoppingCart, Car, RotateCcw, Wallet, Sun, Moon, Sprout, PiggyBank } from 'lucide-react';
+import { DollarSign, Home, Calendar, ShoppingCart, Car, RotateCcw, Wallet, Sun, Moon, Sprout, PiggyBank, TrendingUp } from 'lucide-react';
 import { formatMonthsDetailed, formatCompactMoney } from './calculations/formatting';
 import NumberSliderField from './components/NumberSliderField';
 import LvrBadge from './components/LvrBadge';
@@ -36,6 +36,8 @@ import {
 } from './calculations/loan';
 import { calculateLoanWithOffset } from './calculations/offsetSimulation';
 import { runStrategyGrid, selectParetoFront, calculateEtfCrashSurvivedPct, classifyEtfCrash } from './calculations/strategyComparison';
+import { runStrategyScenarios, summariseStrategy, buildComparisonRows, getComparisonMonths, hasUsableData, YEARLY_STEP_MIN_MONTHS } from './calculations/strategyScenarios';
+import StrategyScenarioComparison from './components/StrategyScenarioComparison';
 import { calculateOffsetTimingBenefit, calculateCardCashback } from './calculations/creditCardBenefit';
 import { calculatePresentValueOfInterest } from './calculations/inflation';
 import { clampToRange } from './calculations/clampToRange';
@@ -215,6 +217,16 @@ const PropertyInvestmentCalculator = () => {
   const [showEtfInvestingOptions, setShowEtfInvestingOptions] = useState(
     config.showEtfInvestingOptions ?? legacyEtfSettingsEnabled
   );
+  // TODO-137: collapse state for the "Extra Investments & Strategies" card.
+  // Presentation only - it hides the ETF editors without changing what the
+  // simulation does. showEtfInvestingOptions above is the control that
+  // actually pauses the effect; keeping the two separate is TODO-141's rule.
+  const [showExtraInvestments, setShowExtraInvestments] = useState(config.showExtraInvestments ?? false);
+  // TODO-137: which figure the side-by-side comparison plots over time. Net
+  // worth by default - it's the one where the offset-vs-ETF lines actually
+  // cross, which is the whole question that panel exists to answer. Purely a
+  // view preference, so it isn't part of the saved scenario.
+  const [comparisonMetric, setComparisonMetric] = useState('netWorth');
   const [showOpportunityCost, setShowOpportunityCost] = useState(config.showOpportunityCost ?? false);
   // Defaults to a plausible long-term diversified-ETF figure (per this
   // session's own ETF analysis rounds) rather than 0, since this value is
@@ -342,11 +354,11 @@ const PropertyInvestmentCalculator = () => {
   // "is it actually showing" value used for rendering.
   // TODO-109/141: Expense Growth Rate/Inflation Rate and the rest of the
   // assumption family moved out into their own dedicated "Projection
-  // Assumptions" card, so this check now only covers
-  // Financial-Position-specific opt-in features.
+  // Assumptions" card. TODO-137: the ETF family likewise moved out into
+  // "Extra Investments & Strategies". So this check now only covers what's
+  // genuinely left behind in Financial Position.
   const financialPositionAdvancedCustomized =
-    savingsInterestRate !== 0 ||
-    useCreditCard || (showEtfInvestingOptions && (showOpportunityCost || useEtfInvesting)) || showMortgageFreeAge;
+    savingsInterestRate !== 0 || useCreditCard || showMortgageFreeAge;
   const financialPositionAdvancedExpanded = showFinancialPositionAdvanced || financialPositionAdvancedCustomized;
 
   // Your personal expenses
@@ -798,7 +810,7 @@ const PropertyInvestmentCalculator = () => {
       showPropertyExpenses, showMonthlyExpensesBreakdown, showClosingCostsBreakdown,
       showIncome, showFinancialPositionAdvanced,
       showPersonalExpenses, showPersonalExpensesBreakdown, showOffsetContributions, showProgressCharts, showHealthCheck,
-      showProjectionAssumptions,
+      showProjectionAssumptions, showExtraInvestments,
       savedAt,
     };
     if (saveScenario(scenario)) {
@@ -1194,7 +1206,7 @@ const PropertyInvestmentCalculator = () => {
             <InfoTooltip label="What are projection assumptions?">
               <p>The assumptions this calculator projects with: Property Growth Rate, Salary/Rent Growth Rate, Vacancy, Expense Growth Rate, Inflation Rate, and Effective Tax Rate. They are always applied - collapsing this section only hides the sliders, it never changes the numbers.</p>
               <p className="mt-2">Set them all to 0 for a flat baseline (no tax, nothing growing). That's a deliberate comparison point, not a more accurate calculation - real costs grow, so a flat baseline reads optimistically.</p>
-              <p className="mt-2">Doesn't affect Credit Card, Compare Offset vs ETF, Invest in ETFs, or Mortgage-Free Age (in Financial Position, below) - those already have their own individual checkboxes.</p>
+              <p className="mt-2">Doesn't affect Credit Card or Mortgage-Free Age (in Financial Position), or the ETF tools (in Extra Investments &amp; Strategies) - those already have their own individual checkboxes.</p>
             </InfoTooltip>
 
             {showProjectionAssumptions && (
@@ -1332,21 +1344,6 @@ const PropertyInvestmentCalculator = () => {
                 The whole savings pool the deposit and upfront costs come out of.
               </NumberSliderField>
 
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
-                  <input
-                    type="checkbox"
-                    checked={showEtfInvestingOptions}
-                    onChange={(e) => setShowEtfInvestingOptions(e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-blue-500"
-                  />
-                  Show ETF investing options
-                </label>
-                {!showEtfInvestingOptions && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">ETF controls, comparisons, and projections are hidden and paused until you turn this on.</p>
-                )}
-              </div>
-
               <button
                 type="button"
                 onClick={() => setShowFinancialPositionAdvanced(!showFinancialPositionAdvanced)}
@@ -1464,8 +1461,127 @@ const PropertyInvestmentCalculator = () => {
                 </>
               )}
 
-              {showEtfInvestingOptions && (
-              <>
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+                  <input
+                    type="checkbox"
+                    checked={showMortgageFreeAge}
+                    onChange={(e) => setShowMortgageFreeAge(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-blue-500"
+                  />
+                  Show my Mortgage-Free Age
+                </label>
+                {!showMortgageFreeAge && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Enter your current age to see the age you'll be mortgage-free in the Purchase Health Check below.</p>
+                )}
+              </div>
+
+              {showMortgageFreeAge && (
+                <NumberSliderField
+                  label="Your Current Age"
+                  value={currentAge}
+                  onChange={setCurrentAge}
+                  min={18}
+                  max={100}
+                  sliderMin={18}
+                  sliderMax={80}
+                  step={1}
+                  color="indigo"
+                  suffix=" years"
+                >
+                  Used to show your Mortgage-Free Age in the Purchase Health Check below.
+                </NumberSliderField>
+              )}
+              </div>
+              )}
+
+              {/* min must stay above 0: a 0% rate makes calculateMonthlyPayment
+                  divide 0 by 0, turning every figure on the page into NaN. */}
+              <SteppedExpenseField
+                field={interestRateField}
+                label="Interest Rate"
+                min={0.1}
+                max={20}
+                sliderMin={3}
+                sliderMax={10}
+                step={0.01}
+                color="purple"
+                suffix="% p.a."
+                formatValue={(v) => v.toFixed(2)}
+              />
+
+              <NumberSliderField
+                label="Loan Term"
+                value={loanTermYears}
+                onChange={setLoanTermYears}
+                min={1}
+                max={30}
+                sliderMin={5}
+                sliderMax={30}
+                step={1}
+                color="indigo"
+                suffix=" years"
+              />
+
+              <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+                  Repayments: ${Math.round(monthlyPayment).toLocaleString()}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Extra Investments & Strategies - TODO-137. Everything ETF
+              lives here instead of inside Financial Position's Advanced
+              Assumptions, which had grown into an unrelated grab-bag
+              (savings rate, credit card, mortgage-free age, ETF).
+              Two controls on purpose, and they are NOT the same thing:
+              the checkbox is an opt-in that genuinely pauses the ETF
+              effect on the simulation, while the collapse below is
+              presentation only (TODO-141's rule - hiding an editor must
+              never change the model). */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-5">
+            <h2 className="text-xl font-bold text-gray-700 dark:text-gray-200 mb-4 flex items-center gap-2">
+              <TrendingUp size={24} className="text-indigo-600 dark:text-indigo-400" />
+              Extra Investments &amp; Strategies
+            </h2>
+
+            <div className="space-y-4">
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+                  <input
+                    type="checkbox"
+                    checked={showEtfInvestingOptions}
+                    onChange={(e) => setShowEtfInvestingOptions(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-blue-500"
+                  />
+                  Show ETF investing options
+                </label>
+                {!showEtfInvestingOptions && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">ETF controls, comparisons, and projections are hidden and paused until you turn this on.</p>
+                )}
+              </div>
+
+            {showEtfInvestingOptions && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowExtraInvestments(!showExtraInvestments)}
+                aria-expanded={showExtraInvestments}
+                className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+              >
+                {showExtraInvestments ? '▾' : '▸'} ETF settings and strategy comparison
+              </button>
+              {/* Outside the button deliberately - nesting it would pull the
+                  tooltip button's own aria-label into the toggle's computed
+                  accessible name. */}
+              <InfoTooltip label="What lives in this section?">
+                <p>Optional tools for modelling money you send to ETFs instead of your offset: how much to divert, when to start, and how the alternatives compare over time.</p>
+                <p className="mt-2">Collapsing this only hides the controls - whatever you have configured keeps applying. Untick the checkbox above to actually pause it.</p>
+              </InfoTooltip>
+
+              {showExtraInvestments && (
+              <div className="space-y-4 mt-4">
               <div>
                 <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
                   <input
@@ -1680,76 +1796,68 @@ const PropertyInvestmentCalculator = () => {
                   </div>
                 );
               })()}
-              </>
-              )}
 
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
-                  <input
-                    type="checkbox"
-                    checked={showMortgageFreeAge}
-                    onChange={(e) => setShowMortgageFreeAge(e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-blue-500"
+              {/* TODO-137: the narrower companion to the Pareto search above.
+                  That one grid-searches 441 (trigger, allocation) pairs; this
+                  one takes the allocation you actually chose and shows where
+                  it sits between the two extremes, year by year. Same IIFE
+                  pattern so the three simulations only run while the section
+                  is open and ETF investing is on. */}
+              {etfInvestingActive && (() => {
+                const scenarioBaseParams = {
+                  contributions: offsetContributions,
+                  personalExpenseItems,
+                  incomeSources,
+                  expenseFields,
+                  monthlyToOffset: baseMonthlySurplus,
+                  loanAmount,
+                  monthlyRate,
+                  monthlyPayment,
+                  interestRateField,
+                  initialSavingsBalance: cashRemaining,
+                  savingsInterestRate,
+                  propertyPrice,
+                  propertyGrowthRate,
+                  salaryGrowthRate,
+                  rentGrowthRate,
+                  vacancyWeeksPerYear,
+                  expenseGrowthRate,
+                  effectiveTaxRate,
+                  isInvestmentProperty,
+                  expectedEtfReturn,
+                  switchThresholdPct,
+                  maxMonths: totalMonths,
+                };
+                const runs = runStrategyScenarios(scenarioBaseParams, etfAllocationPct);
+                // A run that hit the sentinel early-out has no monthlyData at
+                // all - same guard the Timeline Explorer uses.
+                if (!hasUsableData(runs)) return null;
+
+                const snapshotContext = {
+                  loanAmount,
+                  monthZeroInterest,
+                  initialSavingsBalance: cashRemaining,
+                  initialPropertyValue: propertyPrice,
+                };
+                const summaries = runs.map((run) => summariseStrategy(run, snapshotContext));
+                const rows = buildComparisonRows(runs, comparisonMetric, snapshotContext);
+                const monthlyStepping = getComparisonMonths(runs).length > 0
+                  && Math.max(...runs.map(r => r.simulation.months)) <= YEARLY_STEP_MIN_MONTHS;
+
+                return (
+                  <StrategyScenarioComparison
+                    summaries={summaries}
+                    rows={rows}
+                    metricKey={comparisonMetric}
+                    onMetricChange={setComparisonMetric}
+                    monthlyStepping={monthlyStepping}
                   />
-                  Show my Mortgage-Free Age
-                </label>
-                {!showMortgageFreeAge && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Enter your current age to see the age you'll be mortgage-free in the Purchase Health Check below.</p>
-                )}
-              </div>
-
-              {showMortgageFreeAge && (
-                <NumberSliderField
-                  label="Your Current Age"
-                  value={currentAge}
-                  onChange={setCurrentAge}
-                  min={18}
-                  max={100}
-                  sliderMin={18}
-                  sliderMax={80}
-                  step={1}
-                  color="indigo"
-                  suffix=" years"
-                >
-                  Used to show your Mortgage-Free Age in the Purchase Health Check below.
-                </NumberSliderField>
-              )}
+                );
+              })()}
               </div>
               )}
-
-              {/* min must stay above 0: a 0% rate makes calculateMonthlyPayment
-                  divide 0 by 0, turning every figure on the page into NaN. */}
-              <SteppedExpenseField
-                field={interestRateField}
-                label="Interest Rate"
-                min={0.1}
-                max={20}
-                sliderMin={3}
-                sliderMax={10}
-                step={0.01}
-                color="purple"
-                suffix="% p.a."
-                formatValue={(v) => v.toFixed(2)}
-              />
-
-              <NumberSliderField
-                label="Loan Term"
-                value={loanTermYears}
-                onChange={setLoanTermYears}
-                min={1}
-                max={30}
-                sliderMin={5}
-                sliderMax={30}
-                step={1}
-                color="indigo"
-                suffix=" years"
-              />
-
-              <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
-                <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">
-                  Repayments: ${Math.round(monthlyPayment).toLocaleString()}
-                </p>
-              </div>
+            </>
+            )}
             </div>
           </div>
 
