@@ -4265,6 +4265,138 @@ optionally reuse in the commit message when you implement it.
   `strategyScenarios.test.js`, 5 new App-level.
   `npm test -- --run` (565/565), `npm run lint`, `npm run build` clean.
   Spanish-text sweep clean.
+
+- [x] **TODO-142: Risk-tolerance profile reference points (Conservative/Moderate/Aggressive) - educational only, not an auto-apply preset**
+  Surfaced from external financial-planning material the user researched
+  (2026-08-13): planners commonly frame the Offset-vs-ETF decision using a
+  risk-tolerance profile (Conservative/Moderate/Aggressive) mapped to a
+  typical starting split (e.g. roughly 80/20, 50/50, 20/80), plus a "safety
+  floor" (emergency-fund months that must stay in Offset regardless of
+  profile) and a tax-bracket input. **Decided (2026-08-13): add this as pure
+  educational reference content, not a feature that sets anything for the
+  user** - it does not get its own quiz, button, or "apply my %" action that
+  writes to the ETF Allocation slider.
+
+  **Why the careful boundary:** the whole ETF comparison family (TODO-137,
+  TODO-138 part 1, and the pending TODO-144/145) rules out "an optimizer that
+  tells the user the exact best ETF percentage" as out of
+  scope, consistent with this app's TODO-94 design philosophy (no feature
+  that could read as personalized financial advice). A profile-driven
+  auto-set control would cross that line; a labeled reference table does
+  not, provided the copy stays in the register of "investors who describe
+  themselves as X typically consider a range around Y" rather than "you
+  should do Y."
+
+  **Scope:**
+  - A small reference block (inside the Extra Investments & Strategies card,
+    which now hosts three comparison panels it would sit alongside) -
+    three rows/cards (Conservative/Moderate/Aggressive) each showing an
+    illustrative starting-point RANGE (not a single precise number) and a
+    one-line rationale (time horizon, tolerance for a market drop, reliance
+    on the mortgage rate environment).
+  - Explicit, visible disclaimer that these are illustrative starting
+    points from general financial-planning practice, not personal advice,
+    and that the user's own ETF Allocation slider (TODO-136) is unaffected
+    by anything shown here - no auto-fill, no "Apply" button.
+  - The "safety floor" concept (minimum months of expenses that should stay
+    in Offset before any ETF allocation) overlaps with the Health Check's
+    existing Emergency Buffer indicator (TODO-133/134) - reuse that
+    figure/language rather than inventing a second "safety floor" number
+    with different math.
+  - Does not require new simulation logic - this is a static reference
+    panel, not a calculator. If it later needs to *react* to the user's own
+    numbers (e.g. "your current Emergency Buffer already covers your
+    Conservative floor"), that upgrade should be considered as a distinct,
+    later follow-up decision, not assumed as part of this scope.
+
+  **Out of scope (the standing boundary across this whole ETF family):** no
+  button that sets the ETF Allocation slider, no quiz that computes "your
+  profile is X", no claim that any percentage is optimal for the specific
+  user's situation.
+
+  **Shipped (2026-08-17):** new `RiskToleranceProfiles.jsx` - presentational,
+  no internal state, no calculation. Three colour-coded cards
+  (Conservative ~10-30% / Moderate ~30-60% / Aggressive ~60-90%), each an
+  illustrative range plus a one-line rationale in the required register
+  ("investors who describe themselves as X typically consider a range around
+  Y"), never a single precise percentage. A safety-floor callout reuses the
+  EXACT `emergencyBufferMonths`/`classifyEmergencyBuffer` values Purchase
+  Health Check already computes and renders (`App.jsx:677-678`) - read once,
+  not recomputed or reclassified a second way, so the two readings cannot
+  drift apart. The visible not-advice disclaimer uses the app's own
+  established amber-box idiom (`App.jsx`'s top-of-page banner) rather than
+  new styling. Gated on `etfInvestingActive`, same as its two sibling panels
+  (`StrategyScenarioComparison`, `EtfReturnSensitivity`) - only shows once
+  ETF investing is genuinely active, not merely once the card is open.
+  Tests: 5 new component-level (all three profiles render as ranges never a
+  bare number; the disclaimer text; the safety-floor line reflects whatever
+  is passed in rather than a hardcoded figure; the `∞` case; zero interactive
+  controls anywhere in the panel) and 5 new App-level, including a
+  cross-check that the figure shown here textually matches what Purchase
+  Health Check renders elsewhere on the same page - the check that would
+  actually catch the two readings drifting apart. One implementation
+  mistake caught by that same test suite before shipping: the panel was
+  initially wired unconditionally (no `etfInvestingActive` gate at all), so
+  it appeared even with "Invest in ETFs" unchecked - the "appears only once
+  ETF investing is on" test failed immediately and caught it.
+  `npm test -- --run` (575/575), `npm run lint`, `npm run build` clean.
+  Spanish-text sweep clean.
+
+- [x] **TODO-133: Decided - Health Check should reflect projection assumptions, unified with TODO-134's Day1/Stabilized framework**
+  The Health Check indicators (Emergency Buffer, Housing Cost Ratio,
+  Stress Test, Upfront Cost Ratio, Gearing, Vacancy Buffer, Rental
+  Yield, Mortgage-Free Age) all use "month 1 / right now" static
+  snapshots — they are computed from the base `cashRemaining`,
+  `totalPropertyCost`, `monthlyIncome`, etc. They apply the Effective Tax
+  Rate (via `weeklyIncome`/`weeklyRentalIncome`) but ignore every
+  **growth** assumption — property/salary/rent/expense growth and vacancy
+  never enter them. Since TODO-141 those assumptions are always active and
+  default to non-zero, so this gap now affects every user by default rather
+  than only those who had opted into the old Realistic Mode:
+  - A user projecting salary growing 3%/yr, rent 3%/yr and property 5%/yr
+    still sees Health Check badges that ignore all of it — the Emergency
+    Buffer might read "High risk" today even though income will outpace
+    expenses within 2 years.
+  - The Loan Simulation and Timeline Explorer beside it DO reflect that
+    growth, so the two panels can tell visibly different stories about the
+    same scenario with no explanation of why.
+
+  **Decided (2026-08-17):**
+  1. **Unify with TODO-134, one Day1+Stabilized framework, not two patches.**
+     TODO-134 already recommended a two-value approach (Day 1 / Stabilized)
+     for indicators affected by future SCHEDULED income - this TODO's
+     growth-compounding concern is the same underlying question about one
+     consistent model, not a second mode. The same mechanism now covers
+     both causes together: Housing Cost Ratio, Stress Test, Gearing, and
+     Rental Yield show Day 1 + Stabilized reflecting BOTH scheduled income/
+     expense changes AND compounding growth; Emergency Buffer and Vacancy
+     Buffer gain the Stabilized view too (their Day 1 reading is unchanged -
+     `cashRemaining` is inherently a settlement-day figure).
+  2. **What "Stabilized" means under continuous growth** (the open problem
+     TODO-134's original write-up didn't anticipate - it assumed a single
+     schedule-change event to wait for, but a growth rate compounds forever,
+     with no natural "fully kicked in" month): use the month the LAST
+     scheduled income/expense change fires as the stabilization point, and
+     read that month's already growth-adjusted values there - reusing the
+     existing simulation (`monthlyData`), no new calculation engine. If a
+     scenario has no scheduled changes at all, fall back to a fixed default
+     horizon (year 5) so "Stabilized" is never undefined.
+  3. **"Offset Utilisation (this month)"** (`App.jsx:3543-3554`, TODO-70) -
+     confirmed this one is DIFFERENT from the rest: it already reads
+     whichever month the Timeline Explorer's own slider is on, not a fixed
+     "month 1" figure, so the Day1/Stabilized question doesn't apply to it.
+     Its real problem is narrower: `OFFSET_UTILISATION_BANDS`
+     (`purchaseHealthCheck.js:168-173`) labels its middle tiers "Building"/
+     "Early days", implying guaranteed forward progress that stopped being
+     true at TODO-136 (a deficit month can drain the offset). Decided:
+     relabel only (e.g. neutral tier names that don't imply a trend) -
+     no new trend arrow/indicator, no change to the numeric thresholds or
+     `calculateOffsetUtilisation`'s math.
+
+  Implementation of all of the above now lives in TODO-134, which already
+  had the two-value display design and the worse-of-two classification rule
+  - see that entry for the full mechanism.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -4552,42 +4684,7 @@ optionally reuse in the commit message when you implement it.
   still opens it for power users. Added App-level coverage for the default
   collapsed state and expand/collapse interaction.
 
-- [ ] **TODO-133: Analyze whether Health Check values should reflect projection assumptions**
-  The Health Check indicators (Emergency Buffer, Housing Cost Ratio,
-  Stress Test, Upfront Cost Ratio, Gearing, Vacancy Buffer, Rental
-  Yield, Mortgage-Free Age) all use "month 1 / right now" static
-  snapshots — they are computed from the base `cashRemaining`,
-  `totalPropertyCost`, `monthlyIncome`, etc. They apply the Effective Tax
-  Rate (via `weeklyIncome`/`weeklyRentalIncome`) but ignore every
-  **growth** assumption — property/salary/rent/expense growth and vacancy
-  never enter them. Since TODO-141 those assumptions are always active and
-  default to non-zero, so this gap now affects every user by default rather
-  than only those who had opted into the old Realistic Mode:
-  - A user projecting salary growing 3%/yr, rent 3%/yr and property 5%/yr
-    still sees Health Check badges that ignore all of it — the Emergency
-    Buffer might read "High risk" today even though income will outpace
-    expenses within 2 years.
-  - The Loan Simulation and Timeline Explorer beside it DO reflect that
-    growth, so the two panels can tell visibly different stories about the
-    same scenario with no explanation of why.
-  **Open question:** should the Health Check gain a projection-aware variant
-  (e.g. "Emergency Buffer at year 3" alongside "Emergency Buffer today")?
-  Or should it deliberately stay as a conservative "day one snapshot" —
-  "how exposed are you RIGHT NOW, before any growth materializes?" — with
-  the growth-modeled view left to the Timeline Explorer?
-  Scope: needs user decision before any code changes. A middle ground is
-  possible: show the "month 1" values always (conservative) and add a
-  second row for "projected at year N", labelling each clearly.
-  **Related wrinkle from TODO-136 (2026-08-16):** "Offset Utilisation (this
-  month)" reads `snapshot.offset`, which can now go DOWN over time - a
-  deficit month draws the offset balance down. Every band label it uses
-  ("Building", "Early days") assumes monotonic progress. Worth resolving
-  alongside the Day 1 / projected question rather than separately. The
-  simulation also now reports `totalCashShortfall`/`monthsWithShortfall`,
-  which no Health Check indicator consumes yet - `classifyByBands` is the
-  shared mechanism if one is wanted.
-
-- [ ] **TODO-134: Health Check indicators that depend on income don't reflect future income sources**
+- [ ] **TODO-134 (decided, ready to implement): Health Check indicators - Day1/Stabilized, unified with TODO-133**
   Several Health Check indicators are computed via
   `getActiveAmount(incomeSources, 1, ...)` — a month-1 snapshot — so
   income sources that start after month 1 are completely invisible.
@@ -4639,12 +4736,33 @@ optionally reuse in the commit message when you implement it.
   covered. Showing both tells the user "you have 2.1 months today,
   but this grows to 5.8 months once the salary increase kicks in."
 
-  Scope: needs user decision before implementation. Related to
-  TODO-133's broader question about whether Health Check indicators
-  should reflect projection assumptions — those now live in the
-  "Projection Assumptions" card and are always active (TODO-141), so both
-  TODOs are asking the same question about one consistent model rather
-  than about a mode that can be switched off.
+  **Decided with TODO-133 (2026-08-17) - three additions to the scope above:**
+  1. **Growth is now unified into the same Day1/Stabilized mechanism**, not
+     a separate concern. Since TODO-141 growth assumptions are always active
+     and non-zero by default, so "Stabilized" must reflect compounding
+     growth too, not only scheduled income-source start dates - the same
+     two-value display and worse-of-two classification above already cover
+     this once "Stabilized" is computed correctly (next point).
+  2. **Stabilization month, resolved:** the month the LAST scheduled income/
+     expense change fires (reusing the existing schedule data already read
+     by `getActiveAmount`/the expense `SteppedExpenseField`s - no new input).
+     Read that month's value from the existing simulation `monthlyData`
+     (already growth-adjusted) rather than re-deriving a separate growth
+     calculation. If a scenario has no scheduled changes at all, fall back
+     to a fixed default horizon of year 5 so "Stabilized" is never
+     undefined for a scenario with completely flat inputs.
+  3. **"Offset Utilisation (this month)" gets a smaller, separate fix in the
+     same pass** (`App.jsx:3543-3554`, `OFFSET_UTILISATION_BANDS` in
+     `purchaseHealthCheck.js:168-173`): relabel the "Building"/"Early days"
+     tiers to neutral labels that don't imply guaranteed forward progress -
+     a deficit month can now drain the offset (TODO-136), which those labels
+     didn't anticipate. Numeric thresholds and `calculateOffsetUtilisation`
+     itself are unchanged; this indicator already reads whichever month the
+     Timeline Explorer slider is on, so it does NOT get the Day1/Stabilized
+     treatment - that question doesn't apply to it.
+
+  Ready to plan/implement - the open decision this entry and TODO-133 were
+  both blocked on is now resolved.
 
 - [ ] **TODO-135 (Analysis only, large scope): Simple vs. Advanced UI modes — presentation only**
   The app currently shows everything at once — 8 collapsible input cards
@@ -4818,54 +4936,6 @@ optionally reuse in the commit message when you implement it.
   "the ratio only ever grows". That stopped being true at TODO-136 - a deficit
   month can drain the offset, so the ratio can fall and the gate can
   un-trigger. The code may well be fine; the comment is now misleading.
-
-- [ ] **TODO-142 (Analysis/design, pairs with the shipped ETF comparison panels): Risk-tolerance profile reference points (Conservative/Moderate/Aggressive) - educational only, not an auto-apply preset**
-  Surfaced from external financial-planning material the user researched
-  (2026-08-13): planners commonly frame the Offset-vs-ETF decision using a
-  risk-tolerance profile (Conservative/Moderate/Aggressive) mapped to a
-  typical starting split (e.g. roughly 80/20, 50/50, 20/80), plus a "safety
-  floor" (emergency-fund months that must stay in Offset regardless of
-  profile) and a tax-bracket input. **Decided (2026-08-13): add this as pure
-  educational reference content, not a feature that sets anything for the
-  user** - it does not get its own quiz, button, or "apply my %" action that
-  writes to the ETF Allocation slider.
-
-  **Why the careful boundary:** the whole ETF comparison family (TODO-137,
-  TODO-138 part 1, and the pending TODO-144/145) rules out "an optimizer that
-  tells the user the exact best ETF percentage" as out of
-  scope, consistent with this app's TODO-94 design philosophy (no feature
-  that could read as personalized financial advice). A profile-driven
-  auto-set control would cross that line; a labeled reference table does
-  not, provided the copy stays in the register of "investors who describe
-  themselves as X typically consider a range around Y" rather than "you
-  should do Y."
-
-  **Scope:**
-  - A small reference block (inside the Extra Investments & Strategies card,
-    which now hosts three comparison panels it would sit alongside) -
-    three rows/cards (Conservative/Moderate/Aggressive) each showing an
-    illustrative starting-point RANGE (not a single precise number) and a
-    one-line rationale (time horizon, tolerance for a market drop, reliance
-    on the mortgage rate environment).
-  - Explicit, visible disclaimer that these are illustrative starting
-    points from general financial-planning practice, not personal advice,
-    and that the user's own ETF Allocation slider (TODO-136) is unaffected
-    by anything shown here - no auto-fill, no "Apply" button.
-  - The "safety floor" concept (minimum months of expenses that should stay
-    in Offset before any ETF allocation) overlaps with the Health Check's
-    existing Emergency Buffer indicator (TODO-133/134) - reuse that
-    figure/language rather than inventing a second "safety floor" number
-    with different math.
-  - Does not require new simulation logic - this is a static reference
-    panel, not a calculator. If it later needs to *react* to the user's own
-    numbers (e.g. "your current Emergency Buffer already covers your
-    Conservative floor"), that upgrade should be considered as a distinct,
-    later follow-up decision, not assumed as part of this scope.
-
-  **Out of scope (the standing boundary across this whole ETF family):** no
-  button that sets the ETF Allocation slider, no quiz that computes "your
-  profile is X", no claim that any percentage is optimal for the specific
-  user's situation.
 
 ---
 

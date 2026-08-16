@@ -354,3 +354,79 @@ describe('ETF return sensitivity and break-even', () => {
     expect(screen.getAllByLabelText('Track over time:')).toHaveLength(1);
   });
 });
+
+// TODO-142: a static reference panel, not a fourth comparison - no
+// simulation, no allocation slider, no button.
+describe('Risk-tolerance profile reference points', () => {
+  const RISK_HEADING = '🧭 Risk-tolerance reference points';
+
+  async function openRiskProfiles(user) {
+    await openEtfSection(user);
+    await user.click(screen.getByRole('checkbox', INVEST_IN_ETFS_CHECKBOX));
+  }
+
+  // Unlike its sibling panels, the heading here is a direct child of the
+  // panel's own root div (no extra flex-wrapper level around it), so a
+  // single closest('div') is already the panel root - one more level up
+  // would escape into the whole "Extra Investments" card.
+  function riskSection() {
+    return screen.getByText(RISK_HEADING).closest('div');
+  }
+
+  it('appears only once ETF investing is actually on', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openEtfSection(user);
+    expect(screen.queryByText(RISK_HEADING)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('checkbox', INVEST_IN_ETFS_CHECKBOX));
+    expect(screen.getByText(RISK_HEADING)).toBeInTheDocument();
+  });
+
+  it('names all three profiles as illustrative ranges, not a single percentage', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openRiskProfiles(user);
+
+    const section = riskSection();
+    expect(within(section).getByText('Conservative')).toBeInTheDocument();
+    expect(within(section).getByText('Moderate')).toBeInTheDocument();
+    expect(within(section).getByText('Aggressive')).toBeInTheDocument();
+  });
+
+  it('shows the visible not-advice disclaimer', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openRiskProfiles(user);
+
+    expect(within(riskSection()).getByText(/not personal advice/)).toBeInTheDocument();
+  });
+
+  // The same figure Purchase Health Check renders, read once rather than
+  // recomputed a second way - this is the check that would catch the two
+  // readings drifting apart.
+  it('shows the same Emergency Buffer reading as Purchase Health Check', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: /▸ Show/ }));
+    const healthCheckValue = screen.getByText('Emergency Buffer').closest('div').parentElement.textContent;
+    // Requires a decimal digit (calculateEmergencyBufferMonths.toFixed(1)
+    // always produces one) so this can't match the tooltip's own whole-number
+    // prose ("≥12 months excellent, 6-12 good...").
+    const monthsMatch = healthCheckValue.match(/\d+\.\d+ months|∞/);
+    expect(monthsMatch).not.toBeNull();
+
+    await openRiskProfiles(user);
+    expect(within(riskSection()).getByText(new RegExp(monthsMatch[0].replace('.', '\\.')))).toBeInTheDocument();
+  });
+
+  it('contains no button or slider that could apply a profile to the ETF Allocation slider', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openRiskProfiles(user);
+
+    const section = riskSection();
+    expect(within(section).queryAllByRole('button')).toHaveLength(0);
+    expect(within(section).queryAllByRole('slider')).toHaveLength(0);
+  });
+});

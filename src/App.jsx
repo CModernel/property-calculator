@@ -40,6 +40,7 @@ import { runStrategyScenarios, runReturnScenarios, summariseStrategy, buildCompa
 import { findBreakEvenEtfReturn } from './calculations/etfBreakEven';
 import StrategyScenarioComparison from './components/StrategyScenarioComparison';
 import EtfReturnSensitivity from './components/EtfReturnSensitivity';
+import RiskToleranceProfiles from './components/RiskToleranceProfiles';
 import { calculateOffsetTimingBenefit, calculateCardCashback } from './calculations/creditCardBenefit';
 import { calculatePresentValueOfInterest } from './calculations/inflation';
 import { clampToRange } from './calculations/clampToRange';
@@ -1924,6 +1925,18 @@ const PropertyInvestmentCalculator = () => {
                   />
                 );
               })()}
+
+              {/* TODO-142: a static reference panel, not a fourth comparison -
+                  it runs no simulation and reads only the Emergency Buffer
+                  figure Purchase Health Check already computes. Same gate as
+                  its two siblings above, so it only shows once ETF investing
+                  is genuinely active. */}
+              {etfInvestingActive && (
+                <RiskToleranceProfiles
+                  emergencyBufferMonths={emergencyBufferMonths}
+                  emergencyBufferClassification={emergencyBufferClass}
+                />
+              )}
               </div>
               )}
             </>
