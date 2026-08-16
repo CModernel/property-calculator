@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   runStrategyScenarios,
+  runReturnScenarios,
   summariseStrategy,
   getComparisonMonths,
   buildComparisonRows,
@@ -9,6 +10,9 @@ import {
   OFFSET_ONLY,
   CUSTOM,
   ALL_ETF,
+  CONSERVATIVE,
+  CENTRAL,
+  FAVOURABLE,
   COMPARISON_METRICS,
 } from './strategyScenarios';
 
@@ -171,6 +175,59 @@ describe('buildComparisonRows', () => {
     // Offset-only never invests; All-to-ETF always does.
     expect(etfRows.at(-1).values.find(v => v.key === OFFSET_ONLY).value).toBe(0);
     expect(etfRows.at(-1).values.find(v => v.key === ALL_ETF).value).toBeGreaterThan(0);
+  });
+});
+
+// TODO-138: the sibling factory that holds the allocation fixed and varies
+// the expected return instead.
+describe('runReturnScenarios', () => {
+  it('returns the three return levels in ascending order around the central assumption', () => {
+    const runs = runReturnScenarios(BASE_PARAMS, 50, 8);
+    expect(runs.map(r => r.key)).toEqual([CONSERVATIVE, CENTRAL, FAVOURABLE]);
+    expect(runs.map(r => r.expectedEtfReturn)).toEqual([5, 8, 11]);
+  });
+
+  it('holds the allocation fixed across all three - only the return varies', () => {
+    const runs = runReturnScenarios(BASE_PARAMS, 40, 8);
+    runs.forEach(r => expect(r.etfAllocationPct).toBe(40));
+  });
+
+  it('clamps the conservative case at 0 rather than modelling a permanent decline', () => {
+    const runs = runReturnScenarios(BASE_PARAMS, 50, 2);
+    expect(runs.map(r => r.expectedEtfReturn)).toEqual([0, 2, 5]);
+  });
+
+  it('accepts a custom spread', () => {
+    const runs = runReturnScenarios(BASE_PARAMS, 50, 8, 5);
+    expect(runs.map(r => r.expectedEtfReturn)).toEqual([3, 8, 13]);
+  });
+
+  it('a higher assumed return produces a strictly larger ETF balance', () => {
+    const [low, mid, high] = runReturnScenarios(BASE_PARAMS, 50, 8)
+      .map(r => r.simulation.monthlyData.at(-1).etf);
+    expect(mid).toBeGreaterThan(low);
+    expect(high).toBeGreaterThan(mid);
+  });
+
+  // This is the property that makes etfBreakEven.js's bisection valid: the
+  // expected return moves the ETF balance and nothing else, so it cannot
+  // shift the payoff month or the comparison horizon. Pinned here so a future
+  // engine change breaks a test instead of silently invalidating the solver.
+  it('cannot change the payoff month - the return never feeds back into the loan', () => {
+    const months = runReturnScenarios(BASE_PARAMS, 50, 8, 8).map(r => r.simulation.months);
+    expect(new Set(months).size).toBe(1);
+  });
+
+  it('works with the existing generic helpers, which do not care which knob varied', () => {
+    const runs = runReturnScenarios(BASE_PARAMS, 50, 8);
+    expect(hasUsableData(runs)).toBe(true);
+
+    const rows = buildComparisonRows(runs, 'etf', SNAPSHOT_CONTEXT);
+    expect(rows.length).toBe(getComparisonMonths(runs).length);
+    // Same month, same contributions, three different growth rates.
+    const lastRow = rows.at(-1).values.map(v => v.value);
+    expect(lastRow[2]).toBeGreaterThan(lastRow[1]);
+    expect(lastRow[1]).toBeGreaterThan(lastRow[0]);
   });
 });
 

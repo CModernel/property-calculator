@@ -15,6 +15,18 @@ export const OFFSET_ONLY = 'offsetOnly';
 export const CUSTOM = 'custom';
 export const ALL_ETF = 'allEtf';
 
+// TODO-138: keys for the return-sensitivity trio (see runReturnScenarios).
+export const CONSERVATIVE = 'conservative';
+export const CENTRAL = 'central';
+export const FAVOURABLE = 'favourable';
+
+// How far either side of the user's own Expected ETF Return the low/high
+// scenarios sit. Deliberately a band around THEIR assumption rather than
+// absolute figures this app declares "conservative" - the point is to show
+// how sensitive the outcome is to a number nobody can know, not to assert
+// what that number should be.
+export const RETURN_SCENARIO_SPREAD = 3;
+
 // Rows every 12 months once the projection is long enough for that to
 // produce a useful number of them. TODO-137's own edge case: a loan with a
 // year or two left would otherwise render a table with 0 or 1 row.
@@ -66,6 +78,36 @@ export function runStrategyScenarios(baseParams, customEtfAllocationPct) {
       description: 'A comparison boundary, not a recommendation.',
       simulation: run(100),
     },
+  ];
+}
+
+// TODO-138: the same three-run shape as runStrategyScenarios above, but
+// holding the allocation fixed and varying the EXPECTED RETURN instead -
+// "how much does this bet depend on my guess about the market?".
+//
+// Sibling rather than a parameter on runStrategyScenarios: that function's
+// exact 3-element shape and 2-arg signature are pinned by its own tests, and
+// every downstream helper here (hasUsableData/summariseStrategy/
+// getComparisonMonths/buildComparisonRows) is already agnostic about WHICH
+// knob varied, so a second factory costs nothing.
+//
+// Worth knowing for etfBreakEven.js: expectedEtfReturn cannot change the
+// payoff month. etfBalance is written in only three places in
+// offsetSimulation.js and never read by the loan side, so a different return
+// moves the ETF balance and nothing else - all three runs here finish in the
+// same month, which is what makes them directly comparable (and what makes
+// bisection over the return valid).
+export function runReturnScenarios(baseParams, etfAllocationPct, centralReturn, spread = RETURN_SCENARIO_SPREAD) {
+  const run = (expectedEtfReturn) => calculateLoanWithOffset({ ...baseParams, etfAllocationPct, expectedEtfReturn });
+  // Clamped at 0: a central assumption below the spread would otherwise
+  // produce a negative "conservative" return, which models something quite
+  // different (a permanent decline) than "lower than you hoped".
+  const low = Math.max(0, centralReturn - spread);
+  const high = centralReturn + spread;
+  return [
+    { key: CONSERVATIVE, label: `Conservative (${low}%)`, etfAllocationPct, expectedEtfReturn: low, simulation: run(low) },
+    { key: CENTRAL, label: `Your assumption (${centralReturn}%)`, etfAllocationPct, expectedEtfReturn: centralReturn, simulation: run(centralReturn) },
+    { key: FAVOURABLE, label: `Favourable (${high}%)`, etfAllocationPct, expectedEtfReturn: high, simulation: run(high) },
   ];
 }
 

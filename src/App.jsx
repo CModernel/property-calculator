@@ -36,8 +36,10 @@ import {
 } from './calculations/loan';
 import { calculateLoanWithOffset } from './calculations/offsetSimulation';
 import { runStrategyGrid, selectParetoFront, calculateEtfCrashSurvivedPct, classifyEtfCrash } from './calculations/strategyComparison';
-import { runStrategyScenarios, summariseStrategy, buildComparisonRows, getComparisonMonths, hasUsableData, YEARLY_STEP_MIN_MONTHS } from './calculations/strategyScenarios';
+import { runStrategyScenarios, runReturnScenarios, summariseStrategy, buildComparisonRows, getComparisonMonths, hasUsableData, YEARLY_STEP_MIN_MONTHS } from './calculations/strategyScenarios';
+import { findBreakEvenEtfReturn } from './calculations/etfBreakEven';
 import StrategyScenarioComparison from './components/StrategyScenarioComparison';
+import EtfReturnSensitivity from './components/EtfReturnSensitivity';
 import { calculateOffsetTimingBenefit, calculateCardCashback } from './calculations/creditCardBenefit';
 import { calculatePresentValueOfInterest } from './calculations/inflation';
 import { clampToRange } from './calculations/clampToRange';
@@ -1862,6 +1864,63 @@ const PropertyInvestmentCalculator = () => {
                     metricKey={comparisonMetric}
                     onMetricChange={setComparisonMetric}
                     monthlyStepping={monthlyStepping}
+                  />
+                );
+              })()}
+
+              {/* TODO-138: the third and narrowest of the ETF comparisons.
+                  The Pareto grid searches allocations; the panel above shows
+                  where the chosen one sits between the extremes; this one
+                  holds the allocation fixed and asks how much of the answer
+                  depends on the return assumption - plus the return that
+                  would merely match the offset. Same IIFE pattern so nothing
+                  computes while the section is closed. */}
+              {etfInvestingActive && etfAllocationPct > 0 && (() => {
+                const sensitivityBaseParams = {
+                  contributions: offsetContributions,
+                  personalExpenseItems,
+                  incomeSources,
+                  expenseFields,
+                  monthlyToOffset: baseMonthlySurplus,
+                  loanAmount,
+                  monthlyRate,
+                  monthlyPayment,
+                  interestRateField,
+                  initialSavingsBalance: cashRemaining,
+                  savingsInterestRate,
+                  propertyPrice,
+                  propertyGrowthRate,
+                  salaryGrowthRate,
+                  rentGrowthRate,
+                  vacancyWeeksPerYear,
+                  expenseGrowthRate,
+                  effectiveTaxRate,
+                  isInvestmentProperty,
+                  expectedEtfReturn,
+                  switchThresholdPct,
+                  maxMonths: totalMonths,
+                };
+                const returnRuns = runReturnScenarios(sensitivityBaseParams, etfAllocationPct, expectedEtfReturn);
+                if (!hasUsableData(returnRuns)) return null;
+
+                const snapshotContext = {
+                  loanAmount,
+                  monthZeroInterest,
+                  initialSavingsBalance: cashRemaining,
+                  initialPropertyValue: propertyPrice,
+                };
+                // The offset-only arm is the reference every column is
+                // measured against - reuse the existing scenario factory
+                // rather than hand-rolling a fourth base-params bundle.
+                const offsetOnlyRun = runStrategyScenarios(sensitivityBaseParams, 0)[0];
+                if (!hasUsableData([offsetOnlyRun])) return null;
+
+                return (
+                  <EtfReturnSensitivity
+                    summaries={returnRuns.map((run) => summariseStrategy(run, snapshotContext))}
+                    offsetOnlySummary={summariseStrategy(offsetOnlyRun, snapshotContext)}
+                    breakEven={findBreakEvenEtfReturn(sensitivityBaseParams, etfAllocationPct, snapshotContext)}
+                    allocationPct={etfAllocationPct}
                   />
                 );
               })()}

@@ -4197,6 +4197,74 @@ optionally reuse in the commit message when you implement it.
   test confirming the default (no-deficit) scenario reads "None" everywhere.
   `npm test -- --run` (541/541), `npm run lint`, `npm run build` clean.
   Spanish-text sweep clean.
+
+- [x] **TODO-138 (part 1): ETF return sensitivity + break-even return**
+  The original TODO-138 asked for five sub-features. Exploration found their
+  costs were radically different, so the two needing NO simulation-engine
+  change shipped here and the rest were split out (TODO-144/145 below).
+  These two belong together because they sit on the same axis
+  (`expectedEtfReturn`): one shows three points on it, the other finds the
+  crossing point.
+  **Return sensitivity.** New `runReturnScenarios` in `strategyScenarios.js` -
+  a sibling to `runStrategyScenarios`, not a change to it (that one's exact
+  3-element shape and signature are pinned by its own tests). Holds the
+  allocation fixed and varies the return, banding ±3 points around the user's
+  OWN Expected ETF Return rather than absolute figures this app declares
+  "conservative" - the point is showing how much the answer rests on a guess,
+  not asserting what the guess should be. The conservative case clamps at 0,
+  since a negative return models a permanent decline, which is a different
+  claim than "lower than you hoped". Every downstream helper
+  (`hasUsableData`/`summariseStrategy`/`getComparisonMonths`/
+  `buildComparisonRows`) was already agnostic about which knob varied and was
+  reused untouched.
+  **Break-even return.** New `etfBreakEven.js` - the first root-finding helper
+  in `src/calculations/` (everything else there is a forward calculation), so
+  it's deliberately plain bisection rather than anything clever.
+  **Why bisection is provably valid here, not just convenient:** `etfBalance`
+  is written in exactly three places in `offsetSimulation.js` and never READ
+  by the loan side. So the expected return moves the ETF balance and nothing
+  else - it cannot shift the payoff month, the offset, or the interest paid.
+  That makes net worth strictly monotonic in the return (one crossing point),
+  fixes the comparison horizon (no moving target), and means the offset-only
+  arm is simulated once outside the loop. A test pins the payoff-month
+  invariance explicitly so a future engine change breaks a test rather than
+  silently invalidating the solver.
+  **The modelling trap this avoided, found by a failing test.** The plan said
+  to compare both arms at the LATER of the two payoff months. That produced
+  "no return needed at all", which was nonsense. Cause: past its own payoff a
+  run has no more `monthlyData`, so `getTimelineSnapshot` clamps it to its
+  final row - freezing not just its balances but its PROPERTY VALUE. On a real
+  fixture the offset-only arm froze at ~797k while the still-running arm showed
+  ~964k at the same date: a ~168k phantom gap with nothing to do with either
+  strategy, since the property appreciates identically either way. Switched to
+  the EARLIER payoff month, where both arms are genuinely live and mid-flight
+  and nothing is frozen or invented. The question it now answers is crisp: at
+  the moment the safe path would have cleared your loan, what return would the
+  ETF have needed to leave you equally well off? Both the reasoning and a
+  regression test for the frozen-property artifact are in the code.
+  Also deliberately NOT the naive `return × (1 - tax) - mortgage rate` formula
+  from popular financial-planning material - it ignores the payoff-date shift,
+  the negative-gearing feedback, and the AU 50% CGT discount the engine already
+  models properly (previously recorded in this file, honoured here).
+  Reports three distinct outcomes rather than a bare number - a rate was found,
+  no plausible return catches up, or there's no threshold to clear at all -
+  because quoting "0%" for the third case would imply a threshold exists.
+  **UI:** new `EtfReturnSensitivity` component, its own rather than a
+  parameterisation of `StrategyScenarioComparison` - that one hardcodes its
+  copy, a `CUSTOM`-key check, seven literal rows, and a fixed `<select>` DOM
+  id. Notably this panel has NO metric-over-time selector, which sidesteps
+  that id collision entirely (existing tests query it un-scoped and would break
+  on a duplicate); a test now pins that there's still exactly one such control.
+  Tests: 12 new in `etfBreakEven.test.js` - including a **round-trip** (feed
+  the reported rate back into a fresh simulation and assert net-worth parity,
+  the check that would actually catch a wrong answer), a genuine-threshold
+  check (just below loses, just above wins), monotonicity, the frozen-property
+  regression, both edge outcomes with fixtures found empirically rather than
+  guessed, and a plausibility anchor so a refactor producing an absurd figure
+  fails even if the pure round-trip still passes. 7 new in
+  `strategyScenarios.test.js`, 5 new App-level.
+  `npm test -- --run` (565/565), `npm run lint`, `npm run build` clean.
+  Spanish-text sweep clean.
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -4677,77 +4745,81 @@ optionally reuse in the commit message when you implement it.
   views. Tagged as "(Analysis only, large scope)" to signal that this entry
   records product/architecture decisions and does not authorize code changes.
 
-- [ ] **TODO-138 (Analysis/design, depends on TODO-136, pairs with TODO-137): Advanced ETF timing/risk scenario comparisons**
-  Split out from the original single-entry TODO-136 during the same
-  2026-08-12 analysis session, as the most product-judgment-heavy and
-  distinct piece of that original write-up.
+- [ ] **TODO-144: "When to start" ETF contributions - delayed start and reserve-gated start**
+  Split out of the original TODO-138 (2026-08-16) when exploration showed its
+  five sub-features had radically different costs. These two both need a NEW
+  `calculateLoanWithOffset` param, unlike the two that shipped as TODO-138
+  part 1, which needed no engine change at all.
 
-  Use deterministic scenario paths first, matching the app's existing
-  month-by-month design; this phase is not a Monte Carlo engine - consistent
-  with this app's established TODO-94 design philosophy ("if the user needs
-  to understand it to trust it, don't build it that way"). Each path must
-  document its return assumptions, contribution timing, tax treatment, and
-  any drawdown shock so that two runs are reproducible. Add user-controlled
-  comparisons rather than an automatic financial recommendation:
+  **(a) Delayed start** - compare investing immediately vs after 12/24/60
+  months. **`switchThresholdPct` provably cannot express this**, and that is
+  worth stating because it looks like it could: it gates on
+  `(offsetBalance / balance) * 100 >= switchThresholdPct`, a ratio of two
+  quantities that both move every month as an emergent result of the whole
+  simulation. The month that ratio crosses a given value is an OUTPUT, not
+  something the user can set, and it isn't even monotonically invertible now
+  that a deficit month can drain the offset. It's also loan-relative, so the
+  same threshold means a different delay on a different loan. Needs a genuine
+  `etfStartMonth` param. The app's existing 1-indexed `startMonth` convention
+  (`recurringAmount.js`'s `isScheduleActive`, `MAX_MONTH = 360` as the
+  "forever" sentinel) is the idiom to follow, though only the `startMonth`
+  half - the ETF gate is a one-way latch, not a recurring schedule.
 
-  - Compare starting ETF contributions immediately versus after a configurable
-    delay (for example, after 12, 24, or 60 months).
-  - Optionally compare waiting until the Offset reaches a chosen emergency-
-    reserve target before beginning ETF contributions.
-  - Show at least conservative, central, and favorable ETF-return scenarios.
-  - Add a configurable market-drop stress test (for example, a 20%, 30%, or
-    40% fall after ETF investing begins), and show whether the user still has
-    adequate liquidity and can continue servicing the loan.
-  - Surface a break-even or hurdle-return view: what ETF return would be
-    needed to compensate for the interest benefit forgone by sending that
-    surplus to the ETF instead of the Offset. Label this as an illustrative
-    comparison, not a guaranteed return or personal advice.
-  - Keep property-equity/net-worth outputs tied to the currently modeled
-    property. A future property-sale or inheritance-liquidation event must
-    remove the asset and model its net proceeds separately; it is not silently
-    included in this ETF-allocation TODO.
-  - Decide separately how dividends, capital gains, tax, volatility, and
-    sequence-of-returns risk are represented. Coordinate with TODO-127 rather
-    than implying that the current flat tax rate is a complete ETF tax model
-    - confirmed a real dependency: ETF returns already share the same
-    `effectiveTaxRate` field (with the CGT-discount halving) that TODO-127
-    would change the meaning of.
+  **(b) Reserve-gated start** - wait until the offset covers N months of
+  expenses. Closer to `switchThresholdPct` but with a different denominator:
+  a reserve is expenses-relative, the existing gate is loan-relative. The
+  pieces of a monthly-outgoings figure all exist inside the loop
+  (`monthlyPersonalExpensesCost`, `monthlyExpensesForMonth`,
+  `currentMonthlyPayment`) but are never summed into a reusable scalar -
+  `netMonthlyCashFlow` nets them against income, so it is not it. **Needs a
+  product decision before implementing**: does "N months of expenses" include
+  the loan installment, and/or property expenses? Note `monthlyToOffset`
+  already has the month-1 installment baked in, so double-counting is a real
+  hazard here.
 
-  **Validated feasibility note:** `calculateEtfCrashSurvivedPct`/
-  `classifyEtfCrash` (`strategyComparison.js`) are already decoupled from the
-  current split model and directly reusable for the stress test above -
-  confirmed via code review, not just assumed.
+  Both should reuse `strategyScenarios.js`'s generic helpers, which are
+  already agnostic about which knob a scenario varies (TODO-138 part 1 proved
+  this by adding `runReturnScenarios` alongside the original factory with no
+  changes to any downstream helper).
 
-  **On the "break-even/hurdle-return" formula (note added 2026-08-13):**
-  external financial-planning material the user found frames this as
-  `ETF return × (1 - tax rate) - mortgage rate = risk premium`, applying a
-  single flat tax haircut to the whole ETF return. Our model is already
-  more precise than that simplification: `offsetSimulation.js`'s
-  `etfMonthlyRate` (TODO-131) applies the AU 50% CGT discount specifically,
-  not a flat `(1 - tax)` on the entire return - it doesn't conflate
-  dividend income (taxed in full) with long-term capital gains (taxed at
-  half rate) the way the simplified online formula does. Do not "fix" this
-  to match the simpler formula; the existing treatment is the more correct
-  one. This phase's hurdle-return view should build on the existing
-  `etfMonthlyRate` calculation, not reimplement the naive version.
+- [ ] **TODO-145: ETF market-drop stress test - blocked on a modelling decision, not on effort**
+  Split out of the original TODO-138 (2026-08-16). The hardest of its five
+  sub-features, and the only one that touches the simulation loop's control
+  flow rather than just its inputs.
 
-  **UI boundary:** this belongs inside the **Extra Investments & Strategies**
-  card, which TODO-137 built (2026-08-16) - so this is now an addition to an
-  existing home rather than something that has to create one. It should be
-  hidden from the Simple editor/results by default, while any active advanced
-  strategy must be disclosed if it changes the numbers shown there.
-  Reuse `src/calculations/strategyScenarios.js` (also from TODO-137) rather
-  than starting a fourth comparison engine: it already runs
-  `calculateLoanWithOffset` across named strategies against identical inputs
-  and builds a shared month axis, which is the same shape a delayed-start or
-  crash-scenario comparison needs.
+  **The blocker the original TODO did not anticipate.** TODO-138 wanted a
+  20/30/40% market fall "and show whether the user still has adequate
+  liquidity and can continue servicing the loan". But `etfBalance` is written
+  in exactly three places in `offsetSimulation.js` - initialised to 0, grown
+  by `etfMonthlyRate`, and credited each surplus month - and is **never read
+  by the loan side**. The ETF is a pure sink, deliberately never drawn on
+  during a deficit month (there's an explicit comment saying so). So under the
+  current model **an ETF crash cannot affect liquidity or loan servicing at
+  all** - it would change one reported number and nothing else. Making the
+  feature mean what the TODO wants requires also modelling the SALE of ETF
+  units to cover a shortfall: a new financial concept (with its own CGT
+  consequences, given the engine already models the 50% discount), not a
+  mechanical change. That decision comes first.
 
-  **Out of scope:** an optimizer that tells the user the exact best ETF
-  percentage, market-timing advice, a guarantee that ETF returns exceed the
-  mortgage rate, or a full portfolio/asset-allocation adviser. The feature is
-  for transparent scenario comparison and education.
+  **Correction to the original entry's "validated feasibility note"**, which
+  claimed `calculateEtfCrashSurvivedPct`/`classifyEtfCrash` were "directly
+  reusable". Verified 2026-08-16 that this is only half right:
+  `calculateEtfCrashSurvivedPct` is a post-hoc arithmetic check on a FINAL
+  balance (two scalars in, one of {50,30,10,0} out) and never touches the
+  simulation - it cannot express a mid-simulation shock, where removing
+  capital at month 36 also removes everything it would have compounded into
+  over the remaining ~300 months. Only the banding layer (`ETF_CRASH_BANDS`,
+  `classifyEtfCrash`, and `classifyByBands` beneath them) is genuinely
+  reusable.
 
-- [ ] **TODO-142 (Analysis/design, pairs with TODO-138): Risk-tolerance profile reference points (Conservative/Moderate/Aggressive) - educational only, not an auto-apply preset**
+  **Unrelated stale comment found while investigating, worth fixing whenever
+  this area is next touched:** `offsetSimulation.js`'s `switchThresholdPct`
+  gate carries a comment justifying its stateless check on the grounds that
+  "the ratio only ever grows". That stopped being true at TODO-136 - a deficit
+  month can drain the offset, so the ratio can fall and the gate can
+  un-trigger. The code may well be fine; the comment is now misleading.
+
+- [ ] **TODO-142 (Analysis/design, pairs with the shipped ETF comparison panels): Risk-tolerance profile reference points (Conservative/Moderate/Aggressive) - educational only, not an auto-apply preset**
   Surfaced from external financial-planning material the user researched
   (2026-08-13): planners commonly frame the Offset-vs-ETF decision using a
   risk-tolerance profile (Conservative/Moderate/Aggressive) mapped to a
@@ -4758,8 +4830,9 @@ optionally reuse in the commit message when you implement it.
   user** - it does not get its own quiz, button, or "apply my %" action that
   writes to the ETF Allocation slider.
 
-  **Why the careful boundary:** TODO-138 already explicitly lists "an
-  optimizer that tells the user the exact best ETF percentage" as out of
+  **Why the careful boundary:** the whole ETF comparison family (TODO-137,
+  TODO-138 part 1, and the pending TODO-144/145) rules out "an optimizer that
+  tells the user the exact best ETF percentage" as out of
   scope, consistent with this app's TODO-94 design philosophy (no feature
   that could read as personalized financial advice). A profile-driven
   auto-set control would cross that line; a labeled reference table does
@@ -4768,8 +4841,8 @@ optionally reuse in the commit message when you implement it.
   should do Y."
 
   **Scope:**
-  - A small reference block (likely inside the Advanced-only Extra
-    Investments & Strategies card, near TODO-138's scenario comparisons) -
+  - A small reference block (inside the Extra Investments & Strategies card,
+    which now hosts three comparison panels it would sit alongside) -
     three rows/cards (Conservative/Moderate/Aggressive) each showing an
     illustrative starting-point RANGE (not a single precise number) and a
     one-line rationale (time horizon, tolerance for a market drop, reliance
@@ -4789,9 +4862,10 @@ optionally reuse in the commit message when you implement it.
     Conservative floor"), that upgrade should be considered as a distinct,
     later follow-up decision, not assumed as part of this scope.
 
-  **Out of scope (same boundary as TODO-138):** no button that sets the ETF
-  Allocation slider, no quiz that computes "your profile is X", no claim
-  that any percentage is optimal for the specific user's situation.
+  **Out of scope (the standing boundary across this whole ETF family):** no
+  button that sets the ETF Allocation slider, no quiz that computes "your
+  profile is X", no claim that any percentage is optimal for the specific
+  user's situation.
 
 ---
 

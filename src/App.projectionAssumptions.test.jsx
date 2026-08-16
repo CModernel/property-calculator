@@ -283,3 +283,74 @@ describe('Offset vs ETF side-by-side comparison', () => {
     expect(screen.getByText(new RegExp(`💰 Offset: \\${yourSplitFinal}`))).toBeInTheDocument();
   });
 });
+
+// TODO-138: the return-sensitivity panel, the third and narrowest of the
+// three ETF comparisons in this card.
+describe('ETF return sensitivity and break-even', () => {
+  const SENSITIVITY_HEADING = '🎚️ How much does the return assumption matter?';
+
+  async function openSensitivity(user) {
+    await openEtfSection(user);
+    await user.click(screen.getByRole('checkbox', INVEST_IN_ETFS_CHECKBOX));
+  }
+
+  function sensitivitySection() {
+    return screen.getByText(SENSITIVITY_HEADING).closest('div').parentElement;
+  }
+
+  it('appears only once ETF investing is actually on', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openEtfSection(user);
+    expect(screen.queryByText(SENSITIVITY_HEADING)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('checkbox', INVEST_IN_ETFS_CHECKBOX));
+    expect(screen.getByText(SENSITIVITY_HEADING)).toBeInTheDocument();
+  });
+
+  it('bands the three columns around the user\'s own Expected ETF Return', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openSensitivity(user);
+
+    // Default Expected ETF Return is 8%, so the band is 5 / 8 / 11.
+    const section = sensitivitySection();
+    expect(within(section).getByText('Conservative (5%)')).toBeInTheDocument();
+    expect(within(section).getByText('Your assumption (8%)')).toBeInTheDocument();
+    expect(within(section).getByText('Favourable (11%)')).toBeInTheDocument();
+  });
+
+  it('re-bands when the Expected ETF Return changes', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openSensitivity(user);
+
+    fireEvent.change(screen.getByLabelText('Expected ETF Return'), { target: { value: '10' } });
+    fireEvent.blur(screen.getByLabelText('Expected ETF Return'));
+
+    const section = sensitivitySection();
+    expect(within(section).getByText('Conservative (7%)')).toBeInTheDocument();
+    expect(within(section).getByText('Favourable (13%)')).toBeInTheDocument();
+  });
+
+  it('reports a break-even return framed as illustrative, not as advice', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openSensitivity(user);
+
+    const section = sensitivitySection();
+    expect(within(section).getByText(/Break-even return:/)).toBeInTheDocument();
+    expect(within(section).getByText(/% a year/)).toBeInTheDocument();
+    expect(within(section).getByText(/not a forecast or advice/)).toBeInTheDocument();
+  });
+
+  // Its own panel, so it must not reuse the sibling's select id - a duplicate
+  // would break the un-scoped getByLabelText the TODO-137 tests rely on.
+  it('does not add a second "Track over time" control', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openSensitivity(user);
+
+    expect(screen.getAllByLabelText('Track over time:')).toHaveLength(1);
+  });
+});
