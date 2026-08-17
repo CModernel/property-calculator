@@ -4766,45 +4766,6 @@ optionally reuse in the commit message when you implement it.
   still opens it for power users. Added App-level coverage for the default
   collapsed state and expand/collapse interaction.
 
-- [ ] **TODO-147 (do this FIRST - it protects TODO-148/149/150/151): Scenario-matrix regression test for the four Tier-1 Health Check indicators**
-  Came out of a user-requested audit (2026-08-17) of Emergency Buffer, Housing
-  Cost Ratio, Interest Rate Stress Test and Upfront Cost Ratio. The audit was
-  run by importing the real calculation modules and replicating `App.jsx`'s
-  wiring in a throwaway script - useful once, but it left nothing behind, so
-  the next change to any of these four can move all of them silently.
-  **Build a single fixture-driven test** (suggested
-  `src/calculations/purchaseHealthCheck.scenarios.test.js`) that walks a table
-  of scenario overrides on top of `config.default.json` and asserts all four
-  raw values AND their band labels. It must NOT render `App` - replicate the
-  wiring in a helper, the way the audit script did, so it stays fast and
-  isolated from DOM churn. Reuse the real modules (`loan.js`,
-  `recurringAmount.js`, `lmi.js`, `closingCosts.js`, `states/`,
-  `totalCashRequired.js`, `purchaseHealthCheck.js`) - do not re-derive any
-  formula in the test, or it stops being a check on the code.
-  **The verified current matrix** (baseline = `config.default.json`,
-  `effectiveTaxRate` 20, `payLmiUpfront` false). Pin exactly these, so that
-  TODO-148/149/150/151 each have to change an expected value on purpose:
-
-  | Scenario | EB | HCR | ST | UCR |
-  |---|---|---|---|---|
-  | baseline | 6.3 Good | 55 High risk | 3 Excellent | 1.7 Excellent |
-  | `isFirstHomeBuyer: false` | 1.3 High risk | 55 High risk | 3 Excellent | 4.4 High |
-  | `propertyPrice: 1200000` | -1.5 High risk | 85 High risk | 0 High risk | 4.4 High |
-  | `totalSavings: 500000` | 39.4 Excellent | 55 High risk | 3 Excellent | 1.7 Excellent |
-  | `interestRate: 10` | 4.8 Moderate | 76 High risk | 2 Good | 1.7 Excellent |
-  | `loanTermYears: 15` | 4.9 Moderate | 74 High risk | 3 Excellent | 1.7 Excellent |
-  | `downPayment: 100000` | 40.7 Excellent | 73 High risk | 2 Good | 1.7 Excellent |
-  | `downPayment: 100000, payLmiUpfront: true` | 37.2 Excellent | 73 High risk | 2 Good | 4.1 High |
-  | salary 3000/wk | 6.3 Good | 30 Excellent | 3 Excellent | 1.7 Excellent |
-  | salary 800/wk | 6.3 Good | 111 High risk | 0 High risk | 1.7 Excellent |
-  | Groceries 1300 (single personal expense) | 5.5 Moderate | 55 High risk | 3 Excellent | 1.7 Excellent |
-  | `propertyPrice: 400000, downPayment: 100000` | 80.5 Excellent | 34 Good | 3 Excellent | 1.2 Excellent |
-
-  Also worth asserting as its own case, because it surprises people and is
-  correct: Emergency Buffer is completely income-independent (6.3 at both
-  800/wk and 3000/wk), and `effectiveTaxRate` 0 vs 20 changes nothing while no
-  income item is flagged `isGross`.
-
 - [ ] **TODO-148 (small, contained): Stress Test claims "Fails at +1%" when the scenario is ALREADY in deficit at today's rate**
   Found in the same audit. `calculateStressTestSurvivedDelta`
   (`src/calculations/purchaseHealthCheck.js:67-79`) only probes +3/+2/+1 and
@@ -5171,6 +5132,27 @@ optionally reuse in the commit message when you implement it.
   25 new tests (6 engine, 6 scenario-factory, 7 component, 5 App-level, plus the
   past-payoff case). `EtfReturnSensitivity` has no test file; this panel got one
   rather than copying that gap. Suite 748 passing, lint and build clean.
+
+- [x] **TODO-147: Scenario-matrix regression test for the four Tier-1 Health Check indicators**
+  New `src/calculations/purchaseHealthCheck.scenarios.test.js`. Replicates
+  `App.jsx`'s own Day-1 wiring in a `runScenario()` helper that calls the real
+  modules (`loan.js`, `recurringAmount.js`, `lmi.js`, `closingCosts.js`,
+  `states/`, `totalCashRequired.js`, `purchaseHealthCheck.js`) directly - no
+  `<App/>` render, no re-derived formula, per the entry's own instruction.
+  **Re-verified the entry's pinned matrix against current code before trusting
+  it**, since it was audited on 2026-08-17 and TODO-146 (offset-liquidity fix)
+  landed since - all 12 rows still match exactly. They do because every row's
+  scenario has zero scheduled offset contributions, so `liquidSavings` and the
+  pre-TODO-146 `cashRemaining` coincide; a row that added a contribution would
+  have needed a new expected value.
+  Verified the test actually closes the gap the audit script left: temporarily
+  broke `calculateEmergencyBufferMonths` (`+1` to the return value) and
+  confirmed 13 of 14 cases failed, then restored it.
+  14 tests (12 matrix rows via `it.each`, plus the two "surprising but
+  correct" properties the entry calls out by name: Emergency Buffer is
+  completely income-independent, and `effectiveTaxRate` is inert with no
+  income item Gross-marked). Suite 770 passing, lint and build clean, and this
+  is a pure test addition - no production file touched.
 
 ---
 
