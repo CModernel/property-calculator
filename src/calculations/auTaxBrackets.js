@@ -37,7 +37,7 @@ export function calculateIncomeTax(annualIncome) {
 export const MEDICARE_LEVY_RATE = 0.02;
 export const MEDICARE_LEVY_LOWER_THRESHOLD = 28011;
 export const MEDICARE_LEVY_UPPER_THRESHOLD = 35013;
-const MEDICARE_LEVY_SHADE_IN_RATE = 0.10;
+export const MEDICARE_LEVY_SHADE_IN_RATE = 0.10;
 
 export function calculateMedicareLevy(annualIncome) {
   if (annualIncome <= MEDICARE_LEVY_LOWER_THRESHOLD) return 0;
@@ -45,6 +45,17 @@ export function calculateMedicareLevy(annualIncome) {
     return (annualIncome - MEDICARE_LEVY_LOWER_THRESHOLD) * MEDICARE_LEVY_SHADE_IN_RATE;
   }
   return annualIncome * MEDICARE_LEVY_RATE;
+}
+
+// TODO-127: the levy's own MARGINAL rate at a given income level - not its
+// blended average (calculateMedicareLevy above) - so a marginal-rate figure
+// built on top of this stays internally consistent with the bracket table's
+// own marginal `rate` field. Only differs from the flat MEDICARE_LEVY_RATE
+// inside the shade-in band, where each extra dollar costs 10c, not 2c.
+export function calculateMarginalMedicareLevyRate(annualIncome) {
+  if (annualIncome <= MEDICARE_LEVY_LOWER_THRESHOLD) return 0;
+  if (annualIncome <= MEDICARE_LEVY_UPPER_THRESHOLD) return MEDICARE_LEVY_SHADE_IN_RATE;
+  return MEDICARE_LEVY_RATE;
 }
 
 // The blended AVERAGE rate - total tax over total income - which is what the

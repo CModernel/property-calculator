@@ -66,7 +66,7 @@ import { getSteppedValue } from './calculations/steppedValue';
 import { getActiveAmount, isScheduleActive, countOccurrencesUpTo, classifyScheduleStatus, formatScheduleLabel } from './calculations/recurringAmount';
 import { getTimelineSnapshot, calculateEffectiveProgress, calculateTimeRemaining } from './calculations/timelineSnapshot';
 import { INCOME_CATEGORIES, INCOME_CATEGORY_DEFAULTS, RENTAL_INCOME_CATEGORIES } from './calculations/incomeCategories';
-import { getSuggestedTaxRate } from './calculations/taxRateSuggestion';
+import { getSuggestedTaxRate, getMarginalRentalTaxRate } from './calculations/taxRateSuggestion';
 import { useSteppedValue } from './hooks/useSteppedValue';
 import { useDarkMode } from './hooks/useDarkMode';
 import { useScheduleForm } from './hooks/useScheduleForm';
@@ -558,6 +558,10 @@ const PropertyInvestmentCalculator = () => {
   // else. null when no income is marked Gross (see the hint below the slider).
   const taxSuggestion = getSuggestedTaxRate(incomeSources);
   const suggestedTaxRate = taxSuggestion === null ? null : Math.round(taxSuggestion.suggestedRatePct);
+  // TODO-127: purely informational (no "apply" button) - there is only one
+  // global effectiveTaxRate, so there is no control this figure could ever be
+  // applied to without overstating tax on the rest of the user's income.
+  const marginalRentalRate = getMarginalRentalTaxRate(incomeSources);
 
   // NET WEEKLY/MONTHLY BALANCE
   // Logic: (Personal Income + Rental Income) - (Personal Expenses + Property Expenses)
@@ -1374,9 +1378,20 @@ const PropertyInvestmentCalculator = () => {
                     </>
                   )}
                   <p className="text-gray-500 dark:text-gray-400 mt-1">
-                    Illustrative, from published rates and the income you entered - not tax advice. It's an average rate across all your income, not the marginal rate on your top dollar, and it ignores deductions, offsets and negative gearing, so it reads high if you have much to claim.
+                    Illustrative, from published rates and the income you entered - not tax advice. It's an average rate across all your income - not the marginal rate on your top dollar, which matters most for rental income (see below if you have any), less so for ordinary salary. It also ignores deductions, offsets and negative gearing, so it reads high if you have much to claim.
                   </p>
                 </div>
+
+                {marginalRentalRate !== null && (
+                  <div className="mt-2 p-2 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-100 dark:border-amber-800 text-xs">
+                    <p className="text-gray-700 dark:text-gray-200">
+                      🏠 Your ${Math.round(marginalRentalRate.rentalGrossAnnual).toLocaleString()}/year of Gross-marked rental income sits on top of your other income, landing in the {Math.round(marginalRentalRate.marginalRatePct)}% bracket (including the Medicare levy) - not the {suggestedTaxRate}% average above.
+                    </p>
+                    <p className="text-gray-500 dark:text-gray-400 mt-1">
+                      Informational only - there's no single slider that can apply a different rate to just your rental income, so this isn't something to "use" here.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
             )}

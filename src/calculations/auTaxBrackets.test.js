@@ -3,6 +3,7 @@ import {
   AU_TAX_BRACKETS,
   calculateIncomeTax,
   calculateMedicareLevy,
+  calculateMarginalMedicareLevyRate,
   calculateEffectiveTaxRate,
   MEDICARE_LEVY_LOWER_THRESHOLD,
   MEDICARE_LEVY_UPPER_THRESHOLD,
@@ -75,6 +76,24 @@ describe('calculateMedicareLevy', () => {
 
   it('is a flat 2% well above the upper threshold', () => {
     expect(calculateMedicareLevy(83928)).toBeCloseTo(1678.56, 5);
+  });
+});
+
+describe('calculateMarginalMedicareLevyRate', () => {
+  it('is 0 at or below the lower threshold', () => {
+    expect(calculateMarginalMedicareLevyRate(0)).toBe(0);
+    expect(calculateMarginalMedicareLevyRate(MEDICARE_LEVY_LOWER_THRESHOLD)).toBe(0);
+  });
+
+  it('is 10% inside the shade-in band, not the flat 2%', () => {
+    expect(calculateMarginalMedicareLevyRate(MEDICARE_LEVY_LOWER_THRESHOLD + 1)).toBeCloseTo(0.10, 5);
+    expect(calculateMarginalMedicareLevyRate(30000)).toBeCloseTo(0.10, 5);
+    expect(calculateMarginalMedicareLevyRate(MEDICARE_LEVY_UPPER_THRESHOLD)).toBeCloseTo(0.10, 5);
+  });
+
+  it('is a flat 2% above the upper threshold', () => {
+    expect(calculateMarginalMedicareLevyRate(MEDICARE_LEVY_UPPER_THRESHOLD + 1)).toBeCloseTo(0.02, 5);
+    expect(calculateMarginalMedicareLevyRate(83928)).toBeCloseTo(0.02, 5);
   });
 });
 

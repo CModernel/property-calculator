@@ -4569,6 +4569,41 @@ optionally reuse in the commit message when you implement it.
   `offsetSimulation.js`, `recurringAmount.js` or `projectedHealthCheck.js` - the
   simulation gained no new coupling.
 
+- [x] **TODO-127: Marginal tax rate for rental/investment income, shown alongside TODO-122's average suggestion**
+  Confirmed the entry's own claim: nearly free once TODO-122 existed.
+  New `getMarginalRentalTaxRate(incomeSources)` in
+  `src/calculations/taxRateSuggestion.js` stacks rental income
+  (`RENTAL_INCOME_CATEGORIES`) on top of everything else Gross-marked, finds
+  which `AU_TAX_BRACKETS` tier the combined total lands in, and adds that
+  tier's own `rate` field to a new `calculateMarginalMedicareLevyRate`
+  (`auTaxBrackets.js`) - the levy's own marginal contribution, which is 10%
+  inside the $28,011-$35,013 shade-in band, not the flat 2% the existing
+  `calculateMedicareLevy` blends in above it. Needed for the marginal figure to
+  stay internally consistent with the average, which already includes blended
+  Medicare.
+  Renders as a second, separate hint under the Effective Tax Rate slider
+  (`App.jsx`), only when at least one rental income source is Gross-marked -
+  same `null`-when-nothing-to-show pattern as TODO-122's own suggestion.
+  **Two decisions taken with the user, both changing what the entry's own
+  "which number to surface" open question meant**: (1) **no "apply" button** -
+  the app has a single global `effectiveTaxRate`, so there is no control this
+  figure could ever be applied to without overstating tax on the rest of the
+  user's income; the block is purely informational, styled amber (fact
+  readout) rather than the average suggestion's purple (fact + action) to make
+  that distinction visible. (2) shown only when rental is itself Gross-marked,
+  not as an always-visible "doesn't apply" block.
+  Reworded the existing average-suggestion disclaimer, which used to say "not
+  the marginal rate on your top dollar" as a blanket, unaddressed caveat - it
+  now points at the new rental block specifically while staying honest that
+  freelance/dividends/other non-rental extra income still only gets the
+  average.
+  `sumGrossAnnualIncome`/`getSuggestedTaxRate` unchanged (verified via
+  `git diff` - only the import line moved); the new function is additive.
+  16 new tests (3 Medicare-marginal, 5 rental-marginal, 3 App-level: no rental,
+  rental-but-not-Gross, and the rendered hint has no apply button while the
+  page's other "Use this rate" button still does). Suite 661 passing, lint and
+  build clean.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -4633,24 +4668,6 @@ optionally reuse in the commit message when you implement it.
   `useEtfInvesting` or `showOpportunityCost` enabled automatically reveal the
   master for backward compatibility, while an explicit saved master-off value
   still wins. Added App and persistence coverage for all of these cases.
-
-- [ ] **TODO-127: Effective Tax Rate should arguably use the MARGINAL rate for rental/investment income, not a blended average**
-  Surfaced while quantifying TODO-123's estimation error, and directly
-  relevant to TODO-122's bracket-suggestion design. A single blended
-  `effectiveTaxRate` is applied to all Gross income alike, but under
-  Australia's progressive scale, rental/investment income effectively sits
-  ON TOP of salary income - its relevant rate is really the MARGINAL rate
-  on that top slice, which can be meaningfully higher than a blended
-  average-of-everything rate.
-  **Difficulty: low - this is essentially free once TODO-122 exists**, not
-  a separate calculation engine. TODO-122's bracket lookup already has to
-  find which tier a given income level falls into; that tier's own `rate`
-  field IS the marginal rate - returning it directly (for "income + this
-  extra rental income, what bracket does the top dollar land in") instead
-  of computing a blended average across all lower tiers is a small variant
-  of the same lookup, not new work. Mainly a decision of which number to
-  surface as "the suggestion" (or offer both, labeled clearly) once
-  TODO-122 is being built - not its own separate implementation effort.
 
 - [x] **TODO-128: Two-color slider track for "ETF Allocation"**
   Implemented as an opt-in `splitColor="etf"` mode on `NumberSliderField`.

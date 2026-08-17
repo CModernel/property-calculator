@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import './test/reactTestSetup';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 
@@ -27,6 +27,17 @@ async function addGrossSalary(user, weeklyAmount) {
   fireEvent.change(screen.getByLabelText('Weekly Amount ($)'), { target: { value: String(weeklyAmount) } });
   fireEvent.blur(screen.getByLabelText('Weekly Amount ($)'));
   await user.click(screen.getByLabelText(/This is a gross \(pre-tax\) amount/));
+  await user.click(screen.getByRole('button', { name: 'Add Income' }));
+}
+
+// Adds a second income source, category House Rent, optionally Gross-marked.
+// Assumes the Income breakdown section is already open and "+ Add" available.
+async function addHouseRent(user, weeklyAmount, { gross = true } = {}) {
+  await user.click(screen.getByRole('button', { name: '+ Add' }));
+  await user.selectOptions(screen.getByDisplayValue('Salary/Wages'), 'House Rent');
+  fireEvent.change(screen.getByLabelText('Weekly Rent'), { target: { value: String(weeklyAmount) } });
+  fireEvent.blur(screen.getByLabelText('Weekly Rent'));
+  if (gross) await user.click(screen.getByLabelText(/This is a gross \(pre-tax\) amount/));
   await user.click(screen.getByRole('button', { name: 'Add Income' }));
 }
 
@@ -101,6 +112,43 @@ describe('Effective Tax Rate suggestion (TODO-122)', () => {
     await openProjectionAssumptions(user);
 
     expect(screen.getByText(/~0%/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Use this rate' })).toBeInTheDocument();
+  });
+});
+
+describe('Marginal rental tax rate (TODO-127)', () => {
+  it('shows no rental hint at all with no rental income', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openProjectionAssumptions(user);
+    expect(screen.queryByText(/Gross-marked rental income/)).not.toBeInTheDocument();
+  });
+
+  it('shows no rental hint when rental income exists but is not Gross-marked', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await addGrossSalary(user, 1614);
+    await addHouseRent(user, 600, { gross: false });
+    await openProjectionAssumptions(user);
+
+    expect(screen.queryByText(/Gross-marked rental income/)).not.toBeInTheDocument();
+  });
+
+  it('shows the marginal bracket once rental income is Gross-marked, with no apply button inside it', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    // $1,614/wk salary ($83,928/yr) + $600/wk rent ($31,200/yr) = $115,128,
+    // landing in the 30% bracket -> 32% marginal (30% + 2% Medicare).
+    await addGrossSalary(user, 1614);
+    await addHouseRent(user, 600);
+    await openProjectionAssumptions(user);
+
+    const hint = screen.getByText(/Gross-marked rental income/).closest('div');
+    expect(hint).toHaveTextContent('$31,200/year');
+    expect(hint).toHaveTextContent('32%');
+    expect(within(hint).queryByRole('button', { name: 'Use this rate' })).not.toBeInTheDocument();
+    // The main "Use this rate" button for the average suggestion still exists
+    // elsewhere on the page - only the rental box itself must lack one.
     expect(screen.getByRole('button', { name: 'Use this rate' })).toBeInTheDocument();
   });
 });
