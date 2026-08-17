@@ -72,6 +72,7 @@ import { useDarkMode } from './hooks/useDarkMode';
 import { useScheduleForm } from './hooks/useScheduleForm';
 import SteppedExpenseField from './components/SteppedExpenseField';
 import ScheduleFields from './components/ScheduleFields';
+import ImpactColorLegend from './components/ImpactColorLegend';
 import { loadScenario, saveScenario, clearScenario } from './persistence/scenarioStorage';
 import { validateAmount, hasDuplicateOneTimeMonth } from './calculations/scheduleFormValidation';
 import defaultConfig from '../config.default.json';
@@ -1044,6 +1045,10 @@ const PropertyInvestmentCalculator = () => {
         </p>
       </div>
 
+      <div className="mb-4">
+        <ImpactColorLegend />
+      </div>
+
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mb-4 flex items-center justify-between gap-3 flex-wrap">
         <p className="text-sm text-gray-600 dark:text-gray-300">
           {!hasSavedScenario
@@ -1166,12 +1171,17 @@ const PropertyInvestmentCalculator = () => {
                 sliderMin={200000}
                 sliderMax={3000000}
                 step={10000}
-                color="blue"
+                impact="negative"
                 prefix="$"
                 suffix=" AUD"
                 formatBound={formatCompactMoney}
               />
 
+              {/* TODO-139: raising the deposit also reduces the headline Cash
+                  Remaining figure (subtracted in calculateTotalCashRequired),
+                  even as it improves every ongoing-loan metric - kept
+                  positive/negative (mirrored below) because "more equity,
+                  faster payoff" is the loan-side effect this scheme tracks. */}
               <NumberSliderField
                 label="Deposit Contribution"
                 value={downPayment}
@@ -1181,7 +1191,7 @@ const PropertyInvestmentCalculator = () => {
                 sliderMax={propertyPrice}
                 sliderMin={0}
                 step={10000}
-                color="green"
+                impact="positive"
                 prefix="$"
                 suffix=" AUD"
                 formatBound={formatCompactMoney}
@@ -1199,7 +1209,7 @@ const PropertyInvestmentCalculator = () => {
                 sliderMax={propertyPrice}
                 sliderMin={0}
                 step={10000}
-                color="orange"
+                impact="negative"
                 prefix="$"
                 suffix=" AUD"
                 formatBound={formatCompactMoney}
@@ -1265,7 +1275,7 @@ const PropertyInvestmentCalculator = () => {
                 sliderMin={0}
                 sliderMax={8}
                 step={0.1}
-                color="green"
+                impact="positive"
                 suffix="% p.a."
               >
                 Annual growth applied only to "Salary/Wages" income sources, compounding monthly - independent of inflation, savings, or property growth (real wage growth moves on its own, via promotions or job changes). Defaults to 3%. Set to 0% to keep salary income flat.
@@ -1280,12 +1290,16 @@ const PropertyInvestmentCalculator = () => {
                 sliderMin={0}
                 sliderMax={8}
                 step={0.1}
-                color="green"
+                impact="positive"
                 suffix="% p.a."
               >
                 Annual growth applied only to "House Rent"/"Room Rent" income sources, compounding monthly - independent of Salary Growth Rate above, since rent and wages move on their own schedules. Defaults to 3%. Set to 0% to keep rental income flat.
               </NumberSliderField>
 
+              {/* TODO-139: negative, not positive - this is a real bug fix.
+                  Increasing vacancy REDUCES rental income (vacancyFactor
+                  multiplies it down in offsetSimulation.js), so it was
+                  wrongly colored green before this change. */}
               <NumberSliderField
                 label="Vacancy (weeks/year)"
                 value={vacancyWeeksPerYear}
@@ -1295,7 +1309,7 @@ const PropertyInvestmentCalculator = () => {
                 sliderMin={0}
                 sliderMax={12}
                 step={1}
-                color="green"
+                impact="negative"
                 suffix=" weeks"
               >
                 Applies a flat, deterministic average reduction to "House Rent"/"Room Rent" income every month (e.g. 2 weeks/year ≈ 3.8% less) - not a random event, just an expected average. Defaults to 2 weeks. Set to 0 to assume the property is never vacant.
@@ -1310,7 +1324,7 @@ const PropertyInvestmentCalculator = () => {
                 sliderMin={0}
                 sliderMax={8}
                 step={0.1}
-                color="orange"
+                impact="negative"
                 suffix="% p.a."
               >
                 Annual growth applied to your Personal and Property Expenses together, compounding inside the simulation - unlike the Inflation Rate below (which only affects the "today's dollars" display), this genuinely changes projected payoff time and total interest. Defaults to 2.5%. Set to 0% to keep expenses flat.
@@ -1337,6 +1351,11 @@ const PropertyInvestmentCalculator = () => {
                   `children`, which renders inside a single <p> - a nested <p>
                   would be invalid markup. */}
               <div>
+                {/* TODO-139: negative, not purple - a reclassification, not
+                    just a bug fix. Raising this unambiguously reduces net
+                    income wherever any income source is Gross-marked, and
+                    that reaches the headline total-interest/payoff-time
+                    outcomes via getActiveAmount inside offsetSimulation.js. */}
                 <NumberSliderField
                   label="Effective Tax Rate"
                   value={effectiveTaxRate}
@@ -1346,7 +1365,7 @@ const PropertyInvestmentCalculator = () => {
                   sliderMin={0}
                   sliderMax={47}
                   step={1}
-                  color="purple"
+                  impact="negative"
                   suffix="%"
                 >
                   Only affects income sources checked "Gross (pre-tax)" below - converts them to net using this rate. Defaults to 20%. If you enter every income figure as net (take-home), set this to 0% and it becomes a no-op. Simplification: applied smoothly every month (PAYG-style), not as an annual tax return - typically well under 5% off for salary-only income, more with substantial Gross rental/investment income on top.
@@ -1414,7 +1433,7 @@ const PropertyInvestmentCalculator = () => {
                 sliderMin={0}
                 sliderMax={3000000}
                 step={10000}
-                color="green"
+                impact="positive"
                 prefix="$"
                 suffix=" AUD"
                 formatBound={formatCompactMoney}
@@ -1481,7 +1500,7 @@ const PropertyInvestmentCalculator = () => {
                     sliderMin={0}
                     sliderMax={5000}
                     step={50}
-                    color="blue"
+                    impact="positive"
                     prefix="$"
                   >
                     Eligible expenses (paid off in full every month) that you'd move from debit to credit card.
@@ -1496,7 +1515,7 @@ const PropertyInvestmentCalculator = () => {
                     sliderMin={0}
                     sliderMax={45}
                     step={1}
-                    color="blue"
+                    impact="positive"
                     suffix=" days"
                   >
                     How much longer, on average, this money sits in your offset compared to paying by debit immediately - well under your card's advertised "interest-free days" (e.g. 55), since you spend throughout the month, not all on day one. 27 is a reasonable default.
@@ -1511,7 +1530,7 @@ const PropertyInvestmentCalculator = () => {
                     sliderMin={0}
                     sliderMax={2}
                     step={0.1}
-                    color="blue"
+                    impact="positive"
                     suffix="%"
                   />
 
@@ -1524,7 +1543,7 @@ const PropertyInvestmentCalculator = () => {
                     sliderMin={0}
                     sliderMax={500}
                     step={5}
-                    color="blue"
+                    impact="negative"
                     prefix="$"
                   />
 
@@ -1583,11 +1602,19 @@ const PropertyInvestmentCalculator = () => {
                 sliderMin={3}
                 sliderMax={10}
                 step={0.01}
-                color="purple"
+                impact="negative"
                 suffix="% p.a."
                 formatValue={(v) => v.toFixed(2)}
               />
 
+              {/* TODO-139: neutral, not negative - verified numerically
+                  against the actual offset loop (not the textbook
+                  amortization formula) that a longer term does not
+                  monotonically raise total interest once there's monthly
+                  surplus: freeing up cash by extending the term just routes
+                  more of it into the offset instead, nearly interchangeable
+                  with a shorter term's faster paydown. Direction flips with
+                  the rest of the user's inputs. */}
               <NumberSliderField
                 label="Loan Term"
                 value={loanTermYears}
@@ -1597,7 +1624,7 @@ const PropertyInvestmentCalculator = () => {
                 sliderMin={5}
                 sliderMax={30}
                 step={1}
-                color="indigo"
+                impact="neutral"
                 suffix=" years"
               />
 
@@ -1755,7 +1782,7 @@ const PropertyInvestmentCalculator = () => {
                   sliderMin={0}
                   sliderMax={100}
                   step={5}
-                  color="indigo"
+                  impact="neutral"
                   splitColor="etf"
                   suffix="%"
                 >
@@ -1773,7 +1800,7 @@ const PropertyInvestmentCalculator = () => {
                   sliderMin={0}
                   sliderMax={100}
                   step={5}
-                  color="purple"
+                  impact="neutral"
                   suffix="%"
                 >
                   Once your offset balance reaches this % of your remaining loan balance, ETF Allocation (above) turns on for the rest of the simulation - a one-time switch. 0% (default) means it's active from month 1.
@@ -2062,6 +2089,7 @@ const PropertyInvestmentCalculator = () => {
                       onChange={setNewContribAmount}
                       min={0}
                       max={500000}
+                      impact="positive"
                       prefix="$"
                       hideSlider
                     />
@@ -2182,7 +2210,7 @@ const PropertyInvestmentCalculator = () => {
                     sliderMin={0}
                     sliderMax={3000}
                     step={50}
-                    color="orange"
+                    impact="negative"
                     prefix="$"
                   />
                   <NumberSliderField
@@ -2194,7 +2222,7 @@ const PropertyInvestmentCalculator = () => {
                     sliderMin={0}
                     sliderMax={1000}
                     step={25}
-                    color="orange"
+                    impact="negative"
                     prefix="$"
                   />
                   <NumberSliderField
@@ -2206,7 +2234,7 @@ const PropertyInvestmentCalculator = () => {
                     sliderMin={0}
                     sliderMax={600}
                     step={25}
-                    color="orange"
+                    impact="negative"
                     prefix="$"
                   />
                   <NumberSliderField
@@ -2218,7 +2246,7 @@ const PropertyInvestmentCalculator = () => {
                     sliderMin={0}
                     sliderMax={600}
                     step={25}
-                    color="orange"
+                    impact="negative"
                     prefix="$"
                   />
                   <NumberSliderField
@@ -2230,7 +2258,7 @@ const PropertyInvestmentCalculator = () => {
                     sliderMin={0}
                     sliderMax={500}
                     step={25}
-                    color="orange"
+                    impact="negative"
                     prefix="$"
                   />
                   <NumberSliderField
@@ -2242,7 +2270,7 @@ const PropertyInvestmentCalculator = () => {
                     sliderMin={0}
                     sliderMax={800}
                     step={25}
-                    color="orange"
+                    impact="negative"
                     prefix="$"
                   />
                   <NumberSliderField
@@ -2254,7 +2282,7 @@ const PropertyInvestmentCalculator = () => {
                     sliderMin={0}
                     sliderMax={500}
                     step={25}
-                    color="orange"
+                    impact="negative"
                     prefix="$"
                   />
                   <NumberSliderField
@@ -2266,7 +2294,7 @@ const PropertyInvestmentCalculator = () => {
                     sliderMin={0}
                     sliderMax={1500}
                     step={25}
-                    color="orange"
+                    impact="negative"
                     prefix="$"
                   />
                   <NumberSliderField
@@ -2278,7 +2306,7 @@ const PropertyInvestmentCalculator = () => {
                     sliderMin={0}
                     sliderMax={800}
                     step={25}
-                    color="orange"
+                    impact="negative"
                     prefix="$"
                   />
                   <NumberSliderField
@@ -2290,7 +2318,7 @@ const PropertyInvestmentCalculator = () => {
                     sliderMin={0}
                     sliderMax={2000}
                     step={25}
-                    color="orange"
+                    impact="negative"
                     prefix="$"
                   >
                     Anything not covered by the fields above.
@@ -2328,7 +2356,7 @@ const PropertyInvestmentCalculator = () => {
                       max={20000}
                       sliderMax={5000}
                       step={100}
-                      color="orange"
+                      impact="negative"
                       prefix="$"
                     >
                       ≈ ${Math.round(strataFees / 4)}/month
@@ -2342,7 +2370,7 @@ const PropertyInvestmentCalculator = () => {
                     max={2000}
                     sliderMax={600}
                     step={10}
-                    color="orange"
+                    impact="negative"
                     prefix="$"
                   />
 
@@ -2353,7 +2381,7 @@ const PropertyInvestmentCalculator = () => {
                     max={10000}
                     sliderMax={2000}
                     step={50}
-                    color="orange"
+                    impact="negative"
                     prefix="$"
                   >
                     ≈ ${Math.round(councilRates / 4)}/month
@@ -2366,7 +2394,7 @@ const PropertyInvestmentCalculator = () => {
                     max={2000}
                     sliderMax={500}
                     step={10}
-                    color="orange"
+                    impact="negative"
                     prefix="$"
                   />
 
@@ -2377,7 +2405,7 @@ const PropertyInvestmentCalculator = () => {
                     max={2000}
                     sliderMax={500}
                     step={10}
-                    color="orange"
+                    impact="negative"
                     prefix="$"
                   />
 
@@ -2388,7 +2416,7 @@ const PropertyInvestmentCalculator = () => {
                     max={5000}
                     sliderMax={1000}
                     step={25}
-                    color="orange"
+                    impact="negative"
                     prefix="$"
                   >
                     ≈ ${Math.round(waterRates / 4)}/month
@@ -2401,7 +2429,7 @@ const PropertyInvestmentCalculator = () => {
                     max={2000}
                     sliderMax={500}
                     step={10}
-                    color="orange"
+                    impact="negative"
                     prefix="$"
                   >
                     Anything not covered by the fields above (e.g. pest control, gardening).
@@ -2419,7 +2447,7 @@ const PropertyInvestmentCalculator = () => {
                         max={50000}
                         sliderMax={10000}
                         step={100}
-                        color="orange"
+                        impact="negative"
                         prefix="$"
                       >
                         ≈ ${Math.round(landTax / 12)}/month
@@ -2432,7 +2460,7 @@ const PropertyInvestmentCalculator = () => {
                         max={2000}
                         sliderMax={500}
                         step={10}
-                        color="orange"
+                        impact="negative"
                         prefix="$"
                       />
                     </div>
@@ -2531,7 +2559,7 @@ const PropertyInvestmentCalculator = () => {
                           sliderMin={50}
                           sliderMax={1200}
                           step={10}
-                          color={newIncomeIsShared ? 'blue' : 'green'}
+                          impact="positive"
                           prefix="$"
                         >
                           {newIncomeIsShared && `Total: $${(newIncomeAmount * newIncomeNumPeople).toLocaleString()}/week`}
@@ -2547,7 +2575,7 @@ const PropertyInvestmentCalculator = () => {
                         sliderMin={50}
                         sliderMax={1200}
                         step={10}
-                        color="green"
+                        impact="positive"
                         prefix="$"
                       />
                     ) : (
@@ -2560,7 +2588,7 @@ const PropertyInvestmentCalculator = () => {
                         sliderMin={0}
                         sliderMax={5000}
                         step={10}
-                        color="green"
+                        impact="positive"
                         prefix="$"
                       />
                     )}
@@ -2694,6 +2722,7 @@ const PropertyInvestmentCalculator = () => {
                       onChange={setNewExpAmount}
                       min={0}
                       max={500000}
+                      impact="negative"
                       prefix="$"
                       hideSlider
                     />

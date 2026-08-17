@@ -93,4 +93,47 @@ describe('NumberSliderField', () => {
     expect(screen.getByText('Offset-bound')).toBeInTheDocument();
     expect(screen.getByText('ETF allocation')).toBeInTheDocument();
   });
+
+  describe('impact (TODO-139)', () => {
+    it('renders no icon and the plain color-based track when impact is omitted', () => {
+      render(<NumberSliderField label="Test" value={50} onChange={() => {}} min={0} max={100} color="blue" />);
+      expect(screen.queryByText('⬇')).not.toBeInTheDocument();
+      expect(screen.queryByText('⬆')).not.toBeInTheDocument();
+      expect(screen.queryByText('↔')).not.toBeInTheDocument();
+      expect(screen.getByLabelText('Test slider')).toHaveClass('bg-blue-200', 'dark:bg-blue-900');
+    });
+
+    it('impact="negative" renders the orange track, a hidden ⬇ icon, and an aria-label hint', () => {
+      render(<NumberSliderField label="Property Price" value={50} onChange={() => {}} min={0} max={100} impact="negative" />);
+      const slider = screen.getByLabelText('Property Price slider (higher increases cost)');
+      expect(slider).toHaveClass('bg-orange-200', 'dark:bg-orange-900');
+      const icon = screen.getByText('⬇');
+      expect(icon).toHaveAttribute('aria-hidden', 'true');
+      expect(icon).toHaveClass('text-orange-600', 'dark:text-orange-400');
+    });
+
+    it('impact="positive" renders the green track, a hidden ⬆ icon, and its own aria-label hint', () => {
+      render(<NumberSliderField label="Deposit" value={50} onChange={() => {}} min={0} max={100} impact="positive" />);
+      expect(screen.getByLabelText('Deposit slider (higher improves your position)')).toHaveClass('bg-green-200', 'dark:bg-green-900');
+      expect(screen.getByText('⬆')).toHaveClass('text-green-600', 'dark:text-green-400');
+    });
+
+    it('impact="neutral" renders the violet track, a hidden ↔ icon, and its own aria-label hint', () => {
+      render(<NumberSliderField label="Loan Term" value={15} onChange={() => {}} min={1} max={30} impact="neutral" />);
+      expect(screen.getByLabelText('Loan Term slider (mixed or no clear financial effect)')).toHaveClass('bg-violet-200', 'dark:bg-violet-900');
+      expect(screen.getByText('↔')).toHaveClass('text-violet-600', 'dark:text-violet-400');
+    });
+
+    it('impact takes over the track color even when a decorative color is also passed', () => {
+      render(<NumberSliderField label="Test" value={50} onChange={() => {}} min={0} max={100} color="purple" impact="negative" />);
+      const slider = screen.getByLabelText('Test slider (higher increases cost)');
+      expect(slider).toHaveClass('bg-orange-200', 'dark:bg-orange-900');
+      expect(slider).not.toHaveClass('bg-purple-200');
+    });
+
+    it('the impact icon still renders when hideSlider is set, since it lives in the label row', () => {
+      render(<NumberSliderField label="Amount ($)" value={100} onChange={() => {}} min={0} max={500000} impact="positive" hideSlider />);
+      expect(screen.getByText('⬆')).toBeInTheDocument();
+    });
+  });
 });

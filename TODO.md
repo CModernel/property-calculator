@@ -4760,36 +4760,6 @@ optionally reuse in the commit message when you implement it.
   (TODO-138) were split into their own entries rather than bundled as one
   isolated slider refactor.
 
-- [ ] **TODO-139: Meaningful slider colors based on impact on final values**
-
-  Color-code sliders to visually communicate their impact on the final
-  financial outcome (e.g. time to pay off, total interest, cash remaining):
-  - **Red/orange shades**: sliders that negatively affect final values
-    when increased (e.g. Property Price, Interest Rate, Loan Term,
-    expenses like Strata/Council Rates/Utilities/Insurance/Food/Transport,
-    Land Tax, Property Management, Debt Repayments). Higher values here
-    mean more cost, longer payoff, or less cash remaining.
-  - **Green shades**: sliders that positively affect final values when
-    increased (e.g. Deposit Contribution, Available Savings, Income
-    sources, Offset Contributions, Tenants). Higher values here mean
-    more equity, faster payoff, or more cash remaining.
-  - **Neutral/violet shades**: controls that have mixed or no clear
-    directional impact (e.g. ETF Allocation, Switch Trigger, investment
-    timing and risk assumptions - context-dependent, can help or hurt
-    depending on market conditions and personal circumstances).
-  Implementation: `NumberSliderField` (`src/components/NumberSliderField.jsx`)
-  already has a `color` prop (used for dark/light track styling via
-  `TRACK_CLASSES[color]`). Extend this prop (or add a new `impactColor`
-  prop) to accept semantic color values like `'negative'`, `'positive',
-  `'neutral'` mapped to red/green/violet Tailwind classes for the slider
-  track, thumb, and value display. Each call site in `App.jsx` passes the
-  appropriate semantic color based on the field's known financial impact.
-  Consider also adding a small legend/tooltip near the slider section
-  explaining the color coding, so new users understand the convention.
-  Accessibility: ensure color alone isn't the only indicator - pair with
-  subtle icons (e.g. ⬇ for negative, ⬆ for positive, ↔ for neutral) or
-  text annotations for colorblind users.
-
 - [x] **TODO-140: Purchase Health Check should default to collapsed**
   Changed the fallback to `config.showHealthCheck ?? false`, so the panel
   starts collapsed while an explicit config/saved-scenario value of `true`
@@ -5120,6 +5090,55 @@ optionally reuse in the commit message when you implement it.
   `effectiveTaxRate` 0 (gross == net, so option 1 must be a no-op) and at a
   high rate; and add a case asserting the shipped default scenario no longer
   classifies as High risk while in surplus - the symptom that opened this.
+
+- [x] **TODO-139: Meaningful slider colors based on financial impact**
+  Added a new `impact` prop to `NumberSliderField` (`'negative'|'positive'|
+  'neutral'`), additive to the existing decorative `color` - `color` still
+  governs the ~5 fields this scheme deliberately excludes (see below).
+  `impact` recolors the track (orange/green/violet, matching the app-wide
+  green=good/orange=caution convention already in `ui.js`/
+  `purchaseHealthCheck.js`), adds an `aria-hidden` ⬇/⬆/↔ icon next to the
+  label for colorblind sighted users, and extends the slider's own
+  `aria-label` with a text hint ("... slider (higher increases cost)") for
+  screen-reader users - the TODO's own accessibility paragraph only asked for
+  icon-pairing, which does nothing for blind users; the aria-label suffix
+  covers the half it didn't spell out.
+  **Classification rule, applied to all ~46 call sites, not just the "obvious"
+  ones**: does increasing this field's value move the model's own real
+  outcomes (verified against `offsetSimulation.js`, not assumed from the
+  field's name), specifically the three the TODO itself names - total
+  interest, payoff time, cash remaining? This caught two real pre-existing
+  bugs: **Vacancy** was colored green despite reducing rental income when
+  raised, and **Effective Tax Rate** was purple despite unambiguously
+  reducing net cash flow when raised - both now correctly negative.
+  **Two fields confirmed genuinely mixed, not merely unclear, and colored
+  neutral**: Loan Term (verified numerically against the actual offset loop,
+  not the textbook formula, that a longer term doesn't monotonically raise
+  total interest once there's monthly surplus - freeing cash by extending the
+  term just routes more into the offset) and, per the TODO's own listed
+  examples, ETF Allocation/Switch Trigger (real trade-offs between total
+  interest and ETF balance/compounding time).
+  **Five fields excluded from the scheme entirely** (kept on their existing
+  decorative `color`, not forced into a synthetic label) because they never
+  reach any of the three named outcomes, confirmed line-by-line: Property
+  Growth Rate and Savings Interest Rate only feed a parallel Net Worth/equity
+  display; Inflation Rate is display-only by its own tooltip's admission;
+  Your Current Age isn't a financial input at all, just relabels an existing
+  output; and Expected ETF Return only compounds `etfBalance`, never fed back
+  into interest/payoff/cash remaining - excluding it also sidesteps painting
+  a risky market assumption green, but that wasn't a special case, it fell
+  out of the same rule as the other four.
+  New `src/components/ImpactColorLegend.jsx` (modeled on
+  `RiskToleranceProfiles.jsx`'s static-reference-panel convention) explains
+  the scheme once near the top of the page, including a line noting that some
+  sliders are intentionally left uncolored.
+  Pure presentation change - no `calculations/` module touched.
+  19 new tests (7 component-level covering track/icon/aria-label per impact
+  value and precedence over `color`; 3 for the legend; 6 App-level pinning
+  the two bug fixes, the Property Growth Rate exclusion, and the legend's
+  presence); verified the App-level regression tests actually catch the bugs
+  by temporarily reverting Vacancy's classification and confirming the test
+  fails, then restoring it. Suite 676 passing, lint and build clean.
 
 ---
 

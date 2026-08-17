@@ -12,6 +12,38 @@ const TRACK_CLASSES = {
   purple: 'bg-purple-200 dark:bg-purple-900',
 };
 
+// TODO-139: semantic financial-impact coloring, layered on top of the
+// existing decorative `color` above (a separate prop, not a repurposing of
+// 'orange'/'green'/'purple' - those already carry unrelated per-card
+// decorative meanings elsewhere, e.g. `color="purple"` on Switch Trigger has
+// nothing to do with this). When `impact` is set it takes over the track
+// color; `color` stays in effect for every field this scheme doesn't apply to
+// (see App.jsx for which fields are classified vs. deliberately excluded).
+const IMPACT_TRACK_CLASSES = {
+  negative: 'bg-orange-200 dark:bg-orange-900',
+  positive: 'bg-green-200 dark:bg-green-900',
+  neutral: 'bg-violet-200 dark:bg-violet-900',
+};
+// Matches the app-wide green=good/orange=caution/red=bad text convention
+// already established in src/calculations/ui.js and the Health Check bands
+// (purchaseHealthCheck.js) - same shade numbers, not a new palette.
+const IMPACT_TEXT_CLASSES = {
+  negative: 'text-orange-600 dark:text-orange-400',
+  positive: 'text-green-600 dark:text-green-400',
+  neutral: 'text-violet-600 dark:text-violet-400',
+};
+// The TODO's own suggested glyphs. Deliberately NOT reusing App.jsx's
+// stabilizedArrow ↗/↘/→ - those encode a different concept (did a value
+// trend up or down over time), while these encode a property of the FIELD
+// itself (what increasing it generally does), so reusing the same glyphs
+// would blur two distinct meanings.
+const IMPACT_ICONS = { negative: '⬇', positive: '⬆', neutral: '↔' };
+const IMPACT_HINTS = {
+  negative: 'higher increases cost',
+  positive: 'higher improves your position',
+  neutral: 'mixed or no clear financial effect',
+};
+
 // Split tracks are opt-in because most sliders have one meaningful direction.
 // The CSS variables behind this class are overridden by `.dark` in index.css,
 // so the inline gradient below stays theme-aware without requiring a theme prop.
@@ -35,6 +67,7 @@ const NumberSliderField = ({
   sliderMax = max,
   step = 1,
   color = 'blue',
+  impact,
   prefix = '',
   suffix = '',
   formatValue = (v) => v.toLocaleString(),
@@ -99,9 +132,20 @@ const NumberSliderField = ({
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2 mb-1">
-        <label htmlFor={id} className="block text-sm font-medium text-gray-700 dark:text-gray-200">
-          {label}
-        </label>
+        <span className="flex items-center gap-1">
+          {/* The icon is a SIBLING of <label>, not a child - getByLabelText-
+              style label matching goes by textContent, which does not honor
+              aria-hidden, so an icon inside the label would corrupt every
+              exact-text lookup of this field's own label. */}
+          <label htmlFor={id} className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+            {label}
+          </label>
+          {impact && (
+            <span aria-hidden="true" className={IMPACT_TEXT_CLASSES[impact]}>
+              {IMPACT_ICONS[impact]}
+            </span>
+          )}
+        </span>
         <span className="text-sm font-semibold text-gray-800 dark:text-gray-100 tabular-nums">
           {prefix}{formatValue(preview)}{suffix}
         </span>
@@ -136,7 +180,9 @@ const NumberSliderField = ({
         <>
           <input
             type="range"
-            aria-label={`${label} slider`}
+            // The icon above is aria-hidden (it only serves sighted colorblind
+            // users) - this suffix is what actually reaches screen readers.
+            aria-label={`${label} slider${impact ? ` (${IMPACT_HINTS[impact]})` : ''}`}
             min={sliderMin}
             max={safeSliderMax}
             step={step}
@@ -147,7 +193,7 @@ const NumberSliderField = ({
             onChange={handleSliderChange}
             style={sliderStyle}
             aria-describedby={splitLegend ? `${id}-split-legend` : undefined}
-            className={`w-full h-2 mt-2 rounded-lg appearance-none cursor-pointer ${TRACK_CLASSES[color]} ${splitTrackClass ?? ''}`}
+            className={`w-full h-2 mt-2 rounded-lg appearance-none cursor-pointer ${impact ? IMPACT_TRACK_CLASSES[impact] : TRACK_CLASSES[color]} ${splitTrackClass ?? ''}`}
           />
 
           {splitLegend && (
