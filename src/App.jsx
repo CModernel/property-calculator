@@ -1987,6 +1987,16 @@ const PropertyInvestmentCalculator = () => {
                   effectiveTaxRate: effectiveTaxRate,
                   isInvestmentProperty,
                   expectedEtfReturn,
+                  // TODO-144 fix: stated explicitly rather than left to the
+                  // engine's defaults, so this reads as a decision and not as
+                  // the same oversight that was just fixed in the two bundles
+                  // below. This grid SEARCHES the loan-% axis, so it explores
+                  // that criterion in isolation - layering the user's own
+                  // month/reserve gate on top would make every row a
+                  // combination the selector says cannot exist. The caption
+                  // below says so, and Apply switches the user to loan-% mode.
+                  etfStartMonth: 1,
+                  etfReserveMonths: 0,
                   maxMonths: totalMonths,
                 };
                 const gridResults = runStrategyGrid(gridBaseParams);
@@ -2003,6 +2013,15 @@ const PropertyInvestmentCalculator = () => {
                         <p className="mt-2">There's no single "best" - which one to pick depends on how you personally weigh certainty (offset) against expected but risky growth (ETF). "Apply" sets the sliders above to that row's values.</p>
                         <p className="mt-2">A row flagged with a cash shortfall only reached these numbers by running out of money in some months - its interest/ETF figures assume income it didn't actually have, not a free win over the others.</p>
                       </InfoTooltip>
+                    </p>
+                    {/* TODO-144 fix: this grid searches the loan-% axis, so it
+                        explores that criterion on its own. Saying so keeps it
+                        honest when the user has picked a different criterion -
+                        and makes Apply's own criterion switch predictable
+                        rather than a surprise. */}
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Explores the "% of the loan" criterion for when to start investing.
+                      {etfStartTrigger !== 'loanRatio' && ' You currently start on a different criterion, so applying a row will switch you to that criterion.'}
                     </p>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left border-collapse text-xs">
@@ -2102,7 +2121,14 @@ const PropertyInvestmentCalculator = () => {
                   effectiveTaxRate,
                   isInvestmentProperty,
                   expectedEtfReturn,
-                  switchThresholdPct,
+                  // TODO-144 fix: the EFFECTIVE values, same as the headline
+                  // projection. Passing the raw switchThresholdPct here let a
+                  // threshold the user had switched away from keep gating this
+                  // panel, and omitting the two gates made it simulate investing
+                  // from month 1 regardless of the delay they asked for.
+                  switchThresholdPct: effectiveSwitchThresholdPct,
+                  etfStartMonth: effectiveEtfStartMonth,
+                  etfReserveMonths: effectiveEtfReserveMonths,
                   maxMonths: totalMonths,
                 };
                 const runs = runStrategyScenarios(scenarioBaseParams, etfAllocationPct);
@@ -2161,7 +2187,14 @@ const PropertyInvestmentCalculator = () => {
                   effectiveTaxRate,
                   isInvestmentProperty,
                   expectedEtfReturn,
-                  switchThresholdPct,
+                  // TODO-144 fix: the EFFECTIVE values, same as the headline
+                  // projection. Passing the raw switchThresholdPct here let a
+                  // threshold the user had switched away from keep gating this
+                  // panel, and omitting the two gates made it simulate investing
+                  // from month 1 regardless of the delay they asked for.
+                  switchThresholdPct: effectiveSwitchThresholdPct,
+                  etfStartMonth: effectiveEtfStartMonth,
+                  etfReserveMonths: effectiveEtfReserveMonths,
                   maxMonths: totalMonths,
                 };
                 const returnRuns = runReturnScenarios(sensitivityBaseParams, etfAllocationPct, expectedEtfReturn);

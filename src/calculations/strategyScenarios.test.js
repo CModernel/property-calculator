@@ -318,3 +318,40 @@ describe('runCrashScenarios (TODO-145)', () => {
     }
   });
 });
+
+// A narrower guard for the same class of bug the App-level consistency tests
+// cover: a scenario factory must pass every gate through to each run, or a
+// panel silently simulates a different strategy than the projection above it.
+describe('scenario factories pass the start-timing gates through', () => {
+  const GATED = { ...BASE_PARAMS, etfStartMonth: 120 };
+
+  it('runReturnScenarios honours etfStartMonth in every run', () => {
+    const ungated = runReturnScenarios(BASE_PARAMS, 50, 8);
+    const gated = runReturnScenarios(GATED, 50, 8);
+    for (let i = 0; i < gated.length; i++) {
+      expect(gated[i].simulation.monthlyData.at(-1).etf)
+        .toBeLessThan(ungated[i].simulation.monthlyData.at(-1).etf);
+    }
+  });
+
+  it('runStrategyScenarios honours etfStartMonth in every run that invests', () => {
+    const ungated = runStrategyScenarios(BASE_PARAMS, 50);
+    const gated = runStrategyScenarios(GATED, 50);
+    // The offset-only arm invests nothing either way, so only the two investing
+    // arms can differ - checking all three would pass trivially on the first.
+    for (const key of [CUSTOM, ALL_ETF]) {
+      const before = ungated.find(r => r.key === key).simulation.monthlyData.at(-1).etf;
+      const after = gated.find(r => r.key === key).simulation.monthlyData.at(-1).etf;
+      expect(after).toBeLessThan(before);
+    }
+  });
+
+  it('runCrashScenarios honours etfStartMonth in every run', () => {
+    const ungated = runCrashScenarios(BASE_PARAMS, 50, 60);
+    const gated = runCrashScenarios(GATED, 50, 60);
+    for (let i = 0; i < gated.length; i++) {
+      expect(gated[i].simulation.monthlyData.at(-1).etf)
+        .toBeLessThan(ungated[i].simulation.monthlyData.at(-1).etf);
+    }
+  });
+});

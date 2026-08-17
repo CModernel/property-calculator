@@ -5088,6 +5088,38 @@ optionally reuse in the commit message when you implement it.
   line at three ETF comparison panels, and the user chose a selector rather than
   a comparison. Worth its own item if wanted.
 
+  **CORRECTION (2026-08-18) - two real bugs this shipped with, found when the
+  user asked for it to be re-checked.** `App.jsx` builds SIX parameter bundles
+  for `calculateLoanWithOffset`; this change only wired three of them.
+  1. **Stale-gate leak.** `scenarioBaseParams` and `sensitivityBaseParams` passed
+     the RAW `switchThresholdPct`, so selecting "after month N" while a non-zero
+     Switch Trigger was still stored left those panels applying a threshold the
+     user had switched away from. The comment written at the `effective*`
+     derivation - "switching criteria can never leave a stale gate applied" -
+     was false for exactly those panels, which was the whole point of the
+     single-selector design.
+  2. **Gates never reached three panels.** Strategy Comparison, Return
+     Sensitivity and the Pareto grid simulated ETF investing from month 1
+     regardless of the delay or reserve the user chose, so they quietly
+     contradicted the headline projection. `findBreakEvenEtfReturn` was affected
+     too, since it consumes `sensitivityBaseParams`.
+  **Why the original tests missed it**: every one of them either exercised the
+  engine directly (where the params were correct) or checked the selector's DOM
+  behaviour. None asserted that the PANELS agree with the PROJECTION. The fix
+  therefore closes the class rather than the instance - new App-level tests
+  assert panel/projection agreement, plus a unit guard that each scenario factory
+  passes the gates through to every run. Both were verified to fail against the
+  broken code first (the panels reported byte-identical figures across different
+  start criteria).
+  The Pareto grid keeps varying `switchThresholdPct` as its search axis - that is
+  its purpose - and now passes `etfStartMonth: 1, etfReserveMonths: 0` explicitly
+  plus an on-screen line saying it explores the "% of the loan" criterion, and
+  that applying a row will switch the user to it. Layering the user's own
+  month/reserve gate on top would have made every row a combination the selector
+  declares impossible.
+  No engine change: `offsetSimulation.js` was correct throughout. Suite 756
+  passing.
+
 - [x] **TODO-145: ETF market-drop stress test**
   Unblocked by re-diagnosing the blocker, then shipped narrowly.
   **The stated blocker was a misdiagnosis.** The entry said modelling ETF
