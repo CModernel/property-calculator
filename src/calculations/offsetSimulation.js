@@ -147,6 +147,19 @@ export function calculateLoanWithOffset({
   // the slider and that indicator speak the same language. 0 (default) means
   // no reserve required - every existing caller/test is unaffected.
   etfReserveMonths = 0,
+  // TODO-145: a one-off market drop, for "how much does this bet actually put
+  // at risk?". 0 (default) means no crash at all, so every existing
+  // caller/test is unaffected; when set it's 1-indexed like etfStartMonth.
+  //
+  // Deliberately does NOT model selling ETF units to cover a shortfall. That
+  // would make the model MORE optimistic than it is today (a deficit currently
+  // reports a shortfall even when ETF assets exist), silently changing every
+  // existing scenario. The consequence is worth stating plainly rather than
+  // hiding: because etfBalance is never read by the loan side, a crash cannot
+  // change payoff time, total interest, or the reported cash shortfall. That
+  // isn't a gap in the stress test - it IS the finding, and the UI says so.
+  etfCrashMonth = 0,
+  etfCrashPct = 0,
   maxMonths = 30 * 12,
 }) {
   // Nothing to offset: no surplus, no scheduled contributions, and no income
@@ -336,6 +349,16 @@ export function calculateLoanWithOffset({
     // TODO-96: same "grows on last month's balance before this month's
     // deposit" convention as savings above - a no-op at the 0% default.
     etfBalance += etfBalance * etfMonthlyRate;
+
+    // TODO-145: the crash lands here on purpose - after this month's growth,
+    // BEFORE this month's contribution (below). Same "before the deposit"
+    // convention as the growth line above, so a drop hits standing holdings
+    // and leaves the crash month's own contribution intact. Applying it after
+    // the contribution would also wipe money deposited that same month, which
+    // models something different.
+    if (etfCrashMonth > 0 && months === etfCrashMonth) {
+      etfBalance *= (1 - etfCrashPct / 100);
+    }
 
     // TODO-98/144: three independent "not yet" gates gating when
     // etfAllocationPct actually kicks in. Each defaults to a no-op, and the UI

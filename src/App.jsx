@@ -36,10 +36,11 @@ import {
 } from './calculations/loan';
 import { calculateLoanWithOffset } from './calculations/offsetSimulation';
 import { runStrategyGrid, selectParetoFront, calculateEtfCrashSurvivedPct, classifyEtfCrash } from './calculations/strategyComparison';
-import { runStrategyScenarios, runReturnScenarios, summariseStrategy, buildComparisonRows, getComparisonMonths, hasUsableData, YEARLY_STEP_MIN_MONTHS } from './calculations/strategyScenarios';
+import { runStrategyScenarios, runReturnScenarios, runCrashScenarios, summariseStrategy, buildComparisonRows, getComparisonMonths, hasUsableData, YEARLY_STEP_MIN_MONTHS } from './calculations/strategyScenarios';
 import { findBreakEvenEtfReturn } from './calculations/etfBreakEven';
 import StrategyScenarioComparison from './components/StrategyScenarioComparison';
 import EtfReturnSensitivity from './components/EtfReturnSensitivity';
+import EtfCrashStressTest from './components/EtfCrashStressTest';
 import RiskToleranceProfiles from './components/RiskToleranceProfiles';
 import { calculateOffsetTimingBenefit, calculateCardCashback } from './calculations/creditCardBenefit';
 import { calculatePresentValueOfInterest } from './calculations/inflation';
@@ -283,6 +284,11 @@ const PropertyInvestmentCalculator = () => {
   // no-op defaults - so exactly one is ever away from its default here.
   const [etfStartMonth, setEtfStartMonth] = useState(config.etfStartMonth ?? 1);
   const [etfReserveMonths, setEtfReserveMonths] = useState(config.etfReserveMonths ?? 0);
+  // TODO-145: which month the stress test drops the ETF balance in. Defaults to
+  // year 5 as a starting point for the panel - deliberately NOT the engine's own
+  // `etfCrashMonth = 0` no-crash default, which stays 0 so omitting the param
+  // anywhere else is inert.
+  const [etfCrashMonth, setEtfCrashMonth] = useState(config.etfCrashMonth ?? 60);
   // Which criterion the selector shows. Derived from the saved params rather
   // than persisted separately, the same way legacyFlatBaseline reads intent out
   // of existing fields - so a scenario saved before this feature (which can
@@ -916,7 +922,7 @@ const PropertyInvestmentCalculator = () => {
       // TODO-144: purely additive, so no SCHEMA_VERSION bump - an older
       // scenario without these falls through to the same no-op defaults, and
       // etfStartTrigger is re-derived from them on load rather than stored.
-      etfStartMonth, etfReserveMonths,
+      etfStartMonth, etfReserveMonths, etfCrashMonth,
       conveyancing, buildingInspection, pestInspection, registrationFees, searches,
       loanEstablishmentFee, propertyValuation, homeInsurance, rateAdjustments, miscUpfrontCost,
       incomeSources,
@@ -2182,6 +2188,71 @@ const PropertyInvestmentCalculator = () => {
                   />
                 );
               })()}
+
+              {/* TODO-145: gated on a non-zero allocation as well as ETF being
+                  active - at 0% the ETF balance is 0, so every column would read
+                  identically and the panel would be pure noise. */}
+              {etfInvestingActive && etfAllocationPct > 0 && (
+                <div className="space-y-3">
+                  <NumberSliderField
+                    label="Crash month"
+                    value={etfCrashMonth}
+                    onChange={setEtfCrashMonth}
+                    min={1}
+                    max={totalMonths}
+                    sliderMin={1}
+                    sliderMax={Math.min(240, totalMonths)}
+                    step={1}
+                    impact="neutral"
+                  >
+                    Which month the stress test below drops your ETF balance in. A stress-test input, so it has no better or worse direction of its own - though a later crash generally costs more, since your balance is bigger by then. A crash after the loan is paid off has no effect, because the projection ends there.
+                  </NumberSliderField>
+
+                  {(() => {
+                    const crashBaseParams = {
+                      contributions: offsetContributions,
+                      personalExpenseItems,
+                      incomeSources,
+                      expenseFields,
+                      monthlyToOffset: baseMonthlySurplus,
+                      loanAmount,
+                      monthlyRate,
+                      monthlyPayment,
+                      interestRateField,
+                      initialSavingsBalance: cashRemaining,
+                      savingsInterestRate,
+                      propertyPrice,
+                      propertyGrowthRate,
+                      salaryGrowthRate,
+                      rentGrowthRate,
+                      vacancyWeeksPerYear,
+                      expenseGrowthRate,
+                      effectiveTaxRate,
+                      isInvestmentProperty,
+                      expectedEtfReturn,
+                      switchThresholdPct: effectiveSwitchThresholdPct,
+                      etfStartMonth: effectiveEtfStartMonth,
+                      etfReserveMonths: effectiveEtfReserveMonths,
+                      maxMonths: totalMonths,
+                    };
+                    const crashRuns = runCrashScenarios(crashBaseParams, etfAllocationPct, etfCrashMonth);
+                    if (!hasUsableData(crashRuns)) return null;
+
+                    const snapshotContext = {
+                      loanAmount,
+                      monthZeroInterest,
+                      initialSavingsBalance: cashRemaining,
+                      initialPropertyValue: propertyPrice,
+                    };
+                    return (
+                      <EtfCrashStressTest
+                        summaries={crashRuns.map((run) => summariseStrategy(run, snapshotContext))}
+                        crashMonth={etfCrashMonth}
+                      />
+                    );
+                  })()}
+                </div>
+              )}
 
               {/* TODO-142: a static reference panel, not a fourth comparison -
                   it runs no simulation and reads only the Emergency Buffer

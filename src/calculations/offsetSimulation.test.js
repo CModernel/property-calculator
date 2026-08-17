@@ -1940,3 +1940,84 @@ describe('ETF reserve-gated start (etfReserveMonths, TODO-144b)', () => {
     expect(etfDeltas.some(delta => delta === 0)).toBe(true);
   });
 });
+
+describe('ETF market-drop stress test (etfCrashMonth/etfCrashPct, TODO-145)', () => {
+  const shared = {
+    contributions: [],
+    personalExpenseItems: [],
+    monthlyToOffset: 1000,
+    loanAmount: 10_000_000,
+    monthlyRate: 0,
+    monthlyPayment: 100,
+    etfAllocationPct: 100,
+    maxMonths: 6,
+  };
+
+  it('matches the plain path exactly when omitted or when etfCrashMonth is 0', () => {
+    const withDefault = calculateLoanWithOffset(shared);
+    const withExplicitZero = calculateLoanWithOffset({ ...shared, etfCrashMonth: 0, etfCrashPct: 30 });
+    expect(withExplicitZero).toEqual(withDefault);
+  });
+
+  it('drops the standing ETF balance by the crash percentage in that month', () => {
+    const noCrash = calculateLoanWithOffset(shared);
+    const crashed = calculateLoanWithOffset({ ...shared, etfCrashMonth: 3, etfCrashPct: 30 });
+    // Months 1-2 are untouched.
+    expect(crashed.monthlyData[0].etf).toBe(noCrash.monthlyData[0].etf);
+    expect(crashed.monthlyData[1].etf).toBe(noCrash.monthlyData[1].etf);
+    // Month 3: the $2,000 standing balance drops 30% to $1,400, then that
+    // month's own $1,000 contribution lands on top - so $2,400, not $2,100.
+    expect(noCrash.monthlyData[2].etf).toBe(3000);
+    expect(crashed.monthlyData[2].etf).toBe(2400);
+  });
+
+  // The documented ordering choice: a crash hits standing holdings, not money
+  // contributed in the crash month itself.
+  it('leaves the crash month\'s own contribution intact', () => {
+    const crashed = calculateLoanWithOffset({ ...shared, etfCrashMonth: 3, etfCrashPct: 100 });
+    // A total wipeout of the standing balance still leaves that month's $1,000.
+    expect(crashed.monthlyData[2].etf).toBe(1000);
+  });
+
+  // THE invariant the whole feature rests on, and the thing most likely to
+  // break silently if anyone later adds ETF liquidation.
+  it('cannot change payoff time, total interest, or the reported cash shortfall', () => {
+    const params = {
+      contributions: [],
+      // A deficit month, so totalCashShortfall is genuinely exercised.
+      personalExpenseItems: [{ id: 1, name: 'Car repair', amount: 9000, startMonth: 4, recurrence: 'none' }],
+      monthlyToOffset: 1000,
+      loanAmount: 500_000,
+      monthlyRate: 0.005,
+      monthlyPayment: 3000,
+      etfAllocationPct: 100,
+      expectedEtfReturn: 8,
+      maxMonths: 24,
+    };
+    const noCrash = calculateLoanWithOffset(params);
+    const crashed = calculateLoanWithOffset({ ...params, etfCrashMonth: 2, etfCrashPct: 40 });
+
+    expect(crashed.months).toBe(noCrash.months);
+    expect(crashed.totalInterest).toBe(noCrash.totalInterest);
+    expect(crashed.totalCashShortfall).toBe(noCrash.totalCashShortfall);
+    expect(crashed.monthsWithShortfall).toBe(noCrash.monthsWithShortfall);
+    // The ETF balance IS lower - so the crash did fire, it just can't reach the
+    // loan side. Without this the assertions above would pass trivially.
+    expect(crashed.monthlyData.at(-1).etf).toBeLessThan(noCrash.monthlyData.at(-1).etf);
+  });
+
+  it('never fires when the crash month is past the end of the simulation', () => {
+    const noCrash = calculateLoanWithOffset(shared);
+    const crashed = calculateLoanWithOffset({ ...shared, etfCrashMonth: 99, etfCrashPct: 50 });
+    expect(crashed).toEqual(noCrash);
+  });
+
+  // A one-off shock, not a permanent state change.
+  it('is a single event - the balance regrows from later contributions', () => {
+    const crashed = calculateLoanWithOffset({ ...shared, etfCrashMonth: 2, etfCrashPct: 100 });
+    // Month 2 is wiped to just its own contribution, then months 3+ add more.
+    expect(crashed.monthlyData[1].etf).toBe(1000);
+    expect(crashed.monthlyData[2].etf).toBe(2000);
+    expect(crashed.monthlyData[3].etf).toBe(3000);
+  });
+});

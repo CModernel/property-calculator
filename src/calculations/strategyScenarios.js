@@ -20,6 +20,14 @@ export const CONSERVATIVE = 'conservative';
 export const CENTRAL = 'central';
 export const FAVOURABLE = 'favourable';
 
+// TODO-145: the crash severities the stress test runs, plus the no-crash
+// baseline it compares against. The baseline is the user's OWN current
+// projection rather than an invented reference, so the "vs no crash" figures
+// answer "what would this cost me" rather than "how do I compare to some
+// other strategy".
+export const NO_CRASH = 'noCrash';
+export const CRASH_SEVERITIES = [20, 30, 40];
+
 // How far either side of the user's own Expected ETF Return the low/high
 // scenarios sit. Deliberately a band around THEIR assumption rather than
 // absolute figures this app declares "conservative" - the point is to show
@@ -108,6 +116,36 @@ export function runReturnScenarios(baseParams, etfAllocationPct, centralReturn, 
     { key: CONSERVATIVE, label: `Conservative (${low}%)`, etfAllocationPct, expectedEtfReturn: low, simulation: run(low) },
     { key: CENTRAL, label: `Your assumption (${centralReturn}%)`, etfAllocationPct, expectedEtfReturn: centralReturn, simulation: run(centralReturn) },
     { key: FAVOURABLE, label: `Favourable (${high}%)`, etfAllocationPct, expectedEtfReturn: high, simulation: run(high) },
+  ];
+}
+
+// TODO-145: the same sibling-factory shape again, this time holding everything
+// fixed and varying only a one-off market drop - "how much does this bet
+// actually put at risk?". Consumed by the identical downstream helpers, for the
+// same reason runReturnScenarios spelled out above.
+//
+// The invariant that makes these runs comparable is the same one that makes
+// runReturnScenarios' bisection valid, and here it's even stronger: a crash
+// only ever touches etfBalance (offsetSimulation.js's single `etfBalance *=`
+// line), and the loan side never reads etfBalance, so EVERY run below finishes
+// in the same month with the same totalInterest. That's not a limitation of the
+// stress test - it's the finding it exists to report, and the UI states it.
+export function runCrashScenarios(baseParams, etfAllocationPct, etfCrashMonth, severities = CRASH_SEVERITIES) {
+  const run = (etfCrashPct) => calculateLoanWithOffset({
+    ...baseParams, etfAllocationPct, etfCrashMonth, etfCrashPct,
+  });
+  return [
+    // etfCrashPct 0 would be equally inert, but going through etfCrashMonth: 0
+    // exercises the same "no crash at all" path a caller who omits the params
+    // entirely would take.
+    { key: NO_CRASH, label: 'No crash', etfAllocationPct, etfCrashPct: 0, simulation: calculateLoanWithOffset({ ...baseParams, etfAllocationPct, etfCrashMonth: 0, etfCrashPct: 0 }) },
+    ...severities.map((pct) => ({
+      key: `crash${pct}`,
+      label: `-${pct}%`,
+      etfAllocationPct,
+      etfCrashPct: pct,
+      simulation: run(pct),
+    })),
   ];
 }
 

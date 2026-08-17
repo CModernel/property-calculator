@@ -14,6 +14,9 @@ import {
   CENTRAL,
   FAVOURABLE,
   COMPARISON_METRICS,
+  runCrashScenarios,
+  NO_CRASH,
+  CRASH_SEVERITIES,
 } from './strategyScenarios';
 
 const BASE_PARAMS = {
@@ -238,5 +241,80 @@ describe('getComparisonMetric', () => {
 
   it('falls back to the first metric for an unknown key rather than returning undefined', () => {
     expect(getComparisonMetric('nope')).toBe(COMPARISON_METRICS[0]);
+  });
+});
+
+describe('runCrashScenarios (TODO-145)', () => {
+  it('returns a no-crash baseline plus one run per severity', () => {
+    const runs = runCrashScenarios(BASE_PARAMS, 50, 60);
+    expect(runs.map(r => r.key)).toEqual([NO_CRASH, 'crash20', 'crash30', 'crash40']);
+    expect(runs.map(r => r.label)).toEqual(['No crash', '-20%', '-30%', '-40%']);
+    expect(runs.map(r => r.etfCrashPct)).toEqual([0, ...CRASH_SEVERITIES]);
+  });
+
+  // The invariant that makes the columns directly comparable, and the finding
+  // the whole feature reports: a crash cannot reach the loan side.
+  it('every run finishes in the same month with the same total interest', () => {
+    const runs = runCrashScenarios(BASE_PARAMS, 50, 60);
+    const first = runs[0].simulation;
+    for (const run of runs.slice(1)) {
+      expect(run.simulation.months).toBe(first.months);
+      expect(run.simulation.totalInterest).toBe(first.totalInterest);
+    }
+  });
+
+  it('a worse crash leaves a strictly smaller ETF balance', () => {
+    const runs = runCrashScenarios(BASE_PARAMS, 50, 60);
+    const finalEtf = runs.map(r => r.simulation.monthlyData.at(-1).etf);
+    for (let i = 1; i < finalEtf.length; i++) {
+      expect(finalEtf[i]).toBeLessThan(finalEtf[i - 1]);
+    }
+  });
+
+  // Measured, not assumed: with ongoing contributions the balance grows faster
+  // than the lost compounding time costs, so a LATER crash takes a percentage of
+  // a much bigger number and ends up costing more. (An earlier version of this
+  // test asserted the opposite and passed for a spurious reason - it compared
+  // against month 240, which is past this scenario's payoff month, so that run
+  // had no crash at all. See the past-payoff case below.)
+  it('a later crash costs more than an earlier one, while the loan is still running', () => {
+    const finalEtfAfterWorstCrash = (crashMonth) =>
+      runCrashScenarios(BASE_PARAMS, 50, crashMonth).at(-1).simulation.monthlyData.at(-1).etf;
+    const early = finalEtfAfterWorstCrash(12);
+    const mid = finalEtfAfterWorstCrash(48);
+    const late = finalEtfAfterWorstCrash(120);
+    expect(late).toBeLessThan(mid);
+    expect(mid).toBeLessThan(early);
+  });
+
+  it('a crash after the loan is paid off never fires - the projection has already ended', () => {
+    const runs = runCrashScenarios(BASE_PARAMS, 50, 300);
+    const payoffMonths = runs[0].simulation.months;
+    expect(payoffMonths).toBeLessThan(300);
+    const baselineEtf = runs[0].simulation.monthlyData.at(-1).etf;
+    for (const run of runs.slice(1)) {
+      expect(run.simulation.monthlyData.at(-1).etf).toBe(baselineEtf);
+    }
+  });
+
+  it('feeds the same downstream helpers unchanged', () => {
+    const runs = runCrashScenarios(BASE_PARAMS, 50, 60);
+    expect(hasUsableData(runs)).toBe(true);
+    const summary = summariseStrategy(runs[0], {
+      loanAmount: BASE_PARAMS.loanAmount,
+      monthZeroInterest: 1500,
+      initialSavingsBalance: BASE_PARAMS.initialSavingsBalance,
+      initialPropertyValue: BASE_PARAMS.propertyPrice,
+    });
+    expect(summary.netWorth).toBeGreaterThan(0);
+    expect(getComparisonMonths(runs).length).toBeGreaterThan(0);
+  });
+
+  it('a crash month of 0 makes the whole set identical to the baseline', () => {
+    const runs = runCrashScenarios(BASE_PARAMS, 50, 0);
+    const baselineEtf = runs[0].simulation.monthlyData.at(-1).etf;
+    for (const run of runs.slice(1)) {
+      expect(run.simulation.monthlyData.at(-1).etf).toBe(baselineEtf);
+    }
   });
 });

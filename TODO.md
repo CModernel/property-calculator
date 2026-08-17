@@ -4766,43 +4766,6 @@ optionally reuse in the commit message when you implement it.
   still opens it for power users. Added App-level coverage for the default
   collapsed state and expand/collapse interaction.
 
-- [ ] **TODO-145: ETF market-drop stress test - blocked on a modelling decision, not on effort**
-  Split out of the original TODO-138 (2026-08-16). The hardest of its five
-  sub-features, and the only one that touches the simulation loop's control
-  flow rather than just its inputs.
-
-  **The blocker the original TODO did not anticipate.** TODO-138 wanted a
-  20/30/40% market fall "and show whether the user still has adequate
-  liquidity and can continue servicing the loan". But `etfBalance` is written
-  in exactly three places in `offsetSimulation.js` - initialised to 0, grown
-  by `etfMonthlyRate`, and credited each surplus month - and is **never read
-  by the loan side**. The ETF is a pure sink, deliberately never drawn on
-  during a deficit month (there's an explicit comment saying so). So under the
-  current model **an ETF crash cannot affect liquidity or loan servicing at
-  all** - it would change one reported number and nothing else. Making the
-  feature mean what the TODO wants requires also modelling the SALE of ETF
-  units to cover a shortfall: a new financial concept (with its own CGT
-  consequences, given the engine already models the 50% discount), not a
-  mechanical change. That decision comes first.
-
-  **Correction to the original entry's "validated feasibility note"**, which
-  claimed `calculateEtfCrashSurvivedPct`/`classifyEtfCrash` were "directly
-  reusable". Verified 2026-08-16 that this is only half right:
-  `calculateEtfCrashSurvivedPct` is a post-hoc arithmetic check on a FINAL
-  balance (two scalars in, one of {50,30,10,0} out) and never touches the
-  simulation - it cannot express a mid-simulation shock, where removing
-  capital at month 36 also removes everything it would have compounded into
-  over the remaining ~300 months. Only the banding layer (`ETF_CRASH_BANDS`,
-  `classifyEtfCrash`, and `classifyByBands` beneath them) is genuinely
-  reusable.
-
-  **Unrelated stale comment found while investigating, worth fixing whenever
-  this area is next touched:** `offsetSimulation.js`'s `switchThresholdPct`
-  gate carries a comment justifying its stateless check on the grounds that
-  "the ratio only ever grows". That stopped being true at TODO-136 - a deficit
-  month can drain the offset, so the ratio can fall and the gate can
-  un-trigger. The code may well be fine; the comment is now misleading.
-
 - [ ] **TODO-147 (do this FIRST - it protects TODO-148/149/150/151): Scenario-matrix regression test for the four Tier-1 Health Check indicators**
   Came out of a user-requested audit (2026-08-17) of Emergency Buffer, Housing
   Cost Ratio, Interest Rate Stress Test and Upfront Cost Ratio. The audit was
@@ -5124,6 +5087,58 @@ optionally reuse in the commit message when you implement it.
   enough to make `runStartMonthScenarios` cheap - but TODO-142 already drew the
   line at three ETF comparison panels, and the user chose a selector rather than
   a comparison. Worth its own item if wanted.
+
+- [x] **TODO-145: ETF market-drop stress test**
+  Unblocked by re-diagnosing the blocker, then shipped narrowly.
+  **The stated blocker was a misdiagnosis.** The entry said modelling ETF
+  liquidation would bring "its own CGT consequences". It wouldn't:
+  `etfMonthlyRate` already applies the CGT-discounted tax as a continuous drag
+  on the return (`offsetSimulation.js`), so `etfBalance` is already an
+  after-tax balance and taxing a sale again would double-count. **The real
+  objection is different**: letting a deficit sell ETF units makes the model
+  MORE optimistic than today (it currently reports a shortfall even when ETF
+  assets exist), silently changing every existing scenario. So liquidation was
+  declined - see Out of scope below.
+  **Shipped**: `etfCrashMonth`/`etfCrashPct` engine params (both no-ops at their
+  defaults, so every existing caller/test is byte-for-byte unaffected), a
+  `runCrashScenarios` sibling factory alongside `runReturnScenarios`, and an
+  `EtfCrashStressTest` panel modelled on `EtfReturnSensitivity` - one crash-month
+  slider, fixed -20/-30/-40% columns, and a "vs no crash" row measured against
+  the user's own current projection.
+  The crash lands after that month's growth but BEFORE its contribution,
+  matching the existing "growth accrues before the deposit" convention, so it
+  hits standing holdings and leaves the crash month's own contribution intact.
+  Documented at the code, since the other ordering models something different.
+  **The panel's honest headline is the finding, not a caveat**: payoff time and
+  total interest are identical in every column, because this model never sells
+  ETF units to service the mortgage. That tells the reader the ETF balance is
+  not their emergency buffer - which is the offset-vs-ETF trade-off this whole
+  family of panels exists to surface. Pinned by a test asserting `months`,
+  `totalInterest`, `totalCashShortfall` and `monthsWithShortfall` are unchanged
+  with and without a crash; verified that test actually catches a violation by
+  temporarily adding ETF liquidation to the deficit branch and confirming it
+  failed.
+  **Corrected a factual error in my own first draft of the user-facing copy.**
+  I wrote that an earlier crash costs more (the removed capital compounds for
+  longer). Measuring the engine showed the opposite: the loss rises
+  monotonically with crash month ($3.6k at month 6 -> $63k at month 120 for the
+  test scenario), because ongoing contributions grow the balance faster than the
+  lost compounding time costs. Worse, my unit test asserting the wrong direction
+  PASSED for a spurious reason - it compared against month 240, past that
+  scenario's month-158 payoff, so that run had no crash at all. Both the copy
+  and the test are fixed, and the past-payoff case is now pinned as its own test.
+  **`ETF_CRASH_BANDS` deliberately NOT reused**, contrary to the entry's claim
+  that the banding layer "is genuinely reusable". It's already in live use in the
+  Pareto table's "Crash Test" column answering a different question (did the
+  final ETF balance still beat the offset-only baseline), and its 50/30/10
+  thresholds are calibrated to that search. Reusing them would give one label two
+  meanings in the same app; this panel reports dollars and needs no band.
+  `strategyComparison.js` is untouched.
+  The entry's "unrelated stale comment" sub-item was already done in TODO-144.
+  Purely additive persistence, so **no `SCHEMA_VERSION` bump** (still 10).
+  25 new tests (6 engine, 6 scenario-factory, 7 component, 5 App-level, plus the
+  past-payoff case). `EtfReturnSensitivity` has no test file; this panel got one
+  rather than copying that gap. Suite 748 passing, lint and build clean.
 
 ---
 
