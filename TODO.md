@@ -4429,22 +4429,52 @@ optionally reuse in the commit message when you implement it.
   scheduled-salary-raise cases) plus updated `OFFSET_UTILISATION_BANDS`
   label assertions; full suite (594 tests), lint, and build all clean.
 
+- [x] **TODO-116: Extract the 3x-duplicated "add item" recurrence-picker form**
+  The One-Time checkbox -> Start-Month slider -> Monthly/Quarterly/Yearly
+  button trio -> End-Month slider sub-form was copy-pasted three times, each
+  with its own private set of 4 `useState` vars (12 in `App.jsx` for one
+  repeated concept). Real locations were `App.jsx:2037-2085` (Offset
+  Contributions), `2601-2649` (Income Sources), `2765-2813` (Personal
+  Expenses) - the line numbers in the original entry were stale, predating
+  TODO-115.
+  Split into a hook + a component, following the existing `useSteppedValue` /
+  `SteppedExpenseField` precedent:
+  - **`src/hooks/useScheduleForm.js`** owns the four fields and the three
+    operations all three forms performed on them: a derived `schedule` object
+    (the schedule half of a list item - `recurrence: 'none'` and NO `endMonth`
+    key for a one-time item), `validateRange()` (owns the shared alert, same
+    as `useSteppedValue.addChange` owns its own), `reset(overrides)`, and
+    `applyDefaults(defaults)` for the `INCOME_CATEGORY_DEFAULTS` path.
+  - **`src/components/ScheduleFields.jsx`** renders the markup once. Returns a
+    **fragment, not a wrapper div** - all three call sites space these fields
+    with `space-y-3`/`grid gap-3`, which only apply to direct children, so a
+    wrapper would have silently collapsed the vertical rhythm. Colours stay
+    per-form via literal-class lookup maps (`bg-${color}-200` is invisible to
+    Tailwind), and the six hardcoded slider ids became `useId()`-derived,
+    since one component rendered 3x can't ship duplicate ids.
+  Asymmetries deliberately left in `App.jsx` because they're about the *list*
+  or the *amount*, not the schedule: the duplicate-one-time-month guard, the
+  silent-vs-alerting invalid-amount paths, the post-insert sort, and
+  Contributions' `getNextSuggestion`-based reset (passed in via
+  `reset({ startMonth })`, since the hook has no business knowing the list).
+  The one real trap: `removeOffsetContribution` must call `setStartMonth`, not
+  `reset()` - a full reset would wipe recurrence/End Month out from under an
+  add-form the user has open.
+  Also fixed a pre-existing inconsistency: Personal Expenses' Start Month
+  label was missing `text-xs`, so it rendered at 14px while the other five
+  equivalent labels (including its own End Month sibling) rendered at 12px.
+  `App.jsx` 3800 -> 3621 lines (-179). 18 new tests (11 hook, 7 component,
+  including a `container.children` fragment guard and a colour-map guard that
+  nothing else would catch); **not one character changed in any existing
+  `App.*.test.jsx`** - they were the acceptance criterion, since they pin the
+  checkbox's accessible name, the label+slider sibling shape, and the
+  `Start Month:`/`Occurs at Month:`/`End Month: Forever` text swaps. Full
+  suite 612 passing, lint and build clean, and the 24 moved Tailwind classes
+  verified present in the built CSS (byte-identical 35.38 kB bundle).
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
-
-
-
-- [ ] **TODO-116: Extract the 3x-duplicated "add item" recurrence-picker form**
-  The One-Time checkbox -> Start-Month slider -> Monthly/Quarterly/Yearly
-  button trio -> End-Month slider form is copy-pasted three times - Income
-  Sources (`App.jsx:2143-2189`), Offset Contributions (`App.jsx:2271-2317`),
-  Personal Expenses (`App.jsx:2453-2499`) - each with its own private set of
-  4 `useState` variables (12 total for one repeated concept). Extract into a
-  shared component/hook. Biggest-effort item on this list, and the kind of
-  `App.jsx` change TODO-62's own analysis flagged as carrying real
-  regression risk (this file gets touched by nearly every TODO) - worth
-  extra care/testing when picked up.
 
 - [ ] **TODO-122: Reconsider whether Effective Tax Rate should be more realistic (ATO-style brackets)**
   User's ask: is the current tax calculation realistic - does it use actual

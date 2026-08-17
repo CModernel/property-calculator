@@ -63,14 +63,16 @@ import { findStabilizationMonth, resolveProjectedFinancials, worseOf } from './c
 import HealthCheckIndicator from './components/HealthCheckIndicator';
 import { calculateTotalCashRequired, calculateCashRemaining } from './calculations/totalCashRequired';
 import { getSteppedValue } from './calculations/steppedValue';
-import { getActiveAmount, isScheduleActive, countOccurrencesUpTo, classifyScheduleStatus, formatScheduleLabel, MAX_MONTH } from './calculations/recurringAmount';
+import { getActiveAmount, isScheduleActive, countOccurrencesUpTo, classifyScheduleStatus, formatScheduleLabel } from './calculations/recurringAmount';
 import { getTimelineSnapshot, calculateEffectiveProgress, calculateTimeRemaining } from './calculations/timelineSnapshot';
 import { INCOME_CATEGORIES, INCOME_CATEGORY_DEFAULTS, RENTAL_INCOME_CATEGORIES } from './calculations/incomeCategories';
 import { useSteppedValue } from './hooks/useSteppedValue';
 import { useDarkMode } from './hooks/useDarkMode';
+import { useScheduleForm } from './hooks/useScheduleForm';
 import SteppedExpenseField from './components/SteppedExpenseField';
+import ScheduleFields from './components/ScheduleFields';
 import { loadScenario, saveScenario, clearScenario } from './persistence/scenarioStorage';
-import { validateAmount, validateScheduleRange, hasDuplicateOneTimeMonth } from './calculations/scheduleFormValidation';
+import { validateAmount, hasDuplicateOneTimeMonth } from './calculations/scheduleFormValidation';
 import defaultConfig from '../config.default.json';
 
 // config.local.json is git-ignored and optional - import.meta.glob resolves to
@@ -336,10 +338,7 @@ const PropertyInvestmentCalculator = () => {
   const [newIncomeIsShared, setNewIncomeIsShared] = useState(false); // only used when category is 'Room Rent'
   const [newIncomeIsGross, setNewIncomeIsGross] = useState(false); // TODO-94: pre-tax amount, needs effectiveTaxRate to convert to net
   const [newIncomeNumPeople, setNewIncomeNumPeople] = useState(2); // only used when category is 'Room Rent' and shared
-  const [newIncomeOneTime, setNewIncomeOneTime] = useState(false);
-  const [newIncomeStartMonth, setNewIncomeStartMonth] = useState(1);
-  const [newIncomeRecurrence, setNewIncomeRecurrence] = useState('monthly'); // monthly | quarterly | yearly
-  const [newIncomeEndMonth, setNewIncomeEndMonth] = useState(MAX_MONTH);
+  const incomeSchedule = useScheduleForm();
 
   // TODO-141: replaces the old realisticModeEnabled banner trigger. A flat
   // baseline is now a real state the user can choose (every assumption at
@@ -402,10 +401,7 @@ const PropertyInvestmentCalculator = () => {
   // Contributions default to one-time (unlike Income/Expenses, which default
   // to recurring) - preserves the pre-TODO-32 behavior where every
   // contribution was a single lump sum, with recurring now opt-in.
-  const [newContribOneTime, setNewContribOneTime] = useState(true);
-  const [newContribStartMonth, setNewContribStartMonth] = useState(1);
-  const [newContribRecurrence, setNewContribRecurrence] = useState('monthly'); // monthly | quarterly | yearly
-  const [newContribEndMonth, setNewContribEndMonth] = useState(MAX_MONTH);
+  const contribSchedule = useScheduleForm({ oneTime: true });
   const [newContribAmount, setNewContribAmount] = useState(config.newContribAmount);
 
   // Personal Expenses State (TODO-66, merged with the former "Other
@@ -421,10 +417,7 @@ const PropertyInvestmentCalculator = () => {
   const [newExpCategory, setNewExpCategory] = useState('Groceries'); // see PERSONAL_EXPENSE_CATEGORIES
   const [newExpCustomName, setNewExpCustomName] = useState(''); // only used when category is 'Custom'
   const [newExpAmount, setNewExpAmount] = useState(config.newExpAmount);
-  const [newExpOneTime, setNewExpOneTime] = useState(false);
-  const [newExpStartMonth, setNewExpStartMonth] = useState(1);
-  const [newExpRecurrence, setNewExpRecurrence] = useState('monthly'); // monthly | quarterly | yearly
-  const [newExpEndMonth, setNewExpEndMonth] = useState(MAX_MONTH);
+  const expenseSchedule = useScheduleForm();
 
   // Timeline Explorer State
   const [timelineMonth, setTimelineMonth] = useState(0);
@@ -879,15 +872,12 @@ const PropertyInvestmentCalculator = () => {
   // Functions for managing offset contributions
   const addOffsetContribution = () => {
     if (!validateAmount(newContribAmount)) return;
-    if (!validateScheduleRange(newContribOneTime, newContribStartMonth, newContribEndMonth)) {
-      alert('Start month must be before end month.');
-      return;
-    }
+    if (!contribSchedule.validateRange()) return;
 
     // Only guards against two one-time lump sums landing on the exact same
     // month - two independent recurring contributions starting on the same
     // month aren't a conflict the way two one-time lumps in the same month are.
-    if (newContribOneTime && hasDuplicateOneTimeMonth(offsetContributions, newContribStartMonth)) {
+    if (contribSchedule.oneTime && hasDuplicateOneTimeMonth(offsetContributions, contribSchedule.startMonth)) {
       alert('A contribution already exists for this month. Please remove it first or choose a different month.');
       return;
     }
@@ -895,25 +885,23 @@ const PropertyInvestmentCalculator = () => {
     const newContrib = {
       id: Date.now(),
       amount: newContribAmount,
-      startMonth: newContribStartMonth,
-      recurrence: newContribOneTime ? 'none' : newContribRecurrence,
-      ...(newContribOneTime ? {} : { endMonth: newContribEndMonth }),
+      ...contribSchedule.schedule,
     };
 
     const updatedContributions = [...offsetContributions, newContrib].sort((a, b) => a.startMonth - b.startMonth);
     setOffsetContributions(updatedContributions);
     setShowAddContribution(false);
-    setNewContribStartMonth(getNextSuggestion(updatedContributions));
     setNewContribAmount(10000);
-    setNewContribOneTime(true);
-    setNewContribRecurrence('monthly');
-    setNewContribEndMonth(MAX_MONTH);
+    contribSchedule.reset({ startMonth: getNextSuggestion(updatedContributions) });
   };
 
   const removeOffsetContribution = (id) => {
     const updatedContributions = offsetContributions.filter(c => c.id !== id);
     setOffsetContributions(updatedContributions);
-    setNewContribStartMonth(getNextSuggestion(updatedContributions));
+    // Only the suggested month moves - deliberately not a full reset(), which
+    // would also wipe recurrence/End Month out from under an add-form the user
+    // may have open and half-configured.
+    contribSchedule.setStartMonth(getNextSuggestion(updatedContributions));
   };
 
   // Income Sources Functions
@@ -921,19 +909,12 @@ const PropertyInvestmentCalculator = () => {
   // Applies each category's default Schedule (INCOME_CATEGORY_DEFAULTS) when
   // the user picks a new Income Name, so e.g. a Bonus starts as one-time and
   // a Salary starts as Monthly/Forever, instead of the form always defaulting
-  // the same way regardless of category. Only touches the Schedule fields -
-  // Room Rent's own Shared Room fields (isShared/numPeople) are untouched,
-  // and categories without a listed default (House Rent, Room Rent, Other)
-  // keep whatever the form's current Schedule fields already are.
+  // the same way regardless of category. Only the Schedule fields move - Room
+  // Rent's own Shared Room fields (isShared/numPeople) are untouched. See
+  // useScheduleForm's applyDefaults for what an omitted field means.
   const handleIncomeCategoryChange = (category) => {
     setNewIncomeCategory(category);
-    const defaults = INCOME_CATEGORY_DEFAULTS[category];
-    if (!defaults) return;
-    setNewIncomeOneTime(defaults.oneTime);
-    if (!defaults.oneTime) {
-      setNewIncomeRecurrence(defaults.recurrence);
-      if (defaults.endMonth !== undefined) setNewIncomeEndMonth(defaults.endMonth);
-    }
+    incomeSchedule.applyDefaults(INCOME_CATEGORY_DEFAULTS[category]);
   };
 
   const addIncomeSource = () => {
@@ -947,10 +928,7 @@ const PropertyInvestmentCalculator = () => {
       alert('Please enter a valid amount.');
       return;
     }
-    if (!validateScheduleRange(newIncomeOneTime, newIncomeStartMonth, newIncomeEndMonth)) {
-      alert('Start month must be before end month.');
-      return;
-    }
+    if (!incomeSchedule.validateRange()) return;
 
     const numPeople = isRoomRent && newIncomeIsShared ? newIncomeNumPeople : 1;
     const newIncome = {
@@ -962,10 +940,8 @@ const PropertyInvestmentCalculator = () => {
       // Plain House Rent (and every other category) just uses the entered
       // amount directly, same as Salary/Wages etc.
       amount: isRoomRent ? newIncomeAmount * numPeople : newIncomeAmount,
-      startMonth: newIncomeStartMonth,
-      recurrence: newIncomeOneTime ? 'none' : newIncomeRecurrence,
       isGross: newIncomeIsGross,
-      ...(newIncomeOneTime ? {} : { endMonth: newIncomeEndMonth }),
+      ...incomeSchedule.schedule,
       ...(isRoomRent ? { isShared: newIncomeIsShared, numPeople, amountPerPerson: newIncomeAmount } : {}),
     };
 
@@ -977,10 +953,7 @@ const PropertyInvestmentCalculator = () => {
     setNewIncomeIsShared(false);
     setNewIncomeNumPeople(2);
     setNewIncomeIsGross(false);
-    setNewIncomeOneTime(false);
-    setNewIncomeStartMonth(1);
-    setNewIncomeRecurrence('monthly');
-    setNewIncomeEndMonth(MAX_MONTH);
+    incomeSchedule.reset();
   };
 
   const removeIncomeSource = (id) => {
@@ -1000,18 +973,13 @@ const PropertyInvestmentCalculator = () => {
       alert('Please enter a valid amount.');
       return;
     }
-    if (!validateScheduleRange(newExpOneTime, newExpStartMonth, newExpEndMonth)) {
-      alert('Start month must be before end month.');
-      return;
-    }
+    if (!expenseSchedule.validateRange()) return;
 
     const newExp = {
       id: Date.now(),
       name,
       amount: newExpAmount,
-      startMonth: newExpStartMonth,
-      recurrence: newExpOneTime ? 'none' : newExpRecurrence,
-      ...(newExpOneTime ? {} : { endMonth: newExpEndMonth }),
+      ...expenseSchedule.schedule,
     };
 
     setPersonalExpenseItems([...personalExpenseItems, newExp]);
@@ -1019,10 +987,7 @@ const PropertyInvestmentCalculator = () => {
     setNewExpCategory('Groceries');
     setNewExpCustomName('');
     setNewExpAmount(config.newExpAmount);
-    setNewExpOneTime(false);
-    setNewExpStartMonth(1);
-    setNewExpRecurrence('monthly');
-    setNewExpEndMonth(MAX_MONTH);
+    expenseSchedule.reset();
   };
 
   const removePersonalExpense = (id) => {
@@ -2034,55 +1999,7 @@ const PropertyInvestmentCalculator = () => {
                       hideSlider
                     />
 
-                    <label className="flex items-center gap-2 text-xs font-medium text-gray-700 dark:text-gray-200">
-                      <input
-                        type="checkbox"
-                        checked={newContribOneTime}
-                        onChange={(e) => setNewContribOneTime(e.target.checked)}
-                        className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-cyan-600 dark:text-cyan-400 focus:ring-cyan-500"
-                      />
-                      One-Time (occurs once, doesn't repeat)
-                    </label>
-
-                    <div>
-                      <label htmlFor="newContribStartMonthSlider" className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
-                        {newContribOneTime ? `Occurs at Month: ${newContribStartMonth}` : `Start Month: ${newContribStartMonth}`}
-                      </label>
-                      <input
-                        id="newContribStartMonthSlider"
-                        type="range" min="1" max={MAX_MONTH}
-                        value={newContribStartMonth}
-                        onChange={(e) => setNewContribStartMonth(Number(e.target.value))}
-                        className="w-full h-2 bg-cyan-200 dark:bg-cyan-900 rounded-lg appearance-none cursor-pointer"
-                      />
-                    </div>
-
-                    {!newContribOneTime && (
-                      <div className="space-y-3">
-                        <div className="flex gap-2 text-xs">
-                          {['monthly', 'quarterly', 'yearly'].map((option) => (
-                            <button
-                              key={option}
-                              onClick={() => setNewContribRecurrence(option)}
-                              className={`flex-1 py-1 rounded border capitalize text-gray-800 dark:text-gray-100 ${newContribRecurrence === option ? 'bg-blue-200 dark:bg-blue-900 border-blue-400 dark:border-blue-700 font-bold' : 'bg-white dark:bg-gray-800'}`}
-                            >{option}</button>
-                          ))}
-                        </div>
-
-                        <div>
-                          <label htmlFor="newContribEndMonthSlider" className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
-                            End Month: {newContribEndMonth === MAX_MONTH ? 'Forever' : newContribEndMonth}
-                          </label>
-                          <input
-                            id="newContribEndMonthSlider"
-                            type="range" min={newContribStartMonth} max={MAX_MONTH}
-                            value={newContribEndMonth}
-                            onChange={(e) => setNewContribEndMonth(Number(e.target.value))}
-                            className="w-full h-2 bg-blue-200 dark:bg-blue-900 rounded-lg appearance-none cursor-pointer"
-                          />
-                        </div>
-                      </div>
-                    )}
+                    <ScheduleFields form={contribSchedule} color="cyan" accentColor="blue" />
 
                     <button
                       onClick={addOffsetContribution}
@@ -2598,55 +2515,7 @@ const PropertyInvestmentCalculator = () => {
                       )}
                     </div>
 
-                    <label className="flex items-center gap-2 text-xs font-medium text-gray-700 dark:text-gray-200">
-                      <input
-                        type="checkbox"
-                        checked={newIncomeOneTime}
-                        onChange={(e) => setNewIncomeOneTime(e.target.checked)}
-                        className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-green-600 dark:text-green-400 focus:ring-green-500"
-                      />
-                      One-Time (occurs once, doesn't repeat)
-                    </label>
-
-                    <div>
-                      <label htmlFor="newIncomeStartMonthSlider" className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
-                        {newIncomeOneTime ? `Occurs at Month: ${newIncomeStartMonth}` : `Start Month: ${newIncomeStartMonth}`}
-                      </label>
-                      <input
-                        id="newIncomeStartMonthSlider"
-                        type="range" min="1" max={MAX_MONTH}
-                        value={newIncomeStartMonth}
-                        onChange={(e) => setNewIncomeStartMonth(Number(e.target.value))}
-                        className="w-full h-2 bg-green-200 dark:bg-green-900 rounded-lg appearance-none cursor-pointer"
-                      />
-                    </div>
-
-                    {!newIncomeOneTime && (
-                      <div className="space-y-3">
-                        <div className="flex gap-2 text-xs">
-                          {['monthly', 'quarterly', 'yearly'].map((option) => (
-                            <button
-                              key={option}
-                              onClick={() => setNewIncomeRecurrence(option)}
-                              className={`flex-1 py-1 rounded border capitalize text-gray-800 dark:text-gray-100 ${newIncomeRecurrence === option ? 'bg-emerald-200 dark:bg-emerald-900 border-emerald-400 dark:border-emerald-700 font-bold' : 'bg-white dark:bg-gray-800'}`}
-                            >{option}</button>
-                          ))}
-                        </div>
-
-                        <div>
-                          <label htmlFor="newIncomeEndMonthSlider" className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
-                            End Month: {newIncomeEndMonth === MAX_MONTH ? 'Forever' : newIncomeEndMonth}
-                          </label>
-                          <input
-                            id="newIncomeEndMonthSlider"
-                            type="range" min={newIncomeStartMonth} max={MAX_MONTH}
-                            value={newIncomeEndMonth}
-                            onChange={(e) => setNewIncomeEndMonth(Number(e.target.value))}
-                            className="w-full h-2 bg-emerald-200 dark:bg-emerald-900 rounded-lg appearance-none cursor-pointer"
-                          />
-                        </div>
-                      </div>
-                    )}
+                    <ScheduleFields form={incomeSchedule} color="green" accentColor="emerald" />
 
                     <button
                       onClick={addIncomeSource}
@@ -2762,55 +2631,7 @@ const PropertyInvestmentCalculator = () => {
                       hideSlider
                     />
 
-                    <label className="flex items-center gap-2 text-xs font-medium text-gray-700 dark:text-gray-200">
-                      <input
-                        type="checkbox"
-                        checked={newExpOneTime}
-                        onChange={(e) => setNewExpOneTime(e.target.checked)}
-                        className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-yellow-600 dark:text-yellow-400 focus:ring-yellow-500"
-                      />
-                      One-Time (occurs once, doesn't repeat)
-                    </label>
-
-                    <div>
-                      <label htmlFor="newExpStartMonthSlider" className="block font-medium text-gray-700 dark:text-gray-200 mb-1">
-                        {newExpOneTime ? `Occurs at Month: ${newExpStartMonth}` : `Start Month: ${newExpStartMonth}`}
-                      </label>
-                      <input
-                        id="newExpStartMonthSlider"
-                        type="range" min="1" max={MAX_MONTH}
-                        value={newExpStartMonth}
-                        onChange={(e) => setNewExpStartMonth(Number(e.target.value))}
-                        className="w-full h-2 bg-yellow-200 dark:bg-yellow-900 rounded-lg appearance-none cursor-pointer"
-                      />
-                    </div>
-
-                    {!newExpOneTime && (
-                      <div className="space-y-3">
-                        <div className="flex gap-2 text-xs">
-                          {['monthly', 'quarterly', 'yearly'].map((option) => (
-                            <button
-                              key={option}
-                              onClick={() => setNewExpRecurrence(option)}
-                              className={`flex-1 py-1 rounded border capitalize text-gray-800 dark:text-gray-100 ${newExpRecurrence === option ? 'bg-orange-200 dark:bg-orange-900 border-orange-400 dark:border-orange-700 font-bold' : 'bg-white dark:bg-gray-800'}`}
-                            >{option}</button>
-                          ))}
-                        </div>
-
-                        <div>
-                          <label htmlFor="newExpEndMonthSlider" className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
-                            End Month: {newExpEndMonth === MAX_MONTH ? 'Forever' : newExpEndMonth}
-                          </label>
-                          <input
-                            id="newExpEndMonthSlider"
-                            type="range" min={newExpStartMonth} max={MAX_MONTH}
-                            value={newExpEndMonth}
-                            onChange={(e) => setNewExpEndMonth(Number(e.target.value))}
-                            className="w-full h-2 bg-orange-200 dark:bg-orange-900 rounded-lg appearance-none cursor-pointer"
-                          />
-                        </div>
-                      </div>
-                    )}
+                    <ScheduleFields form={expenseSchedule} color="yellow" accentColor="orange" />
 
                     <button
                       onClick={addPersonalExpense}
