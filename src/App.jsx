@@ -61,11 +61,12 @@ import {
 } from './calculations/purchaseHealthCheck';
 import { findStabilizationMonth, resolveProjectedFinancials, worseOf } from './calculations/projectedHealthCheck';
 import HealthCheckIndicator from './components/HealthCheckIndicator';
-import { calculateTotalCashRequired, calculateCashRemaining } from './calculations/totalCashRequired';
+import { calculateTotalCashRequired, calculateCashRemaining, calculateLiquidSavings } from './calculations/totalCashRequired';
 import { getSteppedValue } from './calculations/steppedValue';
 import { getActiveAmount, isScheduleActive, countOccurrencesUpTo, classifyScheduleStatus, formatScheduleLabel } from './calculations/recurringAmount';
 import { getTimelineSnapshot, calculateEffectiveProgress, calculateTimeRemaining } from './calculations/timelineSnapshot';
 import { INCOME_CATEGORIES, INCOME_CATEGORY_DEFAULTS, RENTAL_INCOME_CATEGORIES } from './calculations/incomeCategories';
+import { getSuggestedTaxRate } from './calculations/taxRateSuggestion';
 import { useSteppedValue } from './hooks/useSteppedValue';
 import { useDarkMode } from './hooks/useDarkMode';
 import { useScheduleForm } from './hooks/useScheduleForm';
@@ -490,6 +491,13 @@ const PropertyInvestmentCalculator = () => {
   // month-1 contribution could both look affordable in isolation.
   const cashRemaining = calculateCashRemaining({ totalSavings, totalCashRequired, totalScheduledOffset });
 
+  // Everything still owned and reachable at settlement, bank + offset. The
+  // Emergency/Vacancy Buffers use this rather than cashRemaining: committing
+  // cash to the offset doesn't spend it, and the simulation itself drains the
+  // offset first to cover a deficit month, so subtracting it would contradict
+  // the engine and understate how long the buyer could actually last.
+  const liquidSavings = calculateLiquidSavings({ totalSavings, totalCashRequired });
+
   // Current ("month 1") value of each expense field - same convention as
   // tenants: a scheduled change that hasn't kicked in yet shouldn't affect
   // what these recurring-situation cards show right now.
@@ -543,6 +551,13 @@ const PropertyInvestmentCalculator = () => {
   const weeklyRentalIncome = getActiveAmount(incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
   const monthlyIncome = calculateMonthlyFromWeekly(weeklyIncome);
   const monthlyRentalIncome = calculateMonthlyFromWeekly(weeklyRentalIncome);
+
+  // TODO-122: a suggested Effective Tax Rate from real ATO brackets and the
+  // user's own Gross-marked income. Display only - nothing here feeds the
+  // simulation, which still reads the flat effectiveTaxRate slider and nothing
+  // else. null when no income is marked Gross (see the hint below the slider).
+  const taxSuggestion = getSuggestedTaxRate(incomeSources);
+  const suggestedTaxRate = taxSuggestion === null ? null : Math.round(taxSuggestion.suggestedRatePct);
 
   // NET WEEKLY/MONTHLY BALANCE
   // Logic: (Personal Income + Rental Income) - (Personal Expenses + Property Expenses)
@@ -691,12 +706,12 @@ const PropertyInvestmentCalculator = () => {
   });
   const projectedTotalPropertyCost = calculateTotalPropertyCost(projected.monthlyPayment, projected.monthlyPropertyExpenses);
 
-  const emergencyBufferMonths = calculateEmergencyBufferMonths(cashRemaining, totalPropertyCost + monthlyPersonalExpenses);
-  // Twist (per TODO-134): the numerator (cashRemaining, a settlement-day
+  const emergencyBufferMonths = calculateEmergencyBufferMonths(liquidSavings, totalPropertyCost + monthlyPersonalExpenses);
+  // Twist (per TODO-134): the numerator (liquidSavings, a settlement-day
   // figure) stays fixed for both readings - only the denominator moves. That
   // alone is what makes the Stabilized buffer grow as income outpaces
   // expenses, with no need to model an accumulating savings balance.
-  const stabilizedEmergencyBufferMonths = calculateEmergencyBufferMonths(cashRemaining, projectedTotalPropertyCost + projected.monthlyPersonalExpenses);
+  const stabilizedEmergencyBufferMonths = calculateEmergencyBufferMonths(liquidSavings, projectedTotalPropertyCost + projected.monthlyPersonalExpenses);
   const emergencyBufferClass = classifyEmergencyBuffer(worseOf(emergencyBufferMonths, stabilizedEmergencyBufferMonths, 'higherIsBetter'));
 
   const housingCostRatio = calculateHousingCostRatio(totalPropertyCost, monthlyIncome + monthlyRentalIncome);
@@ -729,8 +744,8 @@ const PropertyInvestmentCalculator = () => {
   const stabilizedGearingCashflow = projected.monthlyRentalIncome - projected.monthlyPayment - projected.monthlyPropertyExpenses;
   const gearingClass = classifyGearing(worseOf(gearingCashflow, stabilizedGearingCashflow, 'higherIsBetter'));
 
-  const vacancyBufferMonths = calculateVacancyBufferMonths(cashRemaining, monthlyPayment + monthlyPropertyExpenses);
-  const stabilizedVacancyBufferMonths = calculateVacancyBufferMonths(cashRemaining, projected.monthlyPayment + projected.monthlyPropertyExpenses);
+  const vacancyBufferMonths = calculateVacancyBufferMonths(liquidSavings, monthlyPayment + monthlyPropertyExpenses);
+  const stabilizedVacancyBufferMonths = calculateVacancyBufferMonths(liquidSavings, projected.monthlyPayment + projected.monthlyPropertyExpenses);
   const vacancyBufferClass = classifyVacancyBuffer(worseOf(vacancyBufferMonths, stabilizedVacancyBufferMonths, 'higherIsBetter'));
 
   const rentalYieldHasData = hasEnoughDataForRentalYield(weeklyRentalIncome);
@@ -1312,20 +1327,57 @@ const PropertyInvestmentCalculator = () => {
                 Shows "Total interest paid" in today's dollars alongside the nominal figure below - a display-only conversion, it doesn't change the loan simulation itself. Defaults to 2.5%. Set to 0% to show the nominal figure only.
               </NumberSliderField>
 
-              <NumberSliderField
-                label="Effective Tax Rate"
-                value={effectiveTaxRate}
-                onChange={setEffectiveTaxRate}
-                min={0}
-                max={90}
-                sliderMin={0}
-                sliderMax={47}
-                step={1}
-                color="purple"
-                suffix="%"
-              >
-                Only affects income sources checked "Gross (pre-tax)" below - converts them to net using this rate. Defaults to 20%. If you enter every income figure as net (take-home), set this to 0% and it becomes a no-op. Simplification: applied smoothly every month (PAYG-style), not as an annual tax return - typically well under 5% off for salary-only income, more with substantial Gross rental/investment income on top.
-              </NumberSliderField>
+              {/* TODO-122: the slider and its ATO-bracket suggestion are wrapped
+                  together so the pair is one child of this space-y-4 column.
+                  The hint deliberately does NOT go through NumberSliderField's
+                  `children`, which renders inside a single <p> - a nested <p>
+                  would be invalid markup. */}
+              <div>
+                <NumberSliderField
+                  label="Effective Tax Rate"
+                  value={effectiveTaxRate}
+                  onChange={setEffectiveTaxRate}
+                  min={0}
+                  max={90}
+                  sliderMin={0}
+                  sliderMax={47}
+                  step={1}
+                  color="purple"
+                  suffix="%"
+                >
+                  Only affects income sources checked "Gross (pre-tax)" below - converts them to net using this rate. Defaults to 20%. If you enter every income figure as net (take-home), set this to 0% and it becomes a no-op. Simplification: applied smoothly every month (PAYG-style), not as an annual tax return - typically well under 5% off for salary-only income, more with substantial Gross rental/investment income on top.
+                </NumberSliderField>
+
+                <div className="mt-2 p-2 rounded-lg bg-purple-50 dark:bg-purple-950 border border-purple-100 dark:border-purple-800 text-xs">
+                  {taxSuggestion === null ? (
+                    <p className="text-gray-600 dark:text-gray-300">
+                      🧾 No income source is marked "Gross (pre-tax)", so there's nothing to base a suggested rate on - a net figure's pre-tax amount can't be worked out without already knowing the rate. Tick that box on an income source to see what ATO brackets would suggest.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-gray-700 dark:text-gray-200">
+                        🧾 ATO brackets + the 2% Medicare levy suggest{' '}
+                        <span className="font-semibold text-purple-700 dark:text-purple-400">~{suggestedTaxRate}%</span>
+                        {' '}on your ${Math.round(taxSuggestion.annualGrossIncome).toLocaleString()}/year of Gross-marked income.
+                      </p>
+                      {suggestedTaxRate === effectiveTaxRate ? (
+                        <p className="text-gray-500 dark:text-gray-400 mt-1">That matches your current rate.</p>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setEffectiveTaxRate(suggestedTaxRate)}
+                          className="mt-2 px-2 py-1 rounded bg-purple-600 text-white font-medium hover:bg-purple-700"
+                        >
+                          Use this rate
+                        </button>
+                      )}
+                    </>
+                  )}
+                  <p className="text-gray-500 dark:text-gray-400 mt-1">
+                    Illustrative, from published rates and the income you entered - not tax advice. It's an average rate across all your income, not the marginal rate on your top dollar, and it ignores deductions, offsets and negative gearing, so it reads high if you have much to claim.
+                  </p>
+                </div>
+              </div>
             </div>
             )}
           </div>
@@ -3018,7 +3070,8 @@ const PropertyInvestmentCalculator = () => {
                   secondaryValueDisplay={`${stabilizedArrow(emergencyBufferMonths, stabilizedEmergencyBufferMonths, 'higherIsBetter')} stabilizes to ${Number.isFinite(stabilizedEmergencyBufferMonths) ? `${stabilizedEmergencyBufferMonths.toFixed(1)} months` : '∞'}`}
                   classification={emergencyBufferClass}
                 >
-                  <p>Remaining Savings divided by your total monthly outgoings (property + personal expenses) - how many months you could cover if income stopped entirely.</p>
+                  <p>Your savings left after settlement, divided by your total monthly outgoings (property + personal expenses) - how many months you could cover if income stopped entirely.</p>
+                  <p className="mt-2">Cash you've scheduled into the offset still counts here: it stays your money and stays available, and the simulation itself draws the offset down first to cover a shortfall. That's why this figure is higher than "Cash Remaining" above, which only counts uncommitted cash.</p>
                   <p className="mt-2">≥12 months excellent, 6-12 good, 3-6 moderate, &lt;3 high risk - the standard "3-6 months" rule of thumb.</p>
                   <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled - with growth rates applied.</p>
                 </HealthCheckIndicator>
@@ -3085,7 +3138,7 @@ const PropertyInvestmentCalculator = () => {
                       secondaryValueDisplay={`${stabilizedArrow(vacancyBufferMonths, stabilizedVacancyBufferMonths, 'higherIsBetter')} stabilizes to ${Number.isFinite(stabilizedVacancyBufferMonths) ? `${stabilizedVacancyBufferMonths.toFixed(1)} months` : '∞'}`}
                       classification={vacancyBufferClass}
                     >
-                      <p>Remaining Savings divided by the loan repayment + property expenses - how many months you could cover the property alone with no tenant.</p>
+                      <p>Your savings left after settlement (including anything scheduled into the offset, which stays yours and stays available) divided by the loan repayment + property expenses - how many months you could cover the property alone with no tenant.</p>
                       <p className="mt-2">≥6 months excellent, 3-6 good, &lt;3 high risk.</p>
                       <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled - with growth rates applied.</p>
                     </HealthCheckIndicator>

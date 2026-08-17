@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateTotalCashRequired, calculateCashRemaining } from './totalCashRequired';
+import { calculateTotalCashRequired, calculateCashRemaining, calculateLiquidSavings } from './totalCashRequired';
 
 describe('calculateTotalCashRequired', () => {
   it('sums deposit, stamp duty and closing costs when LMI is not paid upfront', () => {
@@ -71,5 +71,33 @@ describe('calculateCashRemaining', () => {
     expect(
       calculateCashRemaining({ totalSavings: 350000, totalCashRequired: 307000, totalScheduledOffset: 250000 })
     ).toBe(350000 - 307000 - 250000);
+  });
+});
+
+describe('calculateLiquidSavings', () => {
+  it('is savings minus the upfront costs', () => {
+    expect(
+      calculateLiquidSavings({ totalSavings: 350000, totalCashRequired: 274343.5 })
+    ).toBeCloseTo(75656.5, 5);
+  });
+
+  // The whole point of this figure existing separately from cashRemaining:
+  // money moved into the offset is still the buyer's and still reachable, so
+  // committing it must not shrink the Emergency/Vacancy Buffer.
+  it('does not shrink when cash is committed to the offset, unlike cashRemaining', () => {
+    const totalSavings = 350000;
+    const totalCashRequired = 307000;
+    const withoutContribution = calculateLiquidSavings({ totalSavings, totalCashRequired });
+
+    expect(calculateLiquidSavings({ totalSavings, totalCashRequired })).toBe(withoutContribution);
+    expect(
+      calculateCashRemaining({ totalSavings, totalCashRequired, totalScheduledOffset: 10000 })
+    ).toBe(withoutContribution - 10000);
+  });
+
+  it('goes negative when the upfront costs alone exceed the savings', () => {
+    expect(
+      calculateLiquidSavings({ totalSavings: 100000, totalCashRequired: 274343.5 })
+    ).toBeCloseTo(-174343.5, 5);
   });
 });

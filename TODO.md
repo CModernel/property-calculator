@@ -4472,73 +4472,106 @@ optionally reuse in the commit message when you implement it.
   suite 612 passing, lint and build clean, and the 24 moved Tailwind classes
   verified present in the built CSS (byte-identical 35.38 kB bundle).
 
+- [x] **TODO-146 (bug, reported by the user): Emergency/Vacancy Buffer wrongly treated offset commitments as spent money**
+  Reported symptom: Emergency Buffer showed 6.3 months (green), then adding a
+  single $10,000 one-time Offset Contribution dropped it to 4.1 months and
+  flipped it to orange. Confirmed a real bug, not just confusing framing.
+  **Cause**: both buffers divided `cashRemaining`
+  (`calculateCashRemaining` = `totalSavings - totalCashRequired -
+  totalScheduledOffset`), so every dollar earmarked for the offset came
+  straight off the numerator.
+  **Why that's wrong** - the app contradicted itself in two places:
+  1. `offsetSimulation.js:340-343` already drains the offset FIRST to cover a
+     deficit month (`drawnFromOffset = Math.min(deficit, offsetBalance)`), so
+     the engine treats offset money as exactly the emergency fund the
+     indicator claimed it wasn't.
+  2. `calculateTotalScheduledOffset` only sums `recurrence === 'none'`, so
+     $10k once shrank the buffer while $500/month forever ($180k) left it
+     untouched. No coherent risk model orders those that way.
+  An offset account is fully liquid - it's arguably the best place to hold an
+  emergency fund, since it's reachable AND saves interest. The tooltip
+  promised "how many months you could cover if income stopped entirely", and
+  in that scenario the buyer simply doesn't make the transfer, or withdraws
+  it.
+  **Fix**: new `calculateLiquidSavings({ totalSavings, totalCashRequired })`
+  in `src/calculations/totalCashRequired.js` - everything still owned and
+  reachable at settlement, bank + offset. Emergency Buffer and Vacancy Buffer
+  (Day 1 and Stabilized readings alike) now divide that instead.
+  **Deliberately unchanged**: `cashRemaining` itself, which is correct for the
+  two other things it does - the "Cash Remaining" upfront-costs figure
+  (uncommitted cash on hand, where subtracting the commitment is right, and
+  which still shows the `-$10,000` line) and `initialSavingsBalance` for the
+  simulation, which credits each contribution into the offset as its month
+  arrives, so counting it in savings too would double it.
+  Both tooltips rewrote their "Remaining Savings" wording and Emergency Buffer
+  gained a paragraph explaining why its figure exceeds "Cash Remaining" above.
+  New `src/App.offsetLiquidity.test.jsx` pins the behaviour; verified it
+  genuinely catches the regression by temporarily restoring the old numerator
+  (`expected '🟠 4.1 months' to be '🟢 6.3 months'` - the exact reported
+  symptom). 5 new tests, suite 617 passing, lint and build clean.
+
+- [x] **TODO-122: ATO-bracket suggestion for Effective Tax Rate (hybrid - the flat slider stays authoritative)**
+  Shipped the hybrid the entry itself asked for, not full bracket modelling:
+  the flat `effectiveTaxRate` slider remains the ONLY thing the simulation
+  reads, and a suggestion computed from real ATO brackets now sits beneath it
+  with a "Use this rate" button. The bracket math runs once for display, never
+  inside the simulation loop - which is what let this sidestep the
+  complexity-budget objection TODO-94/106 had rejected twice.
+  Two new pure modules:
+  - **`src/calculations/auTaxBrackets.js`** - `AU_TAX_BRACKETS` in the exact
+    `{max, base, rate, over}` tier shape as `NSW_STAMP_DUTY_TIERS`, with the
+    same `.find(t => v <= t.max)` + `base + (v - over) * rate` lookup, plus
+    `calculateIncomeTax`, `calculateMedicareLevy` and
+    `calculateEffectiveTaxRate` (the blended AVERAGE rate).
+  - **`src/calculations/taxRateSuggestion.js`** - `sumGrossAnnualIncome` and
+    `getSuggestedTaxRate`, kept separate so the data file above stays free of
+    this app's income shape (TODO-127 can import the brackets directly).
+  **Verifying the bracket figures against the published tables caught a stale
+  memory and changed the data**: the rates are the **2026-27** ones, where the
+  16% bracket on $18,201-$45,000 dropped to **15%**, lowering every cumulative
+  base above it (4,288 -> 4,020, 31,288 -> 31,020, 51,638 -> 51,370). Two
+  independent sources agree and the bases self-check
+  ((45,000-18,200) x 15% = 4,020, etc.). A test asserts that self-consistency
+  by walking `AU_TAX_BRACKETS` itself, so a future typo in the table fails loudly
+  instead of producing a silent discontinuity at a threshold.
+  Medicare levy modelled properly rather than approximated, since the real rule
+  turned out to be two lines: nil below $28,011, 10c/$1 shade-in to $35,013,
+  then a flat 2% - and the shade-in converges on the full 2% at the upper
+  threshold by construction, which a test pins.
+  **Annualisation was the one real trap.** A naive `amount * 52` would inflate a
+  one-time gross bonus 52x, since it's active in exactly one month. Instead the
+  annual figure sums the app's OWN monthly income across twelve months
+  (`getActiveAmount` + `calculateMonthlyFromWeekly`), which is correct for every
+  recurrence by construction and reuses already-tested code. Tests cover the
+  one-time, quarterly, starts-later and ends-mid-year cases.
+  **Decisions taken during planning** (the entry left both open): (1) an
+  explicit "Use this rate" button rather than auto-seeding - auto-seeding was
+  ruled out on evidence, since no income is Gross-marked by default, so a
+  first-render seed would have had nothing to compute from and been inert
+  exactly when it was meant to fire; the button also needs no new state and no
+  `SCHEMA_VERSION` bump, because `effectiveTaxRate` is already persisted and the
+  button just calls its setter. (2) brackets + Medicare levy, no LITO (which
+  only reaches ~$67k and costs a two-stage taper).
+  `getSuggestedTaxRate` returns `null`, not 0, when nothing is Gross-marked, so
+  the UI distinguishes "nothing to suggest from" (the default scenario, which
+  gets copy explaining how to enable it) from a genuine 0% suggestion for income
+  under the tax-free threshold. Disclaimer matches the house voice: illustrative,
+  not tax advice, an average not a marginal rate, and ignores deductions,
+  offsets and negative gearing.
+  `NumberSliderField` deliberately untouched: its `children` renders inside a
+  single `<p>`, so the hint would have been invalid nested markup - the slider
+  and hint are wrapped in a `<div>` together instead, leaving a component used
+  ~40 times alone.
+  **TODO-127 is now nearly free**: `AU_TAX_BRACKETS` is exported, and a matched
+  tier's own `rate` field IS the marginal rate.
+  33 new tests (15 brackets, 12 suggestion, 6 App-level), suite 650 passing,
+  lint and build clean, and `git diff` confirms no change to
+  `offsetSimulation.js`, `recurringAmount.js` or `projectedHealthCheck.js` - the
+  simulation gained no new coupling.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
-
-- [ ] **TODO-122: Reconsider whether Effective Tax Rate should be more realistic (ATO-style brackets)**
-  User's ask: is the current tax calculation realistic - does it use actual
-  ATO progressive tax brackets based on annual income, the way real
-  Australian income tax works? **Answer, as currently implemented: no** -
-  `effectiveTaxRate` is a single flat percentage the user manually types in
-  (`App.jsx`'s Projection Assumptions card), applied via `getNetAmount` in
-  `src/calculations/recurringAmount.js:27-29` to every Gross-marked income
-  item independently, every month - it is NOT derived from the user's actual
-  entered income, and does NOT model any bracket structure. **This directly
-  re-opens a decision already made twice**: TODO-94 explicitly rejected
-  modeling real AU tax brackets ("if the user needs to understand it to
-  trust it, don't build it that way"), and TODO-106 reaffirmed a flat
-  constant specifically to avoid reintroducing that complexity when picking
-  the 20% default. Revisiting this needs the same complexity-budget
-  question to be asked again, explicitly, before any code changes - worth
-  a fresh decision, not an automatic "yes, add brackets."
-  **Refined follow-up from the user, after discussion**: a hybrid, not full
-  bracket modeling - keep the flat-rate slider exactly as-is (still the only
-  thing the simulation actually reads, so it stays auditable/simple), but
-  show a one-time SUGGESTED value computed from real ATO brackets applied to
-  the user's already-entered annual income, which the user can accept or
-  freely override. This avoids the original complexity-budget objection
-  entirely, since the bracket math would run once as a display hint, not
-  inside the recurring simulation loop. Implementation sketch: a new small
-  `auTaxBrackets.js` data file, same tiered shape as `NSW_STAMP_DUTY_TIERS`
-  (`src/calculations/states/nsw.js`) - `calculateStandardStampDuty`'s own
-  `.find(tier => price <= tier.max)` + `base + (amount - over) * rate`
-  pattern is directly reusable for ATO brackets (already tested, already
-  proven). Real nuance to resolve before implementing: the suggestion can
-  only be computed from income sources already marked "Gross" (their
-  pre-tax `amount` is known) - income entered as net has no recoverable
-  gross figure without already knowing the tax rate (circular), so the
-  suggestion's own copy needs to be honest about that ("based on your
-  Gross-marked income only") rather than silently ignoring net-entered
-  income sources.
-  **Second refinement (both behaviors wanted, not either/or)**: (1)
-  auto-fill the slider with the suggested value exactly ONCE, then leave it
-  a completely normal, freely-editable slider - manually changing it doesn't
-  re-lock or re-suggest anything.
-  **STALE, needs a new decision (TODO-141, 2026-08-15)**: this used to
-  trigger at the moment Realistic Mode transitioned from off to on, checking
-  `e.target.checked && !realisticModeEnabled` inside the checkbox's
-  `onChange`. That checkbox no longer exists - assumptions are always
-  active, and Effective Tax Rate now simply defaults to 20. So the
-  "seed once" trigger point has to be re-chosen before implementing:
-  candidates are seeding on first render only when no scenario is saved, an
-  explicit "use the suggested rate" button next to the live hint, or
-  dropping the auto-fill entirely and shipping only behavior (2). Pick one
-  during TODO-122's own planning session; do not assume the old trigger.
-  (2) SEPARATELY, always show a
-  live-recalculating hint/tooltip (e.g. "Right now, ATO brackets would
-  suggest ~23% based on your current income") so that if the user changes
-  income or other values afterward, they can check whether the suggestion
-  has since moved, without it silently overwriting their own value. Copy
-  for both must make clear this is illustrative/an example, not
-  authoritative tax advice.
-  **Related, possibly bigger source of imprecision worth keeping in mind
-  when implementing (see also TODO-127)**: a suggested rate based on total/
-  blended income is an AVERAGE rate, but rental/investment income sits on
-  top of salary income under Australia's progressive scale, so its own
-  relevant rate is really the MARGINAL rate on that top slice, not the
-  average - these can differ meaningfully. Negative gearing (investment
-  losses reducing OTHER taxable income) isn't modeled at all either.
 
 - [ ] **TODO-124 (Superseded by TODO-136/137/138 — do not implement independently): Should "Invest in ETFs" divert from Savings instead of from the Offset's own share?**
   User's proposal: instead of `etfAllocationPct` diverting a % of the
@@ -4918,6 +4951,158 @@ optionally reuse in the commit message when you implement it.
   "the ratio only ever grows". That stopped being true at TODO-136 - a deficit
   month can drain the offset, so the ratio can fall and the gate can
   un-trigger. The code may well be fine; the comment is now misleading.
+
+- [ ] **TODO-147 (do this FIRST - it protects TODO-148/149/150/151): Scenario-matrix regression test for the four Tier-1 Health Check indicators**
+  Came out of a user-requested audit (2026-08-17) of Emergency Buffer, Housing
+  Cost Ratio, Interest Rate Stress Test and Upfront Cost Ratio. The audit was
+  run by importing the real calculation modules and replicating `App.jsx`'s
+  wiring in a throwaway script - useful once, but it left nothing behind, so
+  the next change to any of these four can move all of them silently.
+  **Build a single fixture-driven test** (suggested
+  `src/calculations/purchaseHealthCheck.scenarios.test.js`) that walks a table
+  of scenario overrides on top of `config.default.json` and asserts all four
+  raw values AND their band labels. It must NOT render `App` - replicate the
+  wiring in a helper, the way the audit script did, so it stays fast and
+  isolated from DOM churn. Reuse the real modules (`loan.js`,
+  `recurringAmount.js`, `lmi.js`, `closingCosts.js`, `states/`,
+  `totalCashRequired.js`, `purchaseHealthCheck.js`) - do not re-derive any
+  formula in the test, or it stops being a check on the code.
+  **The verified current matrix** (baseline = `config.default.json`,
+  `effectiveTaxRate` 20, `payLmiUpfront` false). Pin exactly these, so that
+  TODO-148/149/150/151 each have to change an expected value on purpose:
+
+  | Scenario | EB | HCR | ST | UCR |
+  |---|---|---|---|---|
+  | baseline | 6.3 Good | 55 High risk | 3 Excellent | 1.7 Excellent |
+  | `isFirstHomeBuyer: false` | 1.3 High risk | 55 High risk | 3 Excellent | 4.4 High |
+  | `propertyPrice: 1200000` | -1.5 High risk | 85 High risk | 0 High risk | 4.4 High |
+  | `totalSavings: 500000` | 39.4 Excellent | 55 High risk | 3 Excellent | 1.7 Excellent |
+  | `interestRate: 10` | 4.8 Moderate | 76 High risk | 2 Good | 1.7 Excellent |
+  | `loanTermYears: 15` | 4.9 Moderate | 74 High risk | 3 Excellent | 1.7 Excellent |
+  | `downPayment: 100000` | 40.7 Excellent | 73 High risk | 2 Good | 1.7 Excellent |
+  | `downPayment: 100000, payLmiUpfront: true` | 37.2 Excellent | 73 High risk | 2 Good | 4.1 High |
+  | salary 3000/wk | 6.3 Good | 30 Excellent | 3 Excellent | 1.7 Excellent |
+  | salary 800/wk | 6.3 Good | 111 High risk | 0 High risk | 1.7 Excellent |
+  | Groceries 1300 (single personal expense) | 5.5 Moderate | 55 High risk | 3 Excellent | 1.7 Excellent |
+  | `propertyPrice: 400000, downPayment: 100000` | 80.5 Excellent | 34 Good | 3 Excellent | 1.2 Excellent |
+
+  Also worth asserting as its own case, because it surprises people and is
+  correct: Emergency Buffer is completely income-independent (6.3 at both
+  800/wk and 3000/wk), and `effectiveTaxRate` 0 vs 20 changes nothing while no
+  income item is flagged `isGross`.
+
+- [ ] **TODO-148 (small, contained): Stress Test claims "Fails at +1%" when the scenario is ALREADY in deficit at today's rate**
+  Found in the same audit. `calculateStressTestSurvivedDelta`
+  (`src/calculations/purchaseHealthCheck.js:67-79`) only probes +3/+2/+1 and
+  returns 0 when none survive. It never checks +0, so "already underwater"
+  and "underwater as soon as rates move a point" collapse into the same
+  answer. The UI then reports `'Fails at +1%'` (`App.jsx`'s Stress Test
+  `valueDisplay`) with the band action "Even a 1-point rate rise would put you
+  in deficit" (`STRESS_TEST_BANDS`' last entry) - both of which state a
+  hypothetical that has already happened.
+  Reproduce: set the single salary income source to $800/week. Monthly net
+  balance is -$1,057 at the current 6.13%, yet the indicator says the problem
+  begins at +1%.
+  **Fix**: distinguish the two. Cheapest shape that doesn't disturb the
+  existing exact-value tests is a separate boolean rather than a new sentinel
+  return value (a -1 would silently reorder `classifyByBands`) - e.g. compute
+  `monthlyNetBalance >= 0` at the current rate in `App.jsx` (the value is
+  already sitting there as `monthlyNetBalance`) and use it to pick the
+  `valueDisplay` string and a distinct band action. `calculateStressTestSurvivedDelta`'s
+  own signature and return values should not change.
+  Copy suggestion: `'Already in deficit'` rather than `'Fails at +1%'`, and an
+  action saying the shortfall exists at today's rate, not after a rise.
+  **Tests**: extend TODO-147's matrix with the salary-800 and salary-500 rows
+  asserting the new display/action, plus a `purchaseHealthCheck.test.js` case
+  pinning that the delta itself is still 0 in that state (i.e. the fix lives in
+  presentation, not in the calculation).
+
+- [ ] **TODO-149 (small, contained): Emergency Buffer renders a negative month count when settlement itself is unaffordable**
+  Found in the same audit. `calculateEmergencyBufferMonths`
+  (`purchaseHealthCheck.js:24-27`) divides `liquidSavings` by monthly
+  outgoings with no floor, so once the deposit plus upfront costs exceed
+  savings the indicator shows e.g. **"-1.5 months"**. The 🔴 High risk band is
+  right, but negative months are not a meaningful quantity - the real
+  statement is "you cannot fund the purchase at all", which is a different
+  (and more serious) message than a thin buffer.
+  Reproduce: Property Price 1,200,000 with the default $307,000 deposit and
+  $350,000 savings - liquid savings land at -$9,937 and the buffer reads
+  -1.5 months.
+  **Fix**: keep the calculation honest (do not clamp the returned number to 0
+  and hide the problem) but change the *display* when `liquidSavings < 0` to
+  something like "Can't cover settlement", with an action pointing at the
+  shortfall amount. Note the page already shows a red "You've committed $X
+  more than your savings" warning for `cashRemaining < 0` - the copy here
+  should agree with it rather than invent a second framing. Vacancy Buffer
+  shares the numerator and needs the same treatment.
+  **Tests**: TODO-147's `propertyPrice: 1200000` row asserts the new display;
+  add a boundary case at exactly `liquidSavings === 0` (should read 0.0 months,
+  not the negative branch).
+
+- [ ] **TODO-150: Day-1 rental income skips the vacancy factor but the Stabilized reading applies it**
+  Found in the same audit. `App.jsx:550-552` builds the Day-1
+  `monthlyRentalIncome` straight from `getActiveAmount(...)` with no vacancy
+  adjustment, while `resolveProjectedFinancials`
+  (`src/calculations/projectedHealthCheck.js`) multiplies rental income by
+  `1 - vacancyWeeksPerYear/52`. So for an investment property, part of every
+  Day1 -> Stabilized movement in Housing Cost Ratio, Gearing and Rental Yield
+  is a change in *definition*, not a projection - the two readings are not
+  apples to apples.
+  **The tie-breaker is already settled by the engine**: verified
+  `offsetSimulation.js:246` applies `vacancyFactor` inside the monthly loop
+  unconditionally, and that loop's `months` counter is 1 on its first
+  iteration - so the simulation vacancy-adjusts from month 1. It is the Day-1
+  Health Check figure that is the outlier, disagreeing with the simulation that
+  drives every other panel on the page.
+  **Fix**: apply the vacancy factor to the Day-1 `monthlyRentalIncome` too, so
+  all three consumers agree. Note this is not a purely cosmetic change - Day-1
+  `monthlyRentalIncome` also feeds `monthlyNetBalance`, `monthlyToOffset` and
+  the weekly/fortnightly cash-flow cards, so the blast radius is wider than the
+  Health Check and every affected figure should be re-checked. Consider whether
+  the "TO OFFSET (automatic)" figure should be vacancy-adjusted as well or
+  deliberately kept optimistic; if they must differ, say why in a comment.
+  **Tests**: an investment-property scenario in TODO-147's matrix with
+  `vacancyWeeksPerYear` at 0 vs 4, asserting Day-1 and Stabilized move
+  together; plus a check that the Day-1 rental figure matches what
+  `offsetSimulation.js` computes for month 1.
+
+- [ ] **TODO-151 (needs a product call before coding - biggest blast radius): Housing Cost Ratio applies gross-income bands to a net-income figure**
+  Found in the same audit, and it is the reason the indicator feels stuck on
+  red. `HOUSING_COST_RATIO_BANDS` uses the standard 30/40/50% thresholds, and
+  that rule of thumb (the "30% rule", and the housing-stress "30/40 rule") is
+  defined on **gross** household income - as is any lender's serviceability
+  assessment. But the app's income sources default to net/take-home (the
+  "This is a gross (pre-tax) amount" checkbox is off by default), so the
+  denominator is net while the thresholds assume gross. At a 20% effective
+  rate, 30% of gross is about 37.5% of net, making the bands roughly a quarter
+  stricter than the benchmark they cite.
+  Concrete evidence of the distortion: the **shipped default scenario** reads
+  55% -> "High risk" 🔴 while simultaneously running a **+$2,470/month
+  surplus**. It takes a $3,000/week salary to reach "Excellent". An indicator
+  whose out-of-the-box state is a false alarm trains users to ignore it.
+  Three ways out, to choose between explicitly:
+  1. **Gross up the denominator for this indicator only** (recommended). The
+     inputs already exist - each income item carries `isGross`, and
+     `effectiveTaxRate` is a user-set flat rate, so `gross = net / (1 - rate)`
+     is recoverable rather than circular (unlike the case TODO-122 rejected,
+     which had no rate to work from). Bands keep their standard meaning and
+     the tooltip's "30% rule" reference stays true. Caveat to state in the
+     tooltip: the grossed-up figure is only as good as the flat rate.
+     Note this makes the indicator move with Effective Tax Rate for the first
+     time, which is a visible behaviour change in its own right.
+  2. **Recalibrate the bands for net income.** Avoids synthesising a gross
+     figure, but the thresholds stop matching any published benchmark and
+     would arguably have to shift with the tax rate, which is worse.
+  3. **Leave the maths, fix the copy** - relabel it as a net-income ratio and
+     drop the "30% rule" framing. Cheapest, but keeps shipping a default
+     scenario that reads High risk at a healthy surplus.
+  Whichever wins, the Stabilized reading (TODO-134) must use the same
+  convention as Day 1.
+  **Tests**: every HCR expectation in TODO-147's matrix changes, so update
+  them deliberately as part of this item rather than in bulk; add cases at
+  `effectiveTaxRate` 0 (gross == net, so option 1 must be a no-op) and at a
+  high rate; and add a case asserting the shipped default scenario no longer
+  classifies as High risk while in surplus - the symptom that opened this.
 
 ---
 
