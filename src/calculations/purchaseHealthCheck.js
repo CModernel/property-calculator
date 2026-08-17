@@ -165,10 +165,13 @@ export function classifyMortgageFreeAge(age) {
   return classifyByBands(age, MORTGAGE_FREE_AGE_BANDS);
 }
 
+// 'Building'/'Early days' (pre-TODO-136) implied guaranteed forward progress
+// - no longer true once a deficit month can drain the offset instead of
+// growing it. Relabeled to describe the current share only, not a trend.
 export const OFFSET_UTILISATION_BANDS = [
   { min: 20, label: 'Strong', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: 'A large share of the loan is offset.' },
-  { min: 10, label: 'Building', symbol: '🟡', textClass: 'text-yellow-600 dark:text-yellow-400', critical: false, action: 'Offset is building up steadily.' },
-  { min: 5, label: 'Early days', symbol: '🟠', textClass: 'text-orange-600 dark:text-orange-400', critical: false, action: 'Still early in building your offset.' },
+  { min: 10, label: 'Moderate', symbol: '🟡', textClass: 'text-yellow-600 dark:text-yellow-400', critical: false, action: 'A moderate share of the loan is offset.' },
+  { min: 5, label: 'Low', symbol: '🟠', textClass: 'text-orange-600 dark:text-orange-400', critical: false, action: 'A small share of the loan is offset so far.' },
   { min: -Infinity, label: 'Just started', symbol: '🔴', textClass: 'text-red-600 dark:text-red-400', critical: false, action: 'Offset balance is still small relative to the loan.' },
 ];
 

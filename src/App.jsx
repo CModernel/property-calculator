@@ -59,6 +59,7 @@ import {
   calculateMortgageFreeAge, classifyMortgageFreeAge,
   calculateOffsetUtilisation, classifyOffsetUtilisation,
 } from './calculations/purchaseHealthCheck';
+import { findStabilizationMonth, resolveProjectedFinancials, worseOf } from './calculations/projectedHealthCheck';
 import HealthCheckIndicator from './components/HealthCheckIndicator';
 import { calculateTotalCashRequired, calculateCashRemaining } from './calculations/totalCashRequired';
 import { getSteppedValue } from './calculations/steppedValue';
@@ -108,6 +109,15 @@ const PERSONAL_EXPENSE_CATEGORIES = ['Groceries', 'Transport', 'Bills', 'Health'
 const WEEKLY_TO_MONTHLY_TOOLTIP = (
   <p>Monthly figures convert weekly amounts using the actual number of weeks per year: <strong>52 ÷ 12 ≈ 4.33</strong>, not a flat ×4.</p>
 );
+
+// TODO-134: arrow prefix for a Health Check indicator's "stabilizes to..."
+// annotation - whether the Stabilized reading is better, worse, or the same
+// as Day 1, in that indicator's own direction (higherIsBetter/higherIsWorse).
+function stabilizedArrow(day1Value, stabilizedValue, direction) {
+  if (stabilizedValue === day1Value) return '→';
+  const improved = direction === 'higherIsBetter' ? stabilizedValue > day1Value : stabilizedValue < day1Value;
+  return improved ? '↗' : '↘';
+}
 
 const PropertyInvestmentCalculator = () => {
   // Not stateful (no useState) - there's no UI to switch states yet, so this
@@ -675,17 +685,44 @@ const PropertyInvestmentCalculator = () => {
 
   // Purchase Health Check panel (TODO-68/69/70) - all "month 1"/"right now"
   // snapshots, same convention as every other static figure on this page.
+  // TODO-134: six of these also get a "Stabilized" reading - the month the
+  // last scheduled income/expense/rate change fires (or year 5 if nothing is
+  // scheduled), with growth applied - computed independently of the loan
+  // simulation (see projectedHealthCheck.js for why). Resolved once, shared
+  // by every indicator below.
+  const stabilizationMonth = findStabilizationMonth({ incomeSources, personalExpenseItems, expenseFields, interestRateField });
+  const projected = resolveProjectedFinancials(stabilizationMonth, {
+    incomeSources, personalExpenseItems, expenseFields, interestRateField,
+    effectiveTaxRate, salaryGrowthRate, rentGrowthRate, expenseGrowthRate, vacancyWeeksPerYear,
+    loanAmount, monthlyPayment, interestRate, totalMonths,
+  });
+  const projectedTotalPropertyCost = calculateTotalPropertyCost(projected.monthlyPayment, projected.monthlyPropertyExpenses);
+
   const emergencyBufferMonths = calculateEmergencyBufferMonths(cashRemaining, totalPropertyCost + monthlyPersonalExpenses);
-  const emergencyBufferClass = classifyEmergencyBuffer(emergencyBufferMonths);
+  // Twist (per TODO-134): the numerator (cashRemaining, a settlement-day
+  // figure) stays fixed for both readings - only the denominator moves. That
+  // alone is what makes the Stabilized buffer grow as income outpaces
+  // expenses, with no need to model an accumulating savings balance.
+  const stabilizedEmergencyBufferMonths = calculateEmergencyBufferMonths(cashRemaining, projectedTotalPropertyCost + projected.monthlyPersonalExpenses);
+  const emergencyBufferClass = classifyEmergencyBuffer(worseOf(emergencyBufferMonths, stabilizedEmergencyBufferMonths, 'higherIsBetter'));
 
   const housingCostRatio = calculateHousingCostRatio(totalPropertyCost, monthlyIncome + monthlyRentalIncome);
-  const housingCostRatioClass = classifyHousingCostRatio(housingCostRatio);
+  const stabilizedHousingCostRatio = calculateHousingCostRatio(projectedTotalPropertyCost, projected.monthlyIncome + projected.monthlyRentalIncome);
+  const housingCostRatioClass = classifyHousingCostRatio(worseOf(housingCostRatio, stabilizedHousingCostRatio, 'higherIsWorse'));
 
   const stressTestSurvivedDelta = calculateStressTestSurvivedDelta({
     loanAmount, interestRate, totalMonths, monthlyPropertyExpenses,
     monthlyIncome, monthlyRentalIncome, monthlyPersonalExpenses,
   });
-  const stressTestClass = classifyStressTest(stressTestSurvivedDelta);
+  // Same original loanAmount/totalMonths as Day 1 (never the offset-reduced
+  // balance - that's the simulation's concern, kept out of this calculation
+  // entirely), but the rate/payment reflect whatever's scheduled by the
+  // Stabilized month.
+  const stabilizedStressTestSurvivedDelta = calculateStressTestSurvivedDelta({
+    loanAmount, interestRate: projected.interestRate, totalMonths, monthlyPropertyExpenses: projected.monthlyPropertyExpenses,
+    monthlyIncome: projected.monthlyIncome, monthlyRentalIncome: projected.monthlyRentalIncome, monthlyPersonalExpenses: projected.monthlyPersonalExpenses,
+  });
+  const stressTestClass = classifyStressTest(worseOf(stressTestSurvivedDelta, stabilizedStressTestSurvivedDelta, 'higherIsBetter'));
 
   const upfrontCostRatio = calculateUpfrontCostRatio(totalCashRequired, downPayment, propertyPrice);
   const upfrontCostRatioClass = classifyUpfrontCostRatio(upfrontCostRatio);
@@ -696,14 +733,20 @@ const PropertyInvestmentCalculator = () => {
 
   // TODO-69: investment-property-only indicators.
   const gearingCashflow = monthlyRentalIncome - monthlyPayment - monthlyPropertyExpenses;
-  const gearingClass = classifyGearing(gearingCashflow);
+  const stabilizedGearingCashflow = projected.monthlyRentalIncome - projected.monthlyPayment - projected.monthlyPropertyExpenses;
+  const gearingClass = classifyGearing(worseOf(gearingCashflow, stabilizedGearingCashflow, 'higherIsBetter'));
 
   const vacancyBufferMonths = calculateVacancyBufferMonths(cashRemaining, monthlyPayment + monthlyPropertyExpenses);
-  const vacancyBufferClass = classifyVacancyBuffer(vacancyBufferMonths);
+  const stabilizedVacancyBufferMonths = calculateVacancyBufferMonths(cashRemaining, projected.monthlyPayment + projected.monthlyPropertyExpenses);
+  const vacancyBufferClass = classifyVacancyBuffer(worseOf(vacancyBufferMonths, stabilizedVacancyBufferMonths, 'higherIsBetter'));
 
   const rentalYieldHasData = hasEnoughDataForRentalYield(weeklyRentalIncome);
   const rentalYield = calculateRentalYield(weeklyRentalIncome, propertyPrice);
-  const rentalYieldClass = rentalYieldHasData ? classifyRentalYield(rentalYield) : null;
+  // Inverse of calculateMonthlyFromWeekly (weekly * 52 / 12) - no dedicated
+  // helper exists, and adding one for this single call site isn't warranted.
+  const stabilizedWeeklyRentalIncome = projected.monthlyRentalIncome * 12 / 52;
+  const stabilizedRentalYield = calculateRentalYield(stabilizedWeeklyRentalIncome, propertyPrice);
+  const rentalYieldClass = rentalYieldHasData ? classifyRentalYield(worseOf(rentalYield, stabilizedRentalYield, 'higherIsBetter')) : null;
 
   // TODO-88: Mortgage-Free Age is opt-in via showMortgageFreeAge, rather than
   // overloading currentAge itself as a "not provided" sentinel.
@@ -3151,30 +3194,36 @@ const PropertyInvestmentCalculator = () => {
                   label="Emergency Buffer"
                   tooltipLabel="What is the Emergency Buffer?"
                   valueDisplay={Number.isFinite(emergencyBufferMonths) ? `${emergencyBufferMonths.toFixed(1)} months` : '∞'}
+                  secondaryValueDisplay={`${stabilizedArrow(emergencyBufferMonths, stabilizedEmergencyBufferMonths, 'higherIsBetter')} stabilizes to ${Number.isFinite(stabilizedEmergencyBufferMonths) ? `${stabilizedEmergencyBufferMonths.toFixed(1)} months` : '∞'}`}
                   classification={emergencyBufferClass}
                 >
                   <p>Remaining Savings divided by your total monthly outgoings (property + personal expenses) - how many months you could cover if income stopped entirely.</p>
                   <p className="mt-2">≥12 months excellent, 6-12 good, 3-6 moderate, &lt;3 high risk - the standard "3-6 months" rule of thumb.</p>
+                  <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled - with growth rates applied.</p>
                 </HealthCheckIndicator>
 
                 <HealthCheckIndicator
                   label="Housing Cost Ratio"
                   tooltipLabel="What is the Housing Cost Ratio?"
                   valueDisplay={`${housingCostRatio.toFixed(0)}%`}
+                  secondaryValueDisplay={`${stabilizedArrow(housingCostRatio, stabilizedHousingCostRatio, 'higherIsWorse')} stabilizes to ${stabilizedHousingCostRatio.toFixed(0)}%`}
                   classification={housingCostRatioClass}
                 >
                   <p>Total property cost (loan repayment + property expenses) as a share of your total monthly income.</p>
                   <p className="mt-2">&lt;30% excellent, 30-40% good, 40-50% caution, ≥50% high risk.</p>
+                  <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled - with growth rates applied.</p>
                 </HealthCheckIndicator>
 
                 <HealthCheckIndicator
                   label="Interest Rate Stress Test"
                   tooltipLabel="What is the Interest Rate Stress Test?"
                   valueDisplay={stressTestSurvivedDelta > 0 ? `Survives +${stressTestSurvivedDelta}%` : 'Fails at +1%'}
+                  secondaryValueDisplay={`${stabilizedArrow(stressTestSurvivedDelta, stabilizedStressTestSurvivedDelta, 'higherIsBetter')} stabilizes to ${stabilizedStressTestSurvivedDelta > 0 ? `Survives +${stabilizedStressTestSurvivedDelta}%` : 'Fails at +1%'}`}
                   classification={stressTestClass}
                 >
                   <p>Recalculates your repayment at today's rate plus 1/2/3 percentage points, and reports the largest rise your current cash flow still survives without going into deficit.</p>
                   <p className="mt-2">Survives +3% excellent, +2% good, +1% moderate, fails already at +1% high risk.</p>
+                  <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled - with growth rates applied.</p>
                 </HealthCheckIndicator>
 
                 <HealthCheckIndicator
@@ -3201,19 +3250,23 @@ const PropertyInvestmentCalculator = () => {
                       label="Gearing"
                       tooltipLabel="What does Gearing mean here?"
                       valueDisplay={`${gearingCashflow >= 0 ? '+' : '-'}$${Math.abs(Math.round(gearingCashflow)).toLocaleString()}/mo`}
+                      secondaryValueDisplay={`${stabilizedArrow(gearingCashflow, stabilizedGearingCashflow, 'higherIsBetter')} stabilizes to ${stabilizedGearingCashflow >= 0 ? '+' : '-'}$${Math.abs(Math.round(stabilizedGearingCashflow)).toLocaleString()}/mo`}
                       classification={gearingClass}
                     >
                       <p>Rental income minus the loan repayment and property expenses. Not itself good or bad - negative gearing (a shortfall) just needs to be affordable from your other income.</p>
+                      <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled - with growth rates applied.</p>
                     </HealthCheckIndicator>
 
                     <HealthCheckIndicator
                       label="Vacancy Buffer"
                       tooltipLabel="What is the Vacancy Buffer?"
                       valueDisplay={Number.isFinite(vacancyBufferMonths) ? `${vacancyBufferMonths.toFixed(1)} months` : '∞'}
+                      secondaryValueDisplay={`${stabilizedArrow(vacancyBufferMonths, stabilizedVacancyBufferMonths, 'higherIsBetter')} stabilizes to ${Number.isFinite(stabilizedVacancyBufferMonths) ? `${stabilizedVacancyBufferMonths.toFixed(1)} months` : '∞'}`}
                       classification={vacancyBufferClass}
                     >
                       <p>Remaining Savings divided by the loan repayment + property expenses - how many months you could cover the property alone with no tenant.</p>
                       <p className="mt-2">≥6 months excellent, 3-6 good, &lt;3 high risk.</p>
+                      <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled - with growth rates applied.</p>
                     </HealthCheckIndicator>
 
                     {rentalYieldHasData ? (
@@ -3221,10 +3274,12 @@ const PropertyInvestmentCalculator = () => {
                         label="Rental Yield"
                         tooltipLabel="What is Rental Yield?"
                         valueDisplay={`${rentalYield.toFixed(1)}%`}
+                        secondaryValueDisplay={`${stabilizedArrow(rentalYield, stabilizedRentalYield, 'higherIsBetter')} stabilizes to ${stabilizedRentalYield.toFixed(1)}%`}
                         classification={rentalYieldClass}
                       >
                         <p>Annualized rental income (House Rent/Room Rent) as a share of the property price.</p>
                         <p className="mt-2">&lt;3% weak, 3-5% average, ≥5% strong.</p>
+                        <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled - with growth rates applied.</p>
                       </HealthCheckIndicator>
                     ) : (
                       <div className="py-2 text-sm text-gray-400 dark:text-gray-500 italic">
@@ -3549,8 +3604,8 @@ const PropertyInvestmentCalculator = () => {
                     valueDisplay={`${calculateOffsetUtilisation(snapshot.offset, snapshot.balance).toFixed(1)}%`}
                     classification={classifyOffsetUtilisation(calculateOffsetUtilisation(snapshot.offset, snapshot.balance))}
                   >
-                    <p>Offset balance divided by (offset + remaining loan balance) at the month selected above - how much of what you still owe is already covered by your offset.</p>
-                    <p className="mt-2">&gt;20% strong, 10-20% building, 5-10% early days, &lt;5% just started.</p>
+                    <p>Offset balance divided by (offset + remaining loan balance) at the month selected above - how much of what you still owe is already covered by your offset. A snapshot of the selected month, not a guarantee of future progress - a deficit month can drain the offset instead of growing it.</p>
+                    <p className="mt-2">&gt;20% strong, 10-20% moderate, 5-10% low, &lt;5% just started.</p>
                   </HealthCheckIndicator>
 
                   {/* SECONDARY METRICS */}

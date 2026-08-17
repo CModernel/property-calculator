@@ -207,10 +207,10 @@ describe('Offset Utilisation (TODO-70)', () => {
     expect(calculateOffsetUtilisation(0, 0)).toBe(100);
   });
 
-  it('classifies at the documented boundaries (>=20 strong, >=10 building, >=5 early days, else just started)', () => {
+  it('classifies at the documented boundaries (>=20 strong, >=10 moderate, >=5 low, else just started)', () => {
     expect(classifyOffsetUtilisation(20).label).toBe('Strong');
-    expect(classifyOffsetUtilisation(10).label).toBe('Building');
-    expect(classifyOffsetUtilisation(5).label).toBe('Early days');
+    expect(classifyOffsetUtilisation(10).label).toBe('Moderate');
+    expect(classifyOffsetUtilisation(5).label).toBe('Low');
     expect(classifyOffsetUtilisation(4.9).label).toBe('Just started');
   });
 });

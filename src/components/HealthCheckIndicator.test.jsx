@@ -44,4 +44,21 @@ describe('HealthCheckIndicator', () => {
     );
     expect(screen.queryByText(classification.action)).not.toBeInTheDocument();
   });
+
+  it('shows the secondary value annotation only when secondaryValueDisplay is passed', () => {
+    const { rerender } = render(
+      <HealthCheckIndicator label="Emergency Buffer" valueDisplay="12 months" classification={classification} />
+    );
+    expect(screen.queryByText(/stabilizes to/)).not.toBeInTheDocument();
+
+    rerender(
+      <HealthCheckIndicator
+        label="Emergency Buffer"
+        valueDisplay="12 months"
+        secondaryValueDisplay="↗ stabilizes to 15.0 months"
+        classification={classification}
+      />
+    );
+    expect(screen.getByText('↗ stabilizes to 15.0 months')).toBeInTheDocument();
+  });
 });

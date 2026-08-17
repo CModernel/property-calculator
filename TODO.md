@@ -4397,6 +4397,38 @@ optionally reuse in the commit message when you implement it.
   had the two-value display design and the worse-of-two classification rule
   - see that entry for the full mechanism.
 
+- [x] **TODO-134: Health Check indicators - Day1/Stabilized dual-value display, unified with TODO-133**
+  Emergency Buffer, Housing Cost Ratio, Interest Rate Stress Test, Gearing,
+  Vacancy Buffer, and Rental Yield now show a "Day 1" value plus a
+  "Stabilized" annotation (e.g. "↗ stabilizes to 5.8 months"), classified by
+  whichever of the two is worse. New `src/calculations/projectedHealthCheck.js`
+  module (fully independent of `offsetSimulation.js` - `monthlyData` doesn't
+  carry per-month income/expense figures, and none of these six indicators
+  actually need the loan simulation's own bookkeeping) exports:
+  - `findStabilizationMonth` - the month the last RECURRING income/expense
+    item's schedule boundary or property-expense/interest-rate `changes[]`
+    entry fires, or month 60 (year 5) if nothing is scheduled. One-time
+    items are excluded (a lump sum isn't a new steady state).
+  - `resolveProjectedFinancials` - re-evaluates income/expenses at an
+    arbitrary month with growth applied, mirroring the Day-1 calculation.
+    Emergency/Vacancy Buffer's numerator (`cashRemaining`) stays fixed at
+    Day 1 for both readings - only the denominator moves. Stress Test/
+    Gearing use the ORIGINAL `loanAmount` (never the offset-reduced
+    balance), only re-amortizing if a scheduled rate change applies by then.
+  - `worseOf` - resolves "worse" on the raw value via an explicit
+    `higherIsBetter`/`higherIsWorse` direction, since `classifyByBands`'
+    band arrays aren't consistently ordered by severity across indicators.
+  Separately relabeled `OFFSET_UTILISATION_BANDS`' "Building"/"Early days"
+  tiers to "Moderate"/"Low" (`purchaseHealthCheck.js`) - those names implied
+  guaranteed forward progress that stopped being true once TODO-136 let a
+  deficit month drain the offset. No signature/return-value changes to any
+  existing `calculate*`/`classify*` function - every one is pinned by
+  exact-value tests. 24 new tests (`projectedHealthCheck.test.js`,
+  `HealthCheckIndicator.test.jsx`'s `secondaryValueDisplay` case,
+  `App.healthCheckStabilized.test.jsx`'s year-5-fallback and
+  scheduled-salary-raise cases) plus updated `OFFSET_UTILISATION_BANDS`
+  label assertions; full suite (594 tests), lint, and build all clean.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -4683,86 +4715,6 @@ optionally reuse in the commit message when you implement it.
   starts collapsed while an explicit config/saved-scenario value of `true`
   still opens it for power users. Added App-level coverage for the default
   collapsed state and expand/collapse interaction.
-
-- [ ] **TODO-134 (decided, ready to implement): Health Check indicators - Day1/Stabilized, unified with TODO-133**
-  Several Health Check indicators are computed via
-  `getActiveAmount(incomeSources, 1, ...)` — a month-1 snapshot — so
-  income sources that start after month 1 are completely invisible.
-  **Affected indicators:**
-  - **Housing Cost Ratio** (`monthlyIncome + monthlyRentalIncome` at month 1)
-  - **Stress Test** (re-amortizes at higher rates using month-1 income;
-    future income increases would let it survive more rate rises)
-  - **Gearing** (`monthlyRentalIncome - payment - expenses` at month 1;
-    investment properties only)
-  - **Rental Yield** (`weeklyRentalIncome / propertyPrice` at month 1;
-    investment properties only)
-  **Partially affected** (depend on `cashRemaining`, which is inherently
-  a day-1 settlement figure, but also on expenses that have scheduled
-  changes via TODO-19):
-  - **Emergency Buffer** (`cashRemaining / monthlyOutgoings`)
-  - **Vacancy Buffer** (`cashRemaining / monthlyPropertyCosts`)
-  **NOT affected** (inherently day-1 measures, or already use the full
-  simulation):
-  - **Upfront Cost Ratio** (stamp duty + fees at settlement — no time dimension)
-  - **Mortgage-Free Age** (uses `loanSimulation.years` which already runs
-    the full month-by-month simulation including all scheduled changes)
-
-  **Recommended approach for Housing Cost Ratio (and generally):**
-  Show TWO values per affected indicator:
-  1. **"Day 1"** — the current month-1 snapshot (unchanged). This is the
-     conservative "how exposed are you RIGHT NOW" reading.
-  2. **"Stabilized"** — the value once all scheduled income/expense
-     changes have taken effect (i.e. the "steady state" ratio). This
-     answers "what does my finances look like once the salary increase
-     kicks in / the tenant moves in / etc."?
-
-  **Why not a time-weighted average?** An average (e.g. mean ratio over
-  30 years) dilutes the signal: 55% for year 1 then 25% for years 2-30
-  averages to ~31% ("Good"), hiding the real year-1 squeeze. The user
-  needs to see BOTH the immediate pressure AND the eventual steady state.
-  **Why not just the peak (worst) value?** Too conservative — a user
-  with 55% month 1 that drops to 25% by month 13 would permanently see
-  "High risk" even though the tight period is short and survivable.
-  **Classification:** use the WORSE of the two values for the color/symbol
-  (conservative — always flags real risk), but show both numbers so the
-  user can see the trajectory. A small annotation like "improves to 25%"
-  or "↘ stabilizes at 25%" next to the Day 1 value conveys the full
-  picture.
-
-  For **Emergency Buffer** and **Vacancy Buffer**, the same two-value
-  approach applies but with a twist: the "Day 1" buffer is naturally
-  the tightest (lowest savings + highest early expenses), and the
-  "Stabilized" buffer grows as income increases and expenses are
-  covered. Showing both tells the user "you have 2.1 months today,
-  but this grows to 5.8 months once the salary increase kicks in."
-
-  **Decided with TODO-133 (2026-08-17) - three additions to the scope above:**
-  1. **Growth is now unified into the same Day1/Stabilized mechanism**, not
-     a separate concern. Since TODO-141 growth assumptions are always active
-     and non-zero by default, so "Stabilized" must reflect compounding
-     growth too, not only scheduled income-source start dates - the same
-     two-value display and worse-of-two classification above already cover
-     this once "Stabilized" is computed correctly (next point).
-  2. **Stabilization month, resolved:** the month the LAST scheduled income/
-     expense change fires (reusing the existing schedule data already read
-     by `getActiveAmount`/the expense `SteppedExpenseField`s - no new input).
-     Read that month's value from the existing simulation `monthlyData`
-     (already growth-adjusted) rather than re-deriving a separate growth
-     calculation. If a scenario has no scheduled changes at all, fall back
-     to a fixed default horizon of year 5 so "Stabilized" is never
-     undefined for a scenario with completely flat inputs.
-  3. **"Offset Utilisation (this month)" gets a smaller, separate fix in the
-     same pass** (`App.jsx:3543-3554`, `OFFSET_UTILISATION_BANDS` in
-     `purchaseHealthCheck.js:168-173`): relabel the "Building"/"Early days"
-     tiers to neutral labels that don't imply guaranteed forward progress -
-     a deficit month can now drain the offset (TODO-136), which those labels
-     didn't anticipate. Numeric thresholds and `calculateOffsetUtilisation`
-     itself are unchanged; this indicator already reads whichever month the
-     Timeline Explorer slider is on, so it does NOT get the Day1/Stabilized
-     treatment - that question doesn't apply to it.
-
-  Ready to plan/implement - the open decision this entry and TODO-133 were
-  both blocked on is now resolved.
 
 - [ ] **TODO-135 (Analysis only, large scope): Simple vs. Advanced UI modes — presentation only**
   The app currently shows everything at once — 8 collapsible input cards
