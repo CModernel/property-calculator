@@ -4766,105 +4766,6 @@ optionally reuse in the commit message when you implement it.
   still opens it for power users. Added App-level coverage for the default
   collapsed state and expand/collapse interaction.
 
-- [ ] **TODO-135 (Analysis only, large scope): Simple vs. Advanced UI modes — presentation only**
-  The app currently shows everything at once — 8 collapsible input cards
-  (Purchase Details, Financial Position, Projection Assumptions, Property
-  Expenses, Income, Offset Contributions, Exceptional Expenses, Other
-  Expenses / Personal Expenses), plus 4 results/output panels (Property
-  Balance, Loan Simulation, Timeline Explorer, Strategy Comparison) and
-  the Health Check. This is powerful for power users but can be
-  **overwhelming** for someone who just wants to answer "can I afford
-  this property?" — the cognitive load of 30+ fields, multiple
-  collapsible sub-sections, and several analytical tools is high.
-
-  **Proposed solution:** two UI modes — **Simple** and **Advanced** —
-  with a toggle in the header. This is a presentation layer only: both
-  modes use the same financial model and the same active assumptions. Simple
-  must not silently calculate a less-realistic scenario merely because it
-  hides advanced controls.
-
-  The current UI is the baseline for **Advanced**, but it is not the final
-  Advanced architecture. New features should initially be implemented in
-  Advanced and then evaluated for a contextual, reduced Simple presentation.
-  The ETF/risk work belongs in a dedicated Advanced-only
-  **Extra Investments & Strategies** card (TODO-136/137/138), not in the
-  basic Financial Position card.
-
-  ### Simple mode ("Can I afford this?")
-  Shows only the essential inputs and a contextual affordability answer,
-  not disconnected numbers:
-  - **Purchase inputs:** Property Price, Deposit Contribution, Loan Amount,
-    Interest Rate, Loan Term, Available Savings, and the relevant upfront
-    costs/liquidity summary.
-  - **Monthly position:** a compact income → property costs → personal costs
-    → repayments → surplus/shortfall breakdown. Multiple existing income
-    sources and commitments must not be silently ignored merely because their
-    detailed editors are hidden; show a compact "N sources included" or
-    "N commitments included" summary with a link to Advanced.
-  - **Results:** affordability status (illustrative, not a lending approval),
-    Monthly Repayments, Total Cash Required, Remaining Savings, Monthly Cash
-    Flow, Housing Cost Ratio, and Emergency Buffer. Each number should explain
-    what question it answers and what inputs are included.
-  - **Health Check:** a contextual subset of Housing Cost Ratio, Stress Test,
-    Emergency Buffer, and any Day 1/Stabilized distinction resolved by
-    TODO-133/134. The full indicator set remains in Advanced.
-  - **Hidden by default:** detailed schedules, Offset Contributions,
-    Exceptional Expenses, detailed expense lists, Timeline Explorer,
-    Strategy Comparison, ETF/risk scenarios, and editable projection
-    assumptions. Hidden controls must still remain active in the same model if
-    the saved scenario contains them; Simple must show a clear notice when an
-    Advanced strategy materially affects the result.
-  - **Goal:** answer "can I afford this and what is driving the answer?" in a
-    small number of connected cards, rather than displaying 5-8 unexplained
-    fields or a falsely precise yes/no verdict.
-
-  ### Advanced mode ("Optimize my strategy")
-  Starts from today's full interface: all input cards, detailed schedules,
-  complete Health Check, Loan Simulation, Timeline Explorer, Strategy
-  Comparison, projection-assumption controls, and the dedicated Extra
-  Investments & Strategies card. This is the current UI classified as
-  Advanced, while later work may reorganize it into focused components.
-
-  ### Open questions for analysis:
-  1. **Mode toggle UX:** persistent toggle in header? Or a one-time
-     choice on first visit (saved to localStorage)? If the user starts
-     in Simple mode and later clicks "Advanced", does the transition
-     feel seamless or jarring?
-  2. **Projection assumptions in Simple:** resolved by TODO-141 - there is
-     no on/off toggle left to duplicate, and the Projection Assumptions card
-     already models the pattern Simple should follow (its collapse toggle
-     hides the editors without touching the model). Simple may hide the
-     editors the same way, but it should disclose that projection
-     assumptions are active and provide an Advanced link/summary so the
-     result is not based on invisible rules.
-  3. **Progressive disclosure within Simple:** instead of a binary
-     Simple/Advanced split, should Simple mode have its own
-     "show more" expander per section (e.g. "Show offset
-     contributions" inside Financial Position)? This avoids a hard
-     mode switch but still reduces default complexity.
-  4. **Saved scenarios:** UI mode should be a user preference, not part of
-     the financial scenario payload. Loading a scenario must not unexpectedly
-     switch the user's interface complexity; the saved financial inputs and
-     active advanced settings must remain intact.
-  5. **Migration path:** many features were added incrementally
-     (TODO-1 through TODO-140). Every future TODO should identify its
-     Advanced implementation first and then decide whether Simple needs a
-     summary, a reduced editor, or no exposure at all. Simple should never
-     drop already-entered financial data from the calculation.
-  6. **Existing collapsible cards:** the app already has many collapsible
-     sections. They can remain useful inside Advanced, but Simple should not
-     be implemented as a pile of permanently hidden existing cards. Prefer a
-     small guided summary view with explicit "View details in Advanced"
-     transitions and shared calculation components.
-
-  **Scope/order:** define the presentation contract now, but implement the
-  actual Simple/Advanced shell after TODO-136/137/138 and TODO-133/134 have
-  stabilized the model and the most important outputs. It is intentionally a
-  late implementation task, not an unplanned final rewrite. TODO-141 must be
-  resolved first because it defines how projection assumptions behave in both
-  views. Tagged as "(Analysis only, large scope)" to signal that this entry
-  records product/architecture decisions and does not authorize code changes.
-
 - [ ] **TODO-144: "When to start" ETF contributions - delayed start and reserve-gated start**
   Split out of the original TODO-138 (2026-08-16) when exploration showed its
   five sub-features had radically different costs. These two both need a NEW
@@ -5139,6 +5040,71 @@ optionally reuse in the commit message when you implement it.
   presence); verified the App-level regression tests actually catch the bugs
   by temporarily reverting Vacancy's classification and confirming the test
   fails, then restoring it. Suite 676 passing, lint and build clean.
+
+- [x] **TODO-135: Simple vs Advanced UI mode - first functional slice**
+  Shipped as a working mode toggle, not analysis. The entry was tagged
+  "(Analysis only)... does not authorize code changes", but its own scope
+  clause was the real gate - "implement the actual shell after TODO-136/137/138
+  and TODO-133/134... TODO-141 must be resolved first" - and all five are now
+  complete, so the tag was a leftover. Deliberately a first slice, since the
+  entry equally warns this must not become "an unplanned final rewrite".
+  **Advanced is the default**, so today's whole interface is what an existing
+  user and every saved scenario still get; Simple is one click away.
+  - **`src/hooks/useUiMode.js`** - own localStorage key
+    (`propertyCalculator.uiMode`), modelled on `useDarkMode`. Deliberately NOT
+    in the scenario payload (entry item 4: loading a scenario must never change
+    interface complexity), which means **no `SCHEMA_VERSION` bump** - confirmed
+    still 10. Worth recording that this diverges from the *larger* half of an
+    inconsistent precedent on purpose: 15 `show*` collapse flags ARE saved into
+    the payload, contradicting that payload's own comment claiming collapsed
+    sections aren't. This follows the dark-mode / `comparisonMetric` side
+    instead, and says so in a comment so nobody "fixes" it into the payload.
+    An unrecognised stored value falls back to advanced rather than rendering
+    neither view.
+  - **`src/calculations/affordabilitySummary.js`** - the "where do I stand"
+    roll-up. The entry asked for "a contextual affordability answer" while
+    warning against "a falsely precise yes/no verdict", and the app's house
+    rule is no optimizer/no personalized advice. Resolved by inventing **no new
+    threshold**: it picks whichever signal is already binding, hardest-first
+    (settlement unaffordable -> monthly shortfall -> the worse of the two
+    Health Check classifications Simple already displays underneath it), and
+    borrows that indicator's own symbol/textClass rather than minting a colour.
+  - **`src/components/SimpleModeView.jsx`** - the guided view: the purchase,
+    cash to settle, the monthly chain, a three-indicator Health Check subset
+    (through the existing `HealthCheckIndicator`, TODO-134 annotations intact),
+    and a disclosure block listing what's still counted but not editable there.
+  - **`src/components/coreFieldConfigs.js`** - the static props of the six core
+    fields Simple re-renders, extracted so Advanced and Simple can't drift.
+    Advanced's six call sites were refactored onto the same constants in the
+    same change; leaving them copied would have re-created exactly the
+    duplication TODO-116 had just removed. Deposit/Loan Amount are functions of
+    `propertyPrice` since their ranges depend on it at runtime.
+  - **Active-advanced notice**: the entry required a clear notice when an
+    Advanced strategy materially affects the result. Lists only features that
+    genuinely move a figure Simple *shows* (ETF investing, scheduled offset
+    contributions, scheduled rate/expense changes, credit-card modelling)
+    rather than a vague catch-all.
+  **Presentation-only, verified three ways**: no `src/calculations/` module
+  modified; `uiMode` absent from the scenario payload with `SCHEMA_VERSION`
+  unchanged; and **all 105 pre-existing App-level tests pass with zero edits** -
+  the criterion that proves the gate never leaked into the default path.
+  Also fixed a small formatting defect found while writing the view rather than
+  enshrining it in a test: a negative figure now renders `-$9,937`, not
+  `$-9,937`.
+  34 new tests (6 hook, 10 affordability, 10 component, 8 App-level). The
+  load-bearing App-level test asserts the same scenario reads identically in
+  both modes; verified it actually catches a leak by temporarily feeding Simple
+  a scaled `monthlyPayment` and confirming it failed, then restoring.
+  Suite 710 passing, lint and build clean.
+  **Answers four of the entry's six open questions**: (1) persistent header
+  toggle, Advanced default; (3) binary modes with a purpose-built guided Simple
+  view, not per-section expanders - its own item 6 already decided against "a
+  pile of permanently hidden existing cards"; (4) mode is a device preference,
+  not scenario data; (6) guided summary with an explicit "View details in
+  Advanced" transition. **Still open for later work**: (2) how much of the
+  projection-assumption disclosure Simple should show beyond the current
+  one-liner, and (5) reorganizing Advanced itself into focused components -
+  the entry explicitly leaves that as "not the final Advanced architecture".
 
 ---
 

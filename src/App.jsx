@@ -1,6 +1,6 @@
 import { useState, lazy, Suspense } from 'react';
 import { DollarSign, Home, Calendar, ShoppingCart, Car, RotateCcw, Wallet, Sun, Moon, Sprout, PiggyBank, TrendingUp } from 'lucide-react';
-import { formatMonthsDetailed, formatCompactMoney } from './calculations/formatting';
+import { formatMonthsDetailed } from './calculations/formatting';
 import NumberSliderField from './components/NumberSliderField';
 import LvrBadge from './components/LvrBadge';
 import InfoTooltip from './components/InfoTooltip';
@@ -69,10 +69,17 @@ import { INCOME_CATEGORIES, INCOME_CATEGORY_DEFAULTS, RENTAL_INCOME_CATEGORIES }
 import { getSuggestedTaxRate, getMarginalRentalTaxRate } from './calculations/taxRateSuggestion';
 import { useSteppedValue } from './hooks/useSteppedValue';
 import { useDarkMode } from './hooks/useDarkMode';
+import { useUiMode, UI_MODES } from './hooks/useUiMode';
+import SimpleModeView from './components/SimpleModeView';
+import { summariseAffordability } from './calculations/affordabilitySummary';
 import { useScheduleForm } from './hooks/useScheduleForm';
 import SteppedExpenseField from './components/SteppedExpenseField';
 import ScheduleFields from './components/ScheduleFields';
 import ImpactColorLegend from './components/ImpactColorLegend';
+import {
+  PROPERTY_PRICE_FIELD, depositContributionField, loanAmountField,
+  AVAILABLE_SAVINGS_FIELD, INTEREST_RATE_FIELD, LOAN_TERM_FIELD,
+} from './components/coreFieldConfigs';
 import { loadScenario, saveScenario, clearScenario } from './persistence/scenarioStorage';
 import { validateAmount, hasDuplicateOneTimeMonth } from './calculations/scheduleFormValidation';
 import defaultConfig from '../config.default.json';
@@ -133,6 +140,12 @@ const PropertyInvestmentCalculator = () => {
   // A device/browser preference, not scenario data - deliberately its own
   // hook/localStorage key (TODO-47) so it survives "Reset to defaults".
   const [isDarkMode, toggleDarkMode] = useDarkMode();
+  // TODO-135: which interface complexity to render. Own localStorage key, NOT
+  // part of the saved scenario - loading a scenario must never change how
+  // complex the interface is. See useUiMode.js for why that diverges from the
+  // `show*` flags, which ARE saved.
+  const [uiMode, toggleUiMode] = useUiMode();
+  const isSimpleMode = uiMode === UI_MODES.simple;
 
   const [propertyPrice, setPropertyPrice] = useState(config.propertyPrice);
   // TODO-141: the growth/vacancy/tax assumptions below are ALWAYS active -
@@ -768,6 +781,23 @@ const PropertyInvestmentCalculator = () => {
 
   const healthCheckHasCritical = fhbConcessionLost || [emergencyBufferClass, housingCostRatioClass, stressTestClass, upfrontCostRatioClass].some((c) => c.critical);
 
+  // TODO-135: Simple mode's roll-up line. A re-reading of figures and
+  // classifications Simple already displays underneath it - no new threshold.
+  const affordability = summariseAffordability({
+    cashRemaining, monthlyNetBalance, emergencyBufferClass, housingCostRatioClass,
+  });
+
+  // TODO-135: Simple hides these editors but the model still applies them, so
+  // it has to say so. Only features that genuinely move a figure Simple SHOWS
+  // are listed - being vague here would be worse than saying nothing.
+  const activeAdvancedFeatures = [
+    etfInvestingActive && etfAllocationPct > 0 && 'ETF investing',
+    totalScheduledOffset > 0 && 'scheduled offset contributions',
+    interestRateField.changes.length > 0 && 'a scheduled interest-rate change',
+    Object.values(expenseFields).some((f) => f.changes.length > 0) && 'scheduled property-expense changes',
+    useCreditCard && 'credit-card modelling',
+  ].filter(Boolean);
+
   // Invariant: downPayment never exceeds propertyPrice, enforced in both
   // directions. Without this, lowering the price below the current deposit
   // leaves a stale deposit behind (the range input clamps its own display but
@@ -1028,14 +1058,27 @@ const PropertyInvestmentCalculator = () => {
               : 'How much is left after EVERYTHING? That goes to offset automatically.'}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={toggleDarkMode}
-          aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-          className="shrink-0 p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200"
-        >
-          {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-        </button>
+        <div className="shrink-0 flex items-center gap-2">
+          {/* TODO-135: presentation only - this switches which view renders,
+              never what the simulation computes (every figure is derived above
+              `return`). Advanced is the default and is today's full interface. */}
+          <button
+            type="button"
+            onClick={toggleUiMode}
+            aria-pressed={isSimpleMode}
+            className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
+          >
+            {isSimpleMode ? '⚙️ Advanced mode' : '✨ Simple mode'}
+          </button>
+          <button
+            type="button"
+            onClick={toggleDarkMode}
+            aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+            className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200"
+          >
+            {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+        </div>
       </div>
 
       <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg p-3 mb-4">
@@ -1079,6 +1122,43 @@ const PropertyInvestmentCalculator = () => {
         </div>
       </div>
 
+      {/* TODO-135: the Simple/Advanced gate. Presentation only - every figure
+          passed to SimpleModeView is computed above `return`, so switching
+          modes cannot change a single number. Advanced renders today's tree
+          untouched, which is also why the existing App-level tests need no
+          edits. Gating the MOUNT (not just visibility) follows the same
+          precedent as the lazy chart Suspense boundary below: Simple mode
+          shouldn't mount the Timeline Explorer or pull in the recharts chunks
+          at all. */}
+      {isSimpleMode ? (
+        <SimpleModeView
+          propertyPrice={propertyPrice} onPropertyPriceChange={handlePropertyPriceChange}
+          downPayment={downPayment} onDownPaymentChange={handleDownPaymentChange}
+          loanAmount={loanAmount} onLoanAmountChange={handleLoanAmountChange}
+          totalSavings={totalSavings} onTotalSavingsChange={setTotalSavings}
+          interestRateField={interestRateField}
+          loanTermYears={loanTermYears} onLoanTermYearsChange={setLoanTermYears}
+          lvr={lvr}
+          affordability={affordability}
+          monthlyPayment={monthlyPayment}
+          totalCashRequired={totalCashRequired}
+          cashRemaining={cashRemaining}
+          monthlyNetBalance={monthlyNetBalance}
+          monthlyIncome={monthlyIncome}
+          monthlyRentalIncome={monthlyRentalIncome}
+          totalPropertyCost={totalPropertyCost}
+          monthlyPersonalExpenses={monthlyPersonalExpenses}
+          housingCostRatio={housingCostRatio} housingCostRatioClass={housingCostRatioClass}
+          stressTestSurvivedDelta={stressTestSurvivedDelta} stressTestClass={stressTestClass}
+          emergencyBufferMonths={emergencyBufferMonths} emergencyBufferClass={emergencyBufferClass}
+          incomeSourceCount={incomeSources.length}
+          personalExpenseCount={personalExpenseItems.length}
+          offsetContributionCount={offsetContributions.length}
+          activeAdvancedFeatures={activeAdvancedFeatures}
+          onSwitchToAdvanced={toggleUiMode}
+        />
+      ) : (
+      <>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* LEFT PANEL - Configuration */}
         <div className="lg:col-span-2 space-y-4">
@@ -1162,19 +1242,13 @@ const PropertyInvestmentCalculator = () => {
                 )}
               </div>
 
+              {/* TODO-135: the static props of these six core fields live in
+                  coreFieldConfigs.js because Simple mode re-renders the same
+                  six - only value/onChange/children differ per mode. */}
               <NumberSliderField
-                label="Property Price"
+                {...PROPERTY_PRICE_FIELD}
                 value={propertyPrice}
                 onChange={handlePropertyPriceChange}
-                min={50000}
-                max={10000000}
-                sliderMin={200000}
-                sliderMax={3000000}
-                step={10000}
-                impact="negative"
-                prefix="$"
-                suffix=" AUD"
-                formatBound={formatCompactMoney}
               />
 
               {/* TODO-139: raising the deposit also reduces the headline Cash
@@ -1183,36 +1257,18 @@ const PropertyInvestmentCalculator = () => {
                   positive/negative (mirrored below) because "more equity,
                   faster payoff" is the loan-side effect this scheme tracks. */}
               <NumberSliderField
-                label="Deposit Contribution"
+                {...depositContributionField(propertyPrice)}
                 value={downPayment}
                 onChange={handleDownPaymentChange}
-                min={0}
-                max={propertyPrice}
-                sliderMax={propertyPrice}
-                sliderMin={0}
-                step={10000}
-                impact="positive"
-                prefix="$"
-                suffix=" AUD"
-                formatBound={formatCompactMoney}
               >
                 Loan: ${loanAmount.toLocaleString()} ({lvr.toFixed(1)}% LVR)
                 <LvrBadge lvr={lvr} />
               </NumberSliderField>
 
               <NumberSliderField
-                label="Loan Amount"
+                {...loanAmountField(propertyPrice)}
                 value={loanAmount}
                 onChange={handleLoanAmountChange}
-                min={0}
-                max={propertyPrice}
-                sliderMax={propertyPrice}
-                sliderMin={0}
-                step={10000}
-                impact="negative"
-                prefix="$"
-                suffix=" AUD"
-                formatBound={formatCompactMoney}
               >
                 Deposit: ${downPayment.toLocaleString()} ({(100 - lvr).toFixed(1)}% of price)
               </NumberSliderField>
@@ -1425,18 +1481,9 @@ const PropertyInvestmentCalculator = () => {
 
             <div className="space-y-4">
               <NumberSliderField
-                label="Available Savings"
+                {...AVAILABLE_SAVINGS_FIELD}
                 value={totalSavings}
                 onChange={setTotalSavings}
-                min={0}
-                max={10000000}
-                sliderMin={0}
-                sliderMax={3000000}
-                step={10000}
-                impact="positive"
-                prefix="$"
-                suffix=" AUD"
-                formatBound={formatCompactMoney}
               >
                 The whole savings pool the deposit and upfront costs come out of.
               </NumberSliderField>
@@ -1592,20 +1639,7 @@ const PropertyInvestmentCalculator = () => {
               </div>
               )}
 
-              {/* min must stay above 0: a 0% rate makes calculateMonthlyPayment
-                  divide 0 by 0, turning every figure on the page into NaN. */}
-              <SteppedExpenseField
-                field={interestRateField}
-                label="Interest Rate"
-                min={0.1}
-                max={20}
-                sliderMin={3}
-                sliderMax={10}
-                step={0.01}
-                impact="negative"
-                suffix="% p.a."
-                formatValue={(v) => v.toFixed(2)}
-              />
+              <SteppedExpenseField {...INTEREST_RATE_FIELD} field={interestRateField} />
 
               {/* TODO-139: neutral, not negative - verified numerically
                   against the actual offset loop (not the textbook
@@ -1616,16 +1650,9 @@ const PropertyInvestmentCalculator = () => {
                   with a shorter term's faster paydown. Direction flips with
                   the rest of the user's inputs. */}
               <NumberSliderField
-                label="Loan Term"
+                {...LOAN_TERM_FIELD}
                 value={loanTermYears}
                 onChange={setLoanTermYears}
-                min={1}
-                max={30}
-                sliderMin={5}
-                sliderMax={30}
-                step={1}
-                impact="neutral"
-                suffix=" years"
               />
 
               <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
@@ -3711,6 +3738,8 @@ const PropertyInvestmentCalculator = () => {
             </Suspense>
           )}
         </div>
+      )}
+      </>
       )}
     </div>
   );
