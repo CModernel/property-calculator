@@ -278,6 +278,28 @@ const PropertyInvestmentCalculator = () => {
   // exactly matching TODO-96's original behavior - every existing
   // scenario behaves byte-for-byte identically until raised above 0.
   const [switchThresholdPct, setSwitchThresholdPct] = useState(config.switchThresholdPct ?? 0);
+  // TODO-144: the three "start investing when..." criteria are mutually
+  // exclusive in the UI (one selector), but the engine just ANDs all three with
+  // no-op defaults - so exactly one is ever away from its default here.
+  const [etfStartMonth, setEtfStartMonth] = useState(config.etfStartMonth ?? 1);
+  const [etfReserveMonths, setEtfReserveMonths] = useState(config.etfReserveMonths ?? 0);
+  // Which criterion the selector shows. Derived from the saved params rather
+  // than persisted separately, the same way legacyFlatBaseline reads intent out
+  // of existing fields - so a scenario saved before this feature (which can
+  // only carry a switchThresholdPct) lands on the right radio automatically,
+  // with no SCHEMA_VERSION bump.
+  const [etfStartTrigger, setEtfStartTrigger] = useState(() => {
+    if ((config.etfStartMonth ?? 1) > 1) return 'month';
+    if ((config.etfReserveMonths ?? 0) > 0) return 'reserve';
+    if ((config.switchThresholdPct ?? 0) > 0) return 'loanRatio';
+    return 'immediate';
+  });
+
+  // Only the selected criterion reaches the engine; the other two stay at their
+  // no-op defaults, so switching criteria can never leave a stale gate applied.
+  const effectiveEtfStartMonth = etfStartTrigger === 'month' ? etfStartMonth : 1;
+  const effectiveEtfReserveMonths = etfStartTrigger === 'reserve' ? etfReserveMonths : 0;
+  const effectiveSwitchThresholdPct = etfStartTrigger === 'loanRatio' ? switchThresholdPct : 0;
   // TODO-93: annual % - a pure display-layer conversion of "Total interest
   // paid" into today's dollars, no simulation changes. 0 (default) means
   // no inflation is modeled, matching every other purely-additive rate
@@ -652,7 +674,9 @@ const PropertyInvestmentCalculator = () => {
     isInvestmentProperty,
     etfAllocationPct: etfInvestingActive ? etfAllocationPct : 0,
     expectedEtfReturn,
-    switchThresholdPct,
+    switchThresholdPct: effectiveSwitchThresholdPct,
+    etfStartMonth: effectiveEtfStartMonth,
+    etfReserveMonths: effectiveEtfReserveMonths,
     maxMonths: totalMonths,
   });
   const baselineSimulation = calculateLoanWithOffset({
@@ -677,7 +701,9 @@ const PropertyInvestmentCalculator = () => {
     isInvestmentProperty,
     etfAllocationPct: etfInvestingActive ? etfAllocationPct : 0,
     expectedEtfReturn,
-    switchThresholdPct,
+    switchThresholdPct: effectiveSwitchThresholdPct,
+    etfStartMonth: effectiveEtfStartMonth,
+    etfReserveMonths: effectiveEtfReserveMonths,
     maxMonths: totalMonths,
   });
   const interestSaved = baselineSimulation.totalInterest - loanSimulation.totalInterest;
@@ -887,6 +913,10 @@ const PropertyInvestmentCalculator = () => {
       isFirstHomeBuyer, isForeignPurchaser, totalSavings, savingsInterestRate, expenseGrowthRate, currentAge, showMortgageFreeAge, payLmiUpfront,
       useCreditCard, monthlyCardSpend, avgExtraDaysHeld, cashbackPct, annualCardFee, inflationRate,
       showEtfInvestingOptions, showOpportunityCost, expectedEtfReturn, useEtfInvesting, etfAllocationPct, switchThresholdPct,
+      // TODO-144: purely additive, so no SCHEMA_VERSION bump - an older
+      // scenario without these falls through to the same no-op defaults, and
+      // etfStartTrigger is re-derived from them on load rather than stored.
+      etfStartMonth, etfReserveMonths,
       conveyancing, buildingInspection, pestInspection, registrationFees, searches,
       loanEstablishmentFee, propertyValuation, homeInsurance, rateAdjustments, miscUpfrontCost,
       incomeSources,
@@ -1817,21 +1847,112 @@ const PropertyInvestmentCalculator = () => {
                 </NumberSliderField>
               )}
 
+              {/* TODO-144: one "when to start" selector instead of three
+                  overlapping gates. The engine ANDs all three criteria with
+                  no-op defaults, and only the selected one is passed a
+                  non-default value - so the user reasons about one condition,
+                  not the intersection of three. */}
               {etfInvestingActive && (
-                <NumberSliderField
-                  label="Switch Trigger"
-                  value={switchThresholdPct}
-                  onChange={setSwitchThresholdPct}
-                  min={0}
-                  max={100}
-                  sliderMin={0}
-                  sliderMax={100}
-                  step={5}
-                  impact="neutral"
-                  suffix="%"
-                >
-                  Once your offset balance reaches this % of your remaining loan balance, ETF Allocation (above) turns on for the rest of the simulation - a one-time switch. 0% (default) means it's active from month 1.
-                </NumberSliderField>
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-200">Start ETF investing when</p>
+
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+                    <input
+                      type="radio"
+                      name="etfStartTrigger"
+                      checked={etfStartTrigger === 'immediate'}
+                      onChange={() => setEtfStartTrigger('immediate')}
+                      className="h-4 w-4 border-gray-300 dark:border-gray-600 text-indigo-600 dark:text-indigo-400 focus:ring-indigo-500"
+                    />
+                    Right away
+                  </label>
+
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+                    <input
+                      type="radio"
+                      name="etfStartTrigger"
+                      checked={etfStartTrigger === 'month'}
+                      onChange={() => setEtfStartTrigger('month')}
+                      className="h-4 w-4 border-gray-300 dark:border-gray-600 text-indigo-600 dark:text-indigo-400 focus:ring-indigo-500"
+                    />
+                    After a set number of months
+                  </label>
+                  {etfStartTrigger === 'month' && (
+                    <div className="pl-6">
+                      <NumberSliderField
+                        label="Start from month"
+                        value={etfStartMonth}
+                        onChange={setEtfStartMonth}
+                        min={1}
+                        max={totalMonths}
+                        sliderMin={1}
+                        sliderMax={120}
+                        step={1}
+                        impact="neutral"
+                      >
+                        Everything goes to the offset until this month, then ETF Allocation (above) applies. A fixed calendar delay - unlike the loan-% option below, it means the same wait regardless of how the loan performs.
+                      </NumberSliderField>
+                    </div>
+                  )}
+
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+                    <input
+                      type="radio"
+                      name="etfStartTrigger"
+                      checked={etfStartTrigger === 'loanRatio'}
+                      onChange={() => setEtfStartTrigger('loanRatio')}
+                      className="h-4 w-4 border-gray-300 dark:border-gray-600 text-indigo-600 dark:text-indigo-400 focus:ring-indigo-500"
+                    />
+                    The offset reaches a share of the loan
+                  </label>
+                  {etfStartTrigger === 'loanRatio' && (
+                    <div className="pl-6">
+                      <NumberSliderField
+                        label="Switch Trigger"
+                        value={switchThresholdPct}
+                        onChange={setSwitchThresholdPct}
+                        min={0}
+                        max={100}
+                        sliderMin={0}
+                        sliderMax={100}
+                        step={5}
+                        impact="neutral"
+                        suffix="%"
+                      >
+                        Once your offset balance reaches this % of your remaining loan balance, ETF Allocation (above) applies. Re-checked every month, so a deficit month that drains the offset back below the threshold pauses investing until it recovers.
+                      </NumberSliderField>
+                    </div>
+                  )}
+
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+                    <input
+                      type="radio"
+                      name="etfStartTrigger"
+                      checked={etfStartTrigger === 'reserve'}
+                      onChange={() => setEtfStartTrigger('reserve')}
+                      className="h-4 w-4 border-gray-300 dark:border-gray-600 text-indigo-600 dark:text-indigo-400 focus:ring-indigo-500"
+                    />
+                    The offset covers a few months of expenses
+                  </label>
+                  {etfStartTrigger === 'reserve' && (
+                    <div className="pl-6">
+                      <NumberSliderField
+                        label="Reserve first"
+                        value={etfReserveMonths}
+                        onChange={setEtfReserveMonths}
+                        min={0}
+                        max={60}
+                        sliderMin={0}
+                        sliderMax={24}
+                        step={1}
+                        impact="neutral"
+                        suffix=" months"
+                      >
+                        Bank this many months of outgoings in the offset before investing anything. A month means the same thing here as in the Emergency Buffer indicator: loan repayment + property expenses + personal expenses. Re-checked every month, so if the offset drops back below the reserve, investing pauses until it recovers.
+                      </NumberSliderField>
+                    </div>
+                  )}
+                </div>
               )}
 
               {etfInvestingActive && (() => {
@@ -1923,7 +2044,14 @@ const PropertyInvestmentCalculator = () => {
                                 </td>
                                 <td className="py-1 whitespace-nowrap">
                                   <button
-                                    onClick={() => { setSwitchThresholdPct(row.switchThresholdPct); setEtfAllocationPct(row.etfAllocationPct); }}
+                                    // TODO-144: this grid varies the LOAN-RATIO
+                                    // threshold, so applying a row must also
+                                    // select that criterion - otherwise the
+                                    // applied value wouldn't reach the engine
+                                    // (only the selected criterion is passed a
+                                    // non-default value) and Apply would
+                                    // silently do nothing.
+                                    onClick={() => { setEtfStartTrigger('loanRatio'); setSwitchThresholdPct(row.switchThresholdPct); setEtfAllocationPct(row.etfAllocationPct); }}
                                     disabled={isApplied}
                                     className="text-xs px-2 py-1 rounded bg-blue-600 text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-blue-700"
                                   >

@@ -119,12 +119,34 @@ export function calculateLoanWithOffset({
   // this keeps working unchanged.
   expectedEtfReturn = 0,
   // TODO-98: gates when etfAllocationPct actually kicks in - it's a no-op
-  // until offsetBalance reaches this % of the REMAINING loan balance,
-  // then switches on for good (see the stateless check below - the
-  // ratio never decreases, so this can't un-trigger). 0 (default) means
+  // until offsetBalance reaches this % of the REMAINING loan balance.
+  // TODO-145 correction: this used to claim it "switches on for good... the
+  // ratio never decreases, so this can't un-trigger". That stopped being true
+  // at TODO-136, when a deficit month began drawing the offset down. The check
+  // below is re-evaluated every month, so it can un-trigger. 0 (default) means
   // active from month 1, exactly matching TODO-96's original behavior -
   // every existing caller/test that omits this keeps working unchanged.
   switchThresholdPct = 0,
+  // TODO-144(a): don't invest anything before this month, whatever the offset
+  // balance happens to be. switchThresholdPct provably cannot express this: it
+  // gates on offsetBalance/balance, a ratio of two quantities that both move
+  // every month as an emergent result of the whole simulation, so the month it
+  // crosses a given value is an OUTPUT rather than something the user sets -
+  // and it's loan-relative, so the same threshold means a different delay on a
+  // different loan. 1-indexed to match the app's `startMonth` convention
+  // (recurringAmount.js's isScheduleActive). 1 (default) means no delay, so
+  // every existing caller/test that omits this keeps working unchanged.
+  etfStartMonth = 1,
+  // TODO-144(b): don't invest until the offset covers this many months of
+  // total outgoings. Expenses-relative, unlike switchThresholdPct's
+  // loan-relative ratio - "I want six months of runway banked before I take
+  // market risk" is a different question from "I want 20% of the loan offset".
+  // One month of outgoings is defined exactly as the Emergency Buffer
+  // indicator defines it (loan installment + property expenses + personal
+  // expenses, see purchaseHealthCheck.js's calculateEmergencyBufferMonths), so
+  // the slider and that indicator speak the same language. 0 (default) means
+  // no reserve required - every existing caller/test is unaffected.
+  etfReserveMonths = 0,
   maxMonths = 30 * 12,
 }) {
   // Nothing to offset: no surplus, no scheduled contributions, and no income
@@ -315,11 +337,29 @@ export function calculateLoanWithOffset({
     // deposit" convention as savings above - a no-op at the 0% default.
     etfBalance += etfBalance * etfMonthlyRate;
 
-    // TODO-98: switchThresholdPct gates when etfAllocationPct actually
-    // kicks in - a stateless check using THIS month's offsetBalance
-    // (already includes any contributions above) against last month's
-    // ending balance is enough, since the ratio only ever grows.
-    const etfSwitchActive = (offsetBalance / balance) * 100 >= switchThresholdPct;
+    // TODO-98/144: three independent "not yet" gates gating when
+    // etfAllocationPct actually kicks in. Each defaults to a no-op, and the UI
+    // only ever moves one away from its default at a time (a single "start
+    // investing when..." selector), so ANDing them here keeps this function
+    // dumb about which criterion the user picked.
+    //
+    // TODO-145 corrected a stale claim that used to live here: this was
+    // justified as safe because "the ratio only ever grows", which stopped
+    // being true at TODO-136 - a deficit month draws the offset down, so
+    // offsetBalance/balance CAN fall and these checks CAN un-trigger. The
+    // stateless re-evaluation is deliberate rather than merely tolerated:
+    // if your offset drops back below the reserve you wanted banked, pausing
+    // new ETF contributions until it recovers is the behaviour you'd want, not
+    // a bug. Existing behaviour is unchanged - only the reasoning was wrong.
+    const etfRatioReached = (offsetBalance / balance) * 100 >= switchThresholdPct;
+    const etfStartMonthReached = months >= etfStartMonth;
+    // Same composition as the Emergency Buffer indicator's denominator, and
+    // built from the loop's own per-month figures rather than from
+    // monthlyToOffset - that already has the month-1 installment baked in, so
+    // reusing it here would double-count the repayment.
+    const monthlyOutgoingsThisMonth = currentMonthlyPayment + monthlyExpensesForMonth + monthlyPersonalExpensesCost;
+    const etfReserveReached = offsetBalance >= etfReserveMonths * monthlyOutgoingsThisMonth;
+    const etfSwitchActive = etfRatioReached && etfStartMonthReached && etfReserveReached;
     const effectiveEtfAllocationPct = etfSwitchActive ? etfAllocationPct : 0;
     // TODO-136: the direct Offset-vs-ETF split. A surplus month divides
     // between the two; there is no third savings destination any more (the

@@ -1813,3 +1813,130 @@ describe('every knob combined at once (regression safety net)', () => {
     }
   });
 });
+
+describe('ETF delayed start (etfStartMonth, TODO-144a)', () => {
+  const shared = {
+    contributions: [],
+    personalExpenseItems: [],
+    monthlyToOffset: 1000,
+    loanAmount: 10_000_000,
+    monthlyRate: 0,
+    monthlyPayment: 100,
+    etfAllocationPct: 100,
+    maxMonths: 5,
+  };
+
+  it('matches the plain path exactly when omitted or set to 1 - no regression', () => {
+    const withDefault = calculateLoanWithOffset(shared);
+    const withExplicitOne = calculateLoanWithOffset({ ...shared, etfStartMonth: 1 });
+    expect(withExplicitOne).toEqual(withDefault);
+    // Every month's surplus reaches the ETF from month 1.
+    expect(withDefault.monthlyData.map(d => d.etf)).toEqual([1000, 2000, 3000, 4000, 5000]);
+  });
+
+  it('sends the whole surplus to the offset until the start month, then to the ETF', () => {
+    const result = calculateLoanWithOffset({ ...shared, etfStartMonth: 3 });
+    // Months 1-2 invest nothing; month 3 onward invests the full surplus.
+    expect(result.monthlyData.map(d => d.etf)).toEqual([0, 0, 1000, 2000, 3000]);
+    // The two skipped months' surplus went to the offset instead - nothing lost.
+    expect(result.monthlyData[1].offset).toBe(2000);
+  });
+
+  // Unlike the ratio and reserve gates, a month counter is genuinely monotonic:
+  // once reached it can never un-trigger.
+  it('never un-triggers once the start month is reached', () => {
+    const result = calculateLoanWithOffset({ ...shared, etfStartMonth: 2, maxMonths: 6 });
+    const etfDeltas = result.monthlyData.slice(1).map((d, i) => d.etf - result.monthlyData[i].etf);
+    // Month 2 onward every delta is positive; only the first is 0.
+    expect(etfDeltas.every(delta => delta > 0)).toBe(true);
+    expect(result.monthlyData[0].etf).toBe(0);
+  });
+
+  it('invests nothing at all when the start month is past the simulation end', () => {
+    const result = calculateLoanWithOffset({ ...shared, etfStartMonth: 99 });
+    expect(result.monthlyData.every(d => d.etf === 0)).toBe(true);
+  });
+});
+
+describe('ETF reserve-gated start (etfReserveMonths, TODO-144b)', () => {
+  const shared = {
+    contributions: [],
+    personalExpenseItems: [],
+    monthlyToOffset: 1000,
+    loanAmount: 10_000_000,
+    monthlyRate: 0,
+    monthlyPayment: 100,
+    etfAllocationPct: 100,
+    maxMonths: 6,
+  };
+
+  it('matches the plain path exactly when omitted or set to 0 - no regression', () => {
+    const withDefault = calculateLoanWithOffset(shared);
+    const withExplicitZero = calculateLoanWithOffset({ ...shared, etfReserveMonths: 0 });
+    expect(withExplicitZero).toEqual(withDefault);
+  });
+
+  // One month of outgoings here is just the $100 installment (no property or
+  // personal expenses in this fixture), so a 5-month reserve is $500.
+  //
+  // The gate reads the offset balance BEFORE this month's surplus lands (same
+  // convention the ratio gate already used), so month 1 always sees an empty
+  // offset and can never satisfy a non-zero reserve - the delay is at least one
+  // month by construction.
+  it('holds the ETF share at 0 for month 1 whatever the reserve, since the offset starts empty', () => {
+    const result = calculateLoanWithOffset({ ...shared, etfReserveMonths: 5 });
+    expect(result.monthlyData[0].etf).toBe(0);
+    // Month 1's whole surplus went to the offset, which now clears the $500
+    // reserve, so month 2 invests.
+    expect(result.monthlyData[1].etf).toBe(1000);
+  });
+
+  it('delays further while the reserve is larger than one month of surplus', () => {
+    // A 25-month reserve is $2,500 of outgoings; at $1,000/month of surplus the
+    // offset only clears it after three months have accumulated.
+    const result = calculateLoanWithOffset({ ...shared, etfReserveMonths: 25 });
+    expect(result.monthlyData.slice(0, 3).map(d => d.etf)).toEqual([0, 0, 0]);
+    // Month 4's gate sees $3,000 banked, past the $2,500 reserve.
+    expect(result.monthlyData[3].etf).toBeGreaterThan(0);
+  });
+
+  it('uses the Emergency Buffer definition of a month - installment plus property AND personal expenses', () => {
+    // Adding a $400/month personal expense raises one month of outgoings from
+    // $100 to $500, so the same etfReserveMonths demands an 8x bigger offset
+    // ($800 -> $4,000) AND leaves less surplus to build it with - both push the
+    // ETF start later. If the denominator ignored personal expenses these two
+    // runs would start in the same month.
+    const withoutExpense = calculateLoanWithOffset({ ...shared, etfReserveMonths: 8, maxMonths: 12 });
+    const withExpense = calculateLoanWithOffset({
+      ...shared,
+      etfReserveMonths: 8,
+      maxMonths: 12,
+      personalExpenseItems: [{ id: 1, name: 'Groceries', amount: 400, startMonth: 1, recurrence: 'monthly', endMonth: 360 }],
+    });
+    const firstInvestingMonth = (r) => r.monthlyData.findIndex(d => d.etf > 0);
+    expect(firstInvestingMonth(withoutExpense)).toBe(1);
+    expect(firstInvestingMonth(withExpense)).toBe(7);
+  });
+
+  // The reserve is deliberately re-evaluated every month rather than latching:
+  // if the offset falls back below the reserve, pausing new contributions until
+  // it recovers is the behaviour a reserve is for.
+  it('pauses investing again if the offset falls back below the reserve', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      // A big one-off expense in month 3 drains the offset back down.
+      personalExpenseItems: [{ id: 1, name: 'Car repair', amount: 2500, startMonth: 3, recurrence: 'none' }],
+      monthlyToOffset: 1000,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      etfAllocationPct: 100,
+      etfReserveMonths: 5,
+      maxMonths: 4,
+    });
+    const etfDeltas = result.monthlyData.slice(1).map((d, i) => d.etf - result.monthlyData[i].etf);
+    // At least one month after the first contributed nothing - the gate closed
+    // again rather than staying latched open.
+    expect(etfDeltas.some(delta => delta === 0)).toBe(true);
+  });
+});

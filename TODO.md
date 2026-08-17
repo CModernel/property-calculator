@@ -4766,43 +4766,6 @@ optionally reuse in the commit message when you implement it.
   still opens it for power users. Added App-level coverage for the default
   collapsed state and expand/collapse interaction.
 
-- [ ] **TODO-144: "When to start" ETF contributions - delayed start and reserve-gated start**
-  Split out of the original TODO-138 (2026-08-16) when exploration showed its
-  five sub-features had radically different costs. These two both need a NEW
-  `calculateLoanWithOffset` param, unlike the two that shipped as TODO-138
-  part 1, which needed no engine change at all.
-
-  **(a) Delayed start** - compare investing immediately vs after 12/24/60
-  months. **`switchThresholdPct` provably cannot express this**, and that is
-  worth stating because it looks like it could: it gates on
-  `(offsetBalance / balance) * 100 >= switchThresholdPct`, a ratio of two
-  quantities that both move every month as an emergent result of the whole
-  simulation. The month that ratio crosses a given value is an OUTPUT, not
-  something the user can set, and it isn't even monotonically invertible now
-  that a deficit month can drain the offset. It's also loan-relative, so the
-  same threshold means a different delay on a different loan. Needs a genuine
-  `etfStartMonth` param. The app's existing 1-indexed `startMonth` convention
-  (`recurringAmount.js`'s `isScheduleActive`, `MAX_MONTH = 360` as the
-  "forever" sentinel) is the idiom to follow, though only the `startMonth`
-  half - the ETF gate is a one-way latch, not a recurring schedule.
-
-  **(b) Reserve-gated start** - wait until the offset covers N months of
-  expenses. Closer to `switchThresholdPct` but with a different denominator:
-  a reserve is expenses-relative, the existing gate is loan-relative. The
-  pieces of a monthly-outgoings figure all exist inside the loop
-  (`monthlyPersonalExpensesCost`, `monthlyExpensesForMonth`,
-  `currentMonthlyPayment`) but are never summed into a reusable scalar -
-  `netMonthlyCashFlow` nets them against income, so it is not it. **Needs a
-  product decision before implementing**: does "N months of expenses" include
-  the loan installment, and/or property expenses? Note `monthlyToOffset`
-  already has the month-1 installment baked in, so double-counting is a real
-  hazard here.
-
-  Both should reuse `strategyScenarios.js`'s generic helpers, which are
-  already agnostic about which knob a scenario varies (TODO-138 part 1 proved
-  this by adding `runReturnScenarios` alongside the original factory with no
-  changes to any downstream helper).
-
 - [ ] **TODO-145: ETF market-drop stress test - blocked on a modelling decision, not on effort**
   Split out of the original TODO-138 (2026-08-16). The hardest of its five
   sub-features, and the only one that touches the simulation loop's control
@@ -5105,6 +5068,62 @@ optionally reuse in the commit message when you implement it.
   projection-assumption disclosure Simple should show beyond the current
   one-liner, and (5) reorganizing Advanced itself into focused components -
   the entry explicitly leaves that as "not the final Advanced architecture".
+
+- [x] **TODO-144: "When to start" ETF contributions - delayed start and reserve-gated start**
+  Both parts shipped, plus a UX decision that collapsed what would have been
+  three overlapping knobs into one.
+  **Engine** (`offsetSimulation.js`): two new params, each a no-op at its
+  default so every existing caller/test is byte-for-byte unaffected -
+  `etfStartMonth = 1` (a) and `etfReserveMonths = 0` (b). The gate is now
+  `etfRatioReached && etfStartMonthReached && etfReserveReached`, which keeps
+  the engine dumb about which criterion the user picked.
+  **UI decision taken with the user**: rather than a third independent gate
+  AND-ed with the existing `switchThresholdPct`, a single "Start ETF investing
+  when" selector - right away / after month N / offset reaches X% of the loan /
+  offset covers N months of expenses. Three overlapping "when to start" knobs
+  would have meant the user reasoning about the intersection of three
+  conditions, and it's easy to leave one at a value that silently blocks
+  everything. Only the selected criterion is passed a non-default value
+  (`effectiveEtfStartMonth`/`effectiveEtfReserveMonths`/
+  `effectiveSwitchThresholdPct`), so switching criteria can never leave a stale
+  gate applied.
+  **The open product decision the entry flagged, resolved**: one "month of
+  expenses" is defined exactly as the Emergency Buffer indicator defines it -
+  loan installment + property expenses + personal expenses. The app already had
+  an answer to "how many months of expenses is that", so inventing a second
+  definition would have made the slider and that indicator disagree. The
+  entry's double-counting hazard is avoided by building the figure from the
+  loop's own per-month values (`currentMonthlyPayment + monthlyExpensesForMonth
+  + monthlyPersonalExpensesCost`) rather than from `monthlyToOffset`, which
+  already has the month-1 installment baked in.
+  **Fixed the stale comment TODO-145's entry flagged**, in both places it
+  appeared (the `switchThresholdPct` param doc and the gate itself): the claim
+  that "the ratio only ever grows, so this can't un-trigger" stopped being true
+  at TODO-136, when a deficit month began drawing the offset down. Behaviour is
+  unchanged - only the reasoning was wrong - and the stateless re-evaluation is
+  now documented as deliberate rather than merely tolerated: if the offset falls
+  back below the reserve you wanted banked, pausing new contributions until it
+  recovers is what a reserve is for.
+  **Caught a real regression the single-selector design introduced**: the
+  Strategy Comparison grid varies the loan-ratio threshold, so its "Apply"
+  button had to also select that criterion - otherwise the applied value never
+  reached the engine and Apply silently did nothing. Fixed, and pinned by a test
+  verified to fail when the fix is reverted.
+  Purely additive persistence, so **no `SCHEMA_VERSION` bump** (still 10):
+  `etfStartTrigger` is re-derived from the saved params on load, the same way
+  `legacyFlatBaseline` reads intent out of existing fields, so a scenario saved
+  before this feature lands on the right radio automatically.
+  13 new tests (4 delayed-start, 5 reserve-gated, 4 App-level). Three of my own
+  reserve-gate tests failed first with wrong arithmetic, which surfaced a
+  property worth documenting: the gate reads the offset BEFORE the month's
+  surplus lands, so month 1 always sees an empty offset and a non-zero reserve
+  always delays by at least one month. Suite 723 passing, lint and build clean.
+  **Deliberately deferred**: a start-timing scenario COMPARISON table. The entry
+  mentions comparing "immediately vs after 12/24/60 months", and
+  `runReturnScenarios` proves the `strategyScenarios.js` helpers are generic
+  enough to make `runStartMonthScenarios` cheap - but TODO-142 already drew the
+  line at three ETF comparison panels, and the user chose a selector rather than
+  a comparison. Worth its own item if wanted.
 
 ---
 
