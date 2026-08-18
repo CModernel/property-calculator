@@ -44,7 +44,7 @@ const SimpleModeView = ({
   // Day-1/Stabilized annotations)
   housingCostRatio, housingCostRatioClass,
   stressTestSurvivedDelta, stressTestClass,
-  emergencyBufferMonths, emergencyBufferClass,
+  emergencyBufferMonths, emergencyBufferClass, liquidSavings,
   // Disclosure of what's included but not editable here
   incomeSourceCount,
   personalExpenseCount,
@@ -163,8 +163,13 @@ const SimpleModeView = ({
         />
         <HealthCheckIndicator
           label="Emergency Buffer"
-          valueDisplay={Number.isFinite(emergencyBufferMonths) ? `${emergencyBufferMonths.toFixed(1)} months` : '∞'}
-          classification={emergencyBufferClass}
+          // TODO-149: liquidSavings < 0 means settlement itself can't be
+          // funded - a negative "months" figure isn't a meaningful buffer
+          // size, so it gets its own wording rather than e.g. "-1.5 months".
+          valueDisplay={liquidSavings < 0 ? "Can't cover settlement" : (Number.isFinite(emergencyBufferMonths) ? `${emergencyBufferMonths.toFixed(1)} months` : '∞')}
+          classification={liquidSavings < 0
+            ? { ...emergencyBufferClass, action: `Short by $${Math.abs(Math.round(liquidSavings)).toLocaleString()} at settlement - reduce the price, add to savings, or scale back scheduled contributions.` }
+            : emergencyBufferClass}
         />
       </div>
 

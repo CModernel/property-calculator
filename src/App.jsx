@@ -131,6 +131,36 @@ function stabilizedArrow(day1Value, stabilizedValue, direction) {
   return improved ? '↗' : '↘';
 }
 
+// TODO-148: calculateStressTestSurvivedDelta returns 0 both when a scenario is
+// already in deficit at today's rate and when it only fails once rates rise a
+// point - it never separately probes +0. Distinguishing the two is presentation
+// only (the function's own signature/return value is untouched); `alreadyInDeficit`
+// is the caller's own already-computed net balance at the rate actually being
+// tested (today's for Day-1, the Stabilized month's projected rate for that
+// reading), not a new calculation.
+function stressTestDisplay(survivedDelta, alreadyInDeficit) {
+  if (survivedDelta > 0) return `Survives +${survivedDelta}%`;
+  return alreadyInDeficit ? 'Already in deficit' : 'Fails at +1%';
+}
+
+// TODO-149: calculateEmergencyBufferMonths/calculateVacancyBufferMonths keep
+// dividing liquidSavings by monthly outgoings unclamped, so a settlement that
+// can't be funded at all produces a negative "months" figure - not a
+// meaningful buffer size, and easy to misread as merely thin rather than
+// "you can't fund this at all". Presentation only: the calculation and
+// classification (still 🔴 High risk regardless) are untouched.
+function bufferDisplay(months, liquidSavings) {
+  if (liquidSavings < 0) return "Can't cover settlement";
+  return Number.isFinite(months) ? `${months.toFixed(1)} months` : '∞';
+}
+
+// Same shortfall liquidSavings already represents in the "You've committed
+// $X more than your savings cover" warning above (Available Savings summary)
+// - restated here rather than invented afresh, so the two agree.
+function bufferShortfallAction(liquidSavings) {
+  return `Short by $${Math.abs(Math.round(liquidSavings)).toLocaleString()} at settlement - reduce the price, add to savings, or scale back scheduled contributions.`;
+}
+
 const PropertyInvestmentCalculator = () => {
   // Not stateful (no useState) - there's no UI to switch states yet, so this
   // is effectively a fixed config-level setting (TODO-58). Adding a state
@@ -781,6 +811,14 @@ const PropertyInvestmentCalculator = () => {
     monthlyIncome: projected.monthlyIncome, monthlyRentalIncome: projected.monthlyRentalIncome, monthlyPersonalExpenses: projected.monthlyPersonalExpenses,
   });
   const stressTestClass = classifyStressTest(worseOf(stressTestSurvivedDelta, stabilizedStressTestSurvivedDelta, 'higherIsBetter'));
+  // TODO-148: whether cash flow is ALREADY negative at the rate each reading
+  // actually tests (today's for Day-1, the Stabilized month's projected rate
+  // for that reading) - reuses monthlyNetBalance (already computed above) and
+  // the same calculateMonthlyNetBalance call for the Stabilized figures, no new
+  // calculation.
+  const alreadyInDeficitAtCurrentRate = monthlyNetBalance < 0;
+  const stabilizedNetBalance = calculateMonthlyNetBalance(projected.monthlyIncome, projected.monthlyRentalIncome, projected.monthlyPersonalExpenses, projectedTotalPropertyCost);
+  const stabilizedAlreadyInDeficit = stabilizedNetBalance < 0;
 
   const upfrontCostRatio = calculateUpfrontCostRatio(totalCashRequired, downPayment, propertyPrice);
   const upfrontCostRatioClass = classifyUpfrontCostRatio(upfrontCostRatio);
@@ -1186,7 +1224,7 @@ const PropertyInvestmentCalculator = () => {
           monthlyPersonalExpenses={monthlyPersonalExpenses}
           housingCostRatio={housingCostRatio} housingCostRatioClass={housingCostRatioClass}
           stressTestSurvivedDelta={stressTestSurvivedDelta} stressTestClass={stressTestClass}
-          emergencyBufferMonths={emergencyBufferMonths} emergencyBufferClass={emergencyBufferClass}
+          emergencyBufferMonths={emergencyBufferMonths} emergencyBufferClass={emergencyBufferClass} liquidSavings={liquidSavings}
           incomeSourceCount={incomeSources.length}
           personalExpenseCount={personalExpenseItems.length}
           offsetContributionCount={offsetContributions.length}
@@ -3369,9 +3407,9 @@ const PropertyInvestmentCalculator = () => {
                 <HealthCheckIndicator
                   label="Emergency Buffer"
                   tooltipLabel="What is the Emergency Buffer?"
-                  valueDisplay={Number.isFinite(emergencyBufferMonths) ? `${emergencyBufferMonths.toFixed(1)} months` : '∞'}
-                  secondaryValueDisplay={`${stabilizedArrow(emergencyBufferMonths, stabilizedEmergencyBufferMonths, 'higherIsBetter')} stabilizes to ${Number.isFinite(stabilizedEmergencyBufferMonths) ? `${stabilizedEmergencyBufferMonths.toFixed(1)} months` : '∞'}`}
-                  classification={emergencyBufferClass}
+                  valueDisplay={bufferDisplay(emergencyBufferMonths, liquidSavings)}
+                  secondaryValueDisplay={`${stabilizedArrow(emergencyBufferMonths, stabilizedEmergencyBufferMonths, 'higherIsBetter')} stabilizes to ${bufferDisplay(stabilizedEmergencyBufferMonths, liquidSavings)}`}
+                  classification={liquidSavings < 0 ? { ...emergencyBufferClass, action: bufferShortfallAction(liquidSavings) } : emergencyBufferClass}
                 >
                   <p>Your savings left after settlement, divided by your total monthly outgoings (property + personal expenses) - how many months you could cover if income stopped entirely.</p>
                   <p className="mt-2">Cash you've scheduled into the offset still counts here: it stays your money and stays available, and the simulation itself draws the offset down first to cover a shortfall. That's why this figure is higher than "Cash Remaining" above, which only counts uncommitted cash.</p>
@@ -3394,8 +3432,8 @@ const PropertyInvestmentCalculator = () => {
                 <HealthCheckIndicator
                   label="Interest Rate Stress Test"
                   tooltipLabel="What is the Interest Rate Stress Test?"
-                  valueDisplay={stressTestSurvivedDelta > 0 ? `Survives +${stressTestSurvivedDelta}%` : 'Fails at +1%'}
-                  secondaryValueDisplay={`${stabilizedArrow(stressTestSurvivedDelta, stabilizedStressTestSurvivedDelta, 'higherIsBetter')} stabilizes to ${stabilizedStressTestSurvivedDelta > 0 ? `Survives +${stabilizedStressTestSurvivedDelta}%` : 'Fails at +1%'}`}
+                  valueDisplay={stressTestDisplay(stressTestSurvivedDelta, alreadyInDeficitAtCurrentRate)}
+                  secondaryValueDisplay={`${stabilizedArrow(stressTestSurvivedDelta, stabilizedStressTestSurvivedDelta, 'higherIsBetter')} stabilizes to ${stressTestDisplay(stabilizedStressTestSurvivedDelta, stabilizedAlreadyInDeficit)}`}
                   classification={stressTestClass}
                 >
                   <p>Recalculates your repayment at today's rate plus 1/2/3 percentage points, and reports the largest rise your current cash flow still survives without going into deficit.</p>
@@ -3437,9 +3475,9 @@ const PropertyInvestmentCalculator = () => {
                     <HealthCheckIndicator
                       label="Vacancy Buffer"
                       tooltipLabel="What is the Vacancy Buffer?"
-                      valueDisplay={Number.isFinite(vacancyBufferMonths) ? `${vacancyBufferMonths.toFixed(1)} months` : '∞'}
-                      secondaryValueDisplay={`${stabilizedArrow(vacancyBufferMonths, stabilizedVacancyBufferMonths, 'higherIsBetter')} stabilizes to ${Number.isFinite(stabilizedVacancyBufferMonths) ? `${stabilizedVacancyBufferMonths.toFixed(1)} months` : '∞'}`}
-                      classification={vacancyBufferClass}
+                      valueDisplay={bufferDisplay(vacancyBufferMonths, liquidSavings)}
+                      secondaryValueDisplay={`${stabilizedArrow(vacancyBufferMonths, stabilizedVacancyBufferMonths, 'higherIsBetter')} stabilizes to ${bufferDisplay(stabilizedVacancyBufferMonths, liquidSavings)}`}
+                      classification={liquidSavings < 0 ? { ...vacancyBufferClass, action: bufferShortfallAction(liquidSavings) } : vacancyBufferClass}
                     >
                       <p>Your savings left after settlement (including anything scheduled into the offset, which stays yours and stays available) divided by the loan repayment + property expenses - how many months you could cover the property alone with no tenant.</p>
                       <p className="mt-2">≥6 months excellent, 3-6 good, &lt;3 high risk.</p>

@@ -4766,54 +4766,6 @@ optionally reuse in the commit message when you implement it.
   still opens it for power users. Added App-level coverage for the default
   collapsed state and expand/collapse interaction.
 
-- [ ] **TODO-148 (small, contained): Stress Test claims "Fails at +1%" when the scenario is ALREADY in deficit at today's rate**
-  Found in the same audit. `calculateStressTestSurvivedDelta`
-  (`src/calculations/purchaseHealthCheck.js:67-79`) only probes +3/+2/+1 and
-  returns 0 when none survive. It never checks +0, so "already underwater"
-  and "underwater as soon as rates move a point" collapse into the same
-  answer. The UI then reports `'Fails at +1%'` (`App.jsx`'s Stress Test
-  `valueDisplay`) with the band action "Even a 1-point rate rise would put you
-  in deficit" (`STRESS_TEST_BANDS`' last entry) - both of which state a
-  hypothetical that has already happened.
-  Reproduce: set the single salary income source to $800/week. Monthly net
-  balance is -$1,057 at the current 6.13%, yet the indicator says the problem
-  begins at +1%.
-  **Fix**: distinguish the two. Cheapest shape that doesn't disturb the
-  existing exact-value tests is a separate boolean rather than a new sentinel
-  return value (a -1 would silently reorder `classifyByBands`) - e.g. compute
-  `monthlyNetBalance >= 0` at the current rate in `App.jsx` (the value is
-  already sitting there as `monthlyNetBalance`) and use it to pick the
-  `valueDisplay` string and a distinct band action. `calculateStressTestSurvivedDelta`'s
-  own signature and return values should not change.
-  Copy suggestion: `'Already in deficit'` rather than `'Fails at +1%'`, and an
-  action saying the shortfall exists at today's rate, not after a rise.
-  **Tests**: extend TODO-147's matrix with the salary-800 and salary-500 rows
-  asserting the new display/action, plus a `purchaseHealthCheck.test.js` case
-  pinning that the delta itself is still 0 in that state (i.e. the fix lives in
-  presentation, not in the calculation).
-
-- [ ] **TODO-149 (small, contained): Emergency Buffer renders a negative month count when settlement itself is unaffordable**
-  Found in the same audit. `calculateEmergencyBufferMonths`
-  (`purchaseHealthCheck.js:24-27`) divides `liquidSavings` by monthly
-  outgoings with no floor, so once the deposit plus upfront costs exceed
-  savings the indicator shows e.g. **"-1.5 months"**. The 🔴 High risk band is
-  right, but negative months are not a meaningful quantity - the real
-  statement is "you cannot fund the purchase at all", which is a different
-  (and more serious) message than a thin buffer.
-  Reproduce: Property Price 1,200,000 with the default $307,000 deposit and
-  $350,000 savings - liquid savings land at -$9,937 and the buffer reads
-  -1.5 months.
-  **Fix**: keep the calculation honest (do not clamp the returned number to 0
-  and hide the problem) but change the *display* when `liquidSavings < 0` to
-  something like "Can't cover settlement", with an action pointing at the
-  shortfall amount. Note the page already shows a red "You've committed $X
-  more than your savings" warning for `cashRemaining < 0` - the copy here
-  should agree with it rather than invent a second framing. Vacancy Buffer
-  shares the numerator and needs the same treatment.
-  **Tests**: TODO-147's `propertyPrice: 1200000` row asserts the new display;
-  add a boundary case at exactly `liquidSavings === 0` (should read 0.0 months,
-  not the negative branch).
-
 - [ ] **TODO-150: Day-1 rental income skips the vacancy factor but the Stabilized reading applies it**
   Found in the same audit. `App.jsx:550-552` builds the Day-1
   `monthlyRentalIncome` straight from `getActiveAmount(...)` with no vacancy
@@ -5153,6 +5105,62 @@ optionally reuse in the commit message when you implement it.
   completely income-independent, and `effectiveTaxRate` is inert with no
   income item Gross-marked). Suite 770 passing, lint and build clean, and this
   is a pure test addition - no production file touched.
+
+- [x] **TODO-148: Stress Test claims "Fails at +1%" when the scenario is ALREADY in deficit at today's rate**
+  Presentation-only fix, exactly as the entry specified -
+  `calculateStressTestSurvivedDelta`'s signature and return value are
+  untouched (still 0 for both "already underwater" and "fails only once rates
+  rise"), pinned by a new case in `purchaseHealthCheck.test.js`.
+  `App.jsx` gained a `stressTestDisplay(survivedDelta, alreadyInDeficit)`
+  helper (module scope, alongside `stabilizedArrow`) and two derived booleans -
+  `alreadyInDeficitAtCurrentRate` (reuses the existing `monthlyNetBalance`) and
+  `stabilizedAlreadyInDeficit` (a `calculateMonthlyNetBalance` call against the
+  Stabilized reading's own projected figures) - so both the Day-1 value and the
+  Stabilized annotation get the correct wording independently.
+  `STRESS_TEST_BANDS`' 🔴 action text was rewritten to be honest about both
+  sub-cases at once ("Already in deficit today, or a 1-point rate rise would
+  put you there...") rather than only the milder one, since both sub-cases
+  share the same High-risk band/classification.
+  **Tests**: new `src/App.stressTestDeficit.test.jsx` (3 tests) instead of
+  extending TODO-147's matrix as originally suggested - this is a
+  presentation/wording concern the calculation-only scenarios file doesn't
+  test, so an App-render-level test fits better. Verified the tests catch the
+  regression: reverted the `HealthCheckIndicator` render call to the old
+  ternary, confirmed the "already in deficit" case wrongly read "Fails at +1%"
+  and the test failed for exactly that reason, then restored.
+  Suite 774 passing, lint and build clean, no Spanish text in changed files.
+
+- [x] **TODO-149: Emergency Buffer renders a negative month count when settlement itself is unaffordable**
+  Presentation-only, exactly as specified - `calculateEmergencyBufferMonths`/
+  `calculateVacancyBufferMonths` stay unclamped (still -1.5 for the entry's
+  own propertyPrice: 1,200,000 reproduce case, pinned in
+  `purchaseHealthCheck.scenarios.test.js`).
+  `App.jsx` gained two module-scope helpers alongside `stressTestDisplay` -
+  `bufferDisplay(months, liquidSavings)` (returns `"Can't cover settlement"`
+  when `liquidSavings < 0`, otherwise the existing `Xs.toFixed(1)} months`/`∞`
+  formatting) and `bufferShortfallAction(liquidSavings)` (a dynamic action
+  string restating the same dollar shortfall the "You've committed $X more
+  than your savings cover" warning already shows above, deliberately not a
+  second framing). Both the Emergency Buffer and Vacancy Buffer
+  `HealthCheckIndicator`s now use `bufferDisplay` for `valueDisplay`/
+  `secondaryValueDisplay` and override `classification.action` with
+  `bufferShortfallAction` only when `liquidSavings < 0` - the classification
+  itself (still 🔴 High risk) is untouched.
+  Also fixed the same display in `SimpleModeView.jsx`'s Emergency Buffer
+  (Simple mode passes already-computed values in rather than importing
+  App.jsx's helpers, so the one-liner is duplicated inline there, matching
+  that file's existing convention of duplicating small formatting expressions
+  rather than sharing them across the Simple/Advanced boundary) - a new
+  `liquidSavings` prop threads through from `App.jsx`.
+  **Tests**: new `src/App.bufferShortfall.test.jsx` (4 tests: Emergency Buffer
+  shortfall wording + action, Vacancy Buffer under `isInvestmentProperty`,
+  the `liquidSavings === 0` boundary reads "0.0 months" not the shortfall
+  wording, and Simple mode shows the same wording). Verified both fixes catch
+  a real regression: reverted `App.jsx`'s indicator (confirmed the Advanced
+  Emergency Buffer test failed, showing "-1.5 months"), restored, then
+  reverted `SimpleModeView.jsx`'s indicator alone (confirmed only the Simple
+  mode test failed), restored.
+  Suite 778 passing, lint and build clean, no Spanish text in changed files.
 
 ---
 

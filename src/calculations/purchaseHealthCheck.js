@@ -56,7 +56,11 @@ export const STRESS_TEST_BANDS = [
   { min: 3, label: 'Excellent', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: 'Cash flow survives a 3-point rate rise.' },
   { min: 2, label: 'Good', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: 'Comfortable margin against rate rises.' },
   { min: 1, label: 'Moderate', symbol: '🟠', textClass: 'text-orange-600 dark:text-orange-400', critical: false, action: 'A larger rate rise would put you in deficit.' },
-  { min: -Infinity, label: 'High risk', symbol: '🔴', textClass: 'text-red-600 dark:text-red-400', critical: true, action: 'Even a 1-point rate rise would put you in deficit - borrow less or grow your buffer.' },
+  // TODO-148: this band covers two different situations - already in deficit
+  // today, or only once a 1-point rise hits - and calculateStressTestSurvivedDelta
+  // returns 0 for both (it never separately probes +0), so the action text has
+  // to stay honest about either one rather than assert the milder of the two.
+  { min: -Infinity, label: 'High risk', symbol: '🔴', textClass: 'text-red-600 dark:text-red-400', critical: true, action: 'Already in deficit today, or a 1-point rate rise would put you there - borrow less or grow your buffer.' },
 ];
 
 // Re-amortizes the CURRENT loan balance at interestRate + 1/2/3, recomputing

@@ -102,6 +102,20 @@ describe('Interest Rate Stress Test', () => {
     expect(classifyStressTest(survivedDelta).critical).toBe(true);
   });
 
+  // TODO-148: the function itself makes no distinction between "already in
+  // deficit today" and "fails only once rates rise" - both return 0. Pinned
+  // here so the calculation stays untouched; distinguishing the two is
+  // App.jsx's job (see App.stressTestDeficit.test.jsx), not this function's.
+  it('also reports 0 when already in deficit at TODAY\'s rate, not just at +1', () => {
+    const paymentAtCurrentRate = calculateMonthlyPayment(loanAmount, calculateMonthlyRate(interestRate), totalMonths);
+    const survivedDelta = calculateStressTestSurvivedDelta({
+      loanAmount, interestRate, totalMonths, monthlyPropertyExpenses: 0,
+      monthlyIncome: paymentAtCurrentRate - 100, monthlyRentalIncome: 0, monthlyPersonalExpenses: 0,
+    });
+    expect(survivedDelta).toBe(0);
+    expect(classifyStressTest(survivedDelta).label).toBe('High risk');
+  });
+
   it('survives exactly at a stressedNetBalance of 0 (the >= 0 boundary), not just clearly-positive surpluses', () => {
     const paymentAt8 = calculateMonthlyPayment(loanAmount, calculateMonthlyRate(interestRate + 3), totalMonths);
     const survivedDelta = calculateStressTestSurvivedDelta({
