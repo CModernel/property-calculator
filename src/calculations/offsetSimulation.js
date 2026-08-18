@@ -12,6 +12,7 @@ import {
   calculateMonthlyPropertyExpenses,
 } from './loan';
 import { calculateCompoundedValue } from './growthRate';
+import { calculateVacancyFactor } from './vacancyFactor';
 
 export function calculateLoanWithOffset({
   contributions,
@@ -191,7 +192,7 @@ export function calculateLoanWithOffset({
   const rentalIncomeSources = incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name));
   // TODO-95: a flat multiplier for the whole simulation - not a per-month
   // accumulator, just applied to rental income below.
-  const vacancyFactor = 1 - (vacancyWeeksPerYear / 52);
+  const vacancyFactor = calculateVacancyFactor(vacancyWeeksPerYear);
   const otherIncomeSources = incomeSources.filter(
     i => i.name !== SALARY_INCOME_CATEGORY && !RENTAL_INCOME_CATEGORIES.includes(i.name)
   );

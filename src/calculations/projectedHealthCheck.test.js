@@ -6,6 +6,7 @@ import {
   DEFAULT_STABILIZATION_MONTH,
 } from './projectedHealthCheck';
 import { calculateCompoundedValue } from './growthRate';
+import { calculateVacancyFactor } from './vacancyFactor';
 
 // getActiveAmountWithGrowth's multiplier is `(1 + monthlyRate) ** month` -
 // already one month of compounding at month 1, not a no-op (matches
@@ -118,7 +119,12 @@ const SNAPSHOT_PARAMS = {
 };
 
 describe('resolveProjectedFinancials', () => {
-  it('matches the Day-1 figures at month 1, including that month\'s own compounding', () => {
+  // Renamed by TODO-150: the old title claimed this "matches the Day-1 figures",
+  // which is only true when every growth rate is 0 - SNAPSHOT_PARAMS sets 3%/5%,
+  // so month 1 here is deliberately ONE month of compounding ahead of App.jsx's
+  // Day-1 snapshot, which applies none. The genuine Day-1 equivalence property
+  // is pinned separately below.
+  it('resolves month 1 with that month\'s own compounding already applied', () => {
     const result = resolveProjectedFinancials(1, SNAPSHOT_PARAMS);
     expect(result.monthlyIncome).toBeCloseTo(growth(2000, 3, 1) * 52 / 12, 5);
     expect(result.monthlyRentalIncome).toBeCloseTo(growth(400, 5, 1) * 52 / 12, 5);
@@ -137,6 +143,43 @@ describe('resolveProjectedFinancials', () => {
     const withoutVacancy = resolveProjectedFinancials(1, SNAPSHOT_PARAMS);
     expect(withVacancy.monthlyRentalIncome).toBeCloseTo(withoutVacancy.monthlyRentalIncome * (1 - 4 / 52), 5);
     expect(withVacancy.monthlyIncome).toBeCloseTo(withoutVacancy.monthlyIncome, 5);
+  });
+
+  // TODO-150's actual regression test, and deliberately an INVARIANT rather
+  // than a pinned pair: with growth switched off, month 1 here must reproduce
+  // App.jsx's Day-1 snapshot exactly, at EVERY vacancy level. That is precisely
+  // the property the bug violated - App.jsx applied no vacancy while this
+  // module did, so the two resolved rental income by different definitions and
+  // the Day1 -> Stabilized arrow partly measured that gap instead of a change
+  // over time. Growth is zeroed because the month-1 compounding offset above is
+  // a separate, deliberate difference; leaving it in would mask this one.
+  describe('Day-1 equivalence (TODO-150)', () => {
+    const NO_GROWTH = { ...SNAPSHOT_PARAMS, salaryGrowthRate: 0, rentGrowthRate: 0, expenseGrowthRate: 0 };
+
+    it.each([0, 2, 4, 52])('resolves rental income identically to App.jsx Day-1 at %i weeks vacancy', (weeks) => {
+      const projected = resolveProjectedFinancials(1, { ...NO_GROWTH, vacancyWeeksPerYear: weeks });
+      // App.jsx's own Day-1 expression, using the same shared helper it calls.
+      const day1Weekly = 400 * calculateVacancyFactor(weeks);
+      expect(projected.monthlyRentalIncome).toBeCloseTo(day1Weekly * 52 / 12, 5);
+      expect(projected.monthlyIncome).toBeCloseTo(2000 * 52 / 12, 5);
+    });
+
+    it('exposes the pre-vacancy rental figure for Rental Yield, unaffected by vacancy', () => {
+      const gross = [0, 4, 52].map(
+        (weeks) => resolveProjectedFinancials(1, { ...NO_GROWTH, vacancyWeeksPerYear: weeks }).monthlyRentalIncomeBeforeVacancy
+      );
+      expect(gross[1]).toBeCloseTo(gross[0], 5);
+      expect(gross[2]).toBeCloseTo(gross[0], 5);
+      expect(gross[0]).toBeCloseTo(400 * 52 / 12, 5);
+    });
+
+    // Why the field exists at all instead of dividing the factor back out of
+    // monthlyRentalIncome: at the slider's max the factor is exactly 0.
+    it('still reports the pre-vacancy figure when the adjusted one is 0 at 52 weeks', () => {
+      const neverRented = resolveProjectedFinancials(1, { ...NO_GROWTH, vacancyWeeksPerYear: 52 });
+      expect(neverRented.monthlyRentalIncome).toBe(0);
+      expect(neverRented.monthlyRentalIncomeBeforeVacancy).toBeGreaterThan(0);
+    });
   });
 
   it('applies the same expense growth multiplier to both property and personal expenses', () => {

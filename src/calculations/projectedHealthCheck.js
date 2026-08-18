@@ -2,6 +2,7 @@ import { getActiveAmount, getActiveAmountWithGrowth, MAX_MONTH } from './recurri
 import { getSteppedValue } from './steppedValue';
 import { calculateCompoundedValue } from './growthRate';
 import { SALARY_INCOME_CATEGORY, RENTAL_INCOME_CATEGORIES } from './incomeCategories';
+import { calculateVacancyFactor } from './vacancyFactor';
 import {
   calculateMonthlyFromWeekly,
   calculateMonthlyRate,
@@ -82,15 +83,24 @@ export function resolveProjectedFinancials(month, {
   const otherNonRentalSources = incomeSources.filter(
     (i) => i.name !== SALARY_INCOME_CATEGORY && !RENTAL_INCOME_CATEGORIES.includes(i.name)
   );
-  const vacancyFactor = 1 - (vacancyWeeksPerYear / 52);
+  const vacancyFactor = calculateVacancyFactor(vacancyWeeksPerYear);
 
   const monthlyIncome = calculateMonthlyFromWeekly(
     getActiveAmountWithGrowth(salarySources, month, salaryGrowthRate, effectiveTaxRate)
       + getActiveAmount(otherNonRentalSources, month, effectiveTaxRate)
   );
-  const monthlyRentalIncome = calculateMonthlyFromWeekly(
-    getActiveAmountWithGrowth(rentalSources, month, rentGrowthRate, effectiveTaxRate) * vacancyFactor
-  );
+  // Hoisted rather than inlined twice so the vacancy-adjusted expression below
+  // stays byte-identical to what it was before TODO-150 added the
+  // BeforeVacancy sibling - reordering `x * f` into `f * x` here would risk
+  // sub-cent drift against tests that assert to 5 decimals.
+  const weeklyRentalBeforeVacancy = getActiveAmountWithGrowth(rentalSources, month, rentGrowthRate, effectiveTaxRate);
+  const monthlyRentalIncome = calculateMonthlyFromWeekly(weeklyRentalBeforeVacancy * vacancyFactor);
+  // TODO-150: Rental Yield is quoted BEFORE the vacancy haircut on both its
+  // Day-1 and Stabilized readings, because its 3%/5% bands cite the standard
+  // gross-yield benchmark. Exposed as its own field rather than recovered by
+  // dividing vacancyFactor back out of monthlyRentalIncome, which is a
+  // division by zero at the slider's max of 52 weeks.
+  const monthlyRentalIncomeBeforeVacancy = calculateMonthlyFromWeekly(weeklyRentalBeforeVacancy);
 
   const expenseGrowthMultiplier = calculateCompoundedValue(1, expenseGrowthRate, month);
   const monthlyPersonalExpenses = getActiveAmount(personalExpenseItems, month) * expenseGrowthMultiplier;
@@ -137,6 +147,7 @@ export function resolveProjectedFinancials(month, {
   return {
     monthlyIncome,
     monthlyRentalIncome,
+    monthlyRentalIncomeBeforeVacancy,
     monthlyPersonalExpenses,
     monthlyPropertyExpenses,
     monthlyPayment: resolvedMonthlyPayment,

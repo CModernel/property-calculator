@@ -3,6 +3,7 @@ import { calculateLoanWithOffset } from './offsetSimulation';
 import { calculateMonthlyRate, calculateMonthlyPayment, calculateMonthlyFromWeekly } from './loan';
 import { MAX_MONTH } from './recurringAmount';
 import { calculateCompoundedValue } from './growthRate';
+import { calculateVacancyFactor } from './vacancyFactor';
 
 describe('calculateLoanWithOffset', () => {
   it('returns the sentinel result when there is no surplus and no contributions', () => {
@@ -1027,6 +1028,45 @@ describe('rental vacancy (vacancyWeeksPerYear, TODO-95)', () => {
       return Math.round(cumulative);
     });
     expect(result.monthlyData.map(d => d.offset)).toEqual(expectedOffsets);
+  });
+
+  // TODO-150: the engine is the tie-breaker for what rental income "is", so
+  // these two pin the relationship between it and App.jsx's Day-1 figure
+  // directly - one for the part that must agree, one for the part that
+  // deliberately doesn't. `monthlyData` carries no per-month income field, so
+  // both read month 1's income through `offset` with monthlyToOffset at 0 and
+  // no expenses, the same technique the cases above use.
+  describe('agreement with App.jsx\'s Day-1 rental figure (TODO-150)', () => {
+    const monthOneParams = (overrides) => ({
+      contributions: [],
+      personalExpenseItems: [],
+      incomeSources: [{ id: 1, name: 'House Rent', amount: 600, startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH }],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 0,
+      vacancyWeeksPerYear: 4,
+      maxMonths: 1,
+      ...overrides,
+    });
+
+    it('equals App.jsx\'s Day-1 expression once rent growth is out of the way', () => {
+      const result = calculateLoanWithOffset(monthOneParams({ rentGrowthRate: 0 }));
+      // App.jsx:622-625's own expression, via the same shared helper it calls.
+      const appDay1 = calculateMonthlyFromWeekly(600 * calculateVacancyFactor(4));
+      expect(result.monthlyData[0].offset).toBe(Math.round(appDay1));
+    });
+
+    // Pinned as deliberate, not left as a comment an audit would re-report as a
+    // bug: the engine's month 1 means "end of the first month" and so carries
+    // one month of growth, while App's Day 1 means "today, before any growth".
+    // The same offset exists on salary and expenses, so chasing it for rent
+    // alone would create a new inconsistency INSIDE the Day-1 snapshot.
+    it('runs exactly one month of rent growth ahead of Day-1 when growth is on', () => {
+      const result = calculateLoanWithOffset(monthOneParams({ rentGrowthRate: 6 }));
+      const appDay1 = calculateMonthlyFromWeekly(600 * calculateVacancyFactor(4));
+      expect(result.monthlyData[0].offset).toBe(Math.round(appDay1 * (1 + 0.06 / 12)));
+    });
   });
 
   it('is a full 52-week vacancy edge case that zeroes out rental income entirely', () => {

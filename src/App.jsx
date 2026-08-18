@@ -46,6 +46,7 @@ import { calculateOffsetTimingBenefit, calculateCardCashback } from './calculati
 import { calculatePresentValueOfInterest } from './calculations/inflation';
 import { clampToRange } from './calculations/clampToRange';
 import { safePercentage } from './calculations/safePercentage';
+import { calculateVacancyFactor } from './calculations/vacancyFactor';
 import { estimateLmi } from './calculations/lmi';
 import { sumClosingCosts } from './calculations/closingCosts';
 import { getStateModule } from './calculations/states';
@@ -620,7 +621,29 @@ const PropertyInvestmentCalculator = () => {
   // the same array into the two subtotals the rest of the app already
   // expects, instead of drawing from two separate arrays.
   const weeklyIncome = getActiveAmount(incomeSources.filter(i => !RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
-  const weeklyRentalIncome = getActiveAmount(incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
+  // TODO-150: rental income is haircut by the vacancy assumption here, the same
+  // way offsetSimulation.js does it from month 1 and resolveProjectedFinancials
+  // does it for the Stabilized reading. Before this, the Day-1 figure was the
+  // lone outlier, so part of every Day1 -> Stabilized movement in Housing Cost
+  // Ratio and Gearing was a change in DEFINITION rather than a projection.
+  //
+  // Deliberately NOT gated on isInvestmentProperty, even though landTax and
+  // propertyManagement above are: the engine doesn't gate it either, and a Room
+  // Rent in an owner-occupied house is a supported configuration. Gating here
+  // would just re-create the same divergence one layer down.
+  //
+  // The plain names carry the ADJUSTED figure so every consumer gets the
+  // haircut by default. Exactly three sites want the pre-vacancy figure, all
+  // of them below, and all for a reason other than "how much cash arrives":
+  //   1. Rental Yield's value  - quoted gross of vacancy, matching its bands
+  //   2. Rental Yield's data gate - "did you enter a rent?", not "how much?"
+  //   3. Property Summary's render gate - same data-presence question
+  // Sites 2 and 3 matter because the slider allows 52 weeks (factor exactly 0),
+  // which would otherwise read as "no rental income entered" and silently hide
+  // both the indicator and the whole card.
+  const weeklyRentalIncomeBeforeVacancy = getActiveAmount(incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
+  const weeklyRentalIncome = weeklyRentalIncomeBeforeVacancy * calculateVacancyFactor(vacancyWeeksPerYear);
+  const hasRentalIncome = weeklyRentalIncomeBeforeVacancy > 0;
   const monthlyIncome = calculateMonthlyFromWeekly(weeklyIncome);
   const monthlyRentalIncome = calculateMonthlyFromWeekly(weeklyRentalIncome);
 
@@ -836,11 +859,19 @@ const PropertyInvestmentCalculator = () => {
   const stabilizedVacancyBufferMonths = calculateVacancyBufferMonths(liquidSavings, projected.monthlyPayment + projected.monthlyPropertyExpenses);
   const vacancyBufferClass = classifyVacancyBuffer(worseOf(vacancyBufferMonths, stabilizedVacancyBufferMonths, 'higherIsBetter'));
 
-  const rentalYieldHasData = hasEnoughDataForRentalYield(weeklyRentalIncome);
-  const rentalYield = calculateRentalYield(weeklyRentalIncome, propertyPrice);
+  // TODO-150: the ONE indicator that deliberately reads the pre-vacancy figure
+  // on BOTH readings. "Gross rental yield" is the standard quoted metric and
+  // the 3%/5% bands below cite that gross benchmark - netting it for vacancy
+  // would make the bands wrong by definition, which is exactly the defect
+  // TODO-151 exists to fix in Housing Cost Ratio. Honest caveat: this is gross
+  // of VACANCY only - it's still net of effectiveTaxRate for any income item
+  // marked "gross (pre-tax)" (pre-existing, TODO-94), so TODO-151's question
+  // applies here too.
+  const rentalYieldHasData = hasEnoughDataForRentalYield(weeklyRentalIncomeBeforeVacancy);
+  const rentalYield = calculateRentalYield(weeklyRentalIncomeBeforeVacancy, propertyPrice);
   // Inverse of calculateMonthlyFromWeekly (weekly * 52 / 12) - no dedicated
   // helper exists, and adding one for this single call site isn't warranted.
-  const stabilizedWeeklyRentalIncome = projected.monthlyRentalIncome * 12 / 52;
+  const stabilizedWeeklyRentalIncome = projected.monthlyRentalIncomeBeforeVacancy * 12 / 52;
   const stabilizedRentalYield = calculateRentalYield(stabilizedWeeklyRentalIncome, propertyPrice);
   const rentalYieldClass = rentalYieldHasData ? classifyRentalYield(worseOf(rentalYield, stabilizedRentalYield, 'higherIsBetter')) : null;
 
@@ -3286,7 +3317,18 @@ const PropertyInvestmentCalculator = () => {
                 </h3>
                 <div className="space-y-1">
                   <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-300">Monthly Rental Income:</span>
+                    <span className="text-gray-600 dark:text-gray-300">
+                      Monthly Rental Income:
+                      {/* TODO-150: without this the figure silently contradicts the
+                          card's own "52 / 12 = 4.33" tooltip - the vacancy haircut is
+                          the missing term in the user's mental math (same complaint
+                          TODO-60's tooltip exists to answer). */}
+                      {vacancyWeeksPerYear > 0 && hasRentalIncome && (
+                        <span className="block text-xs text-gray-500 dark:text-gray-400">
+                          After {vacancyWeeksPerYear} {vacancyWeeksPerYear === 1 ? 'week' : 'weeks'}/yr vacancy
+                        </span>
+                      )}
+                    </span>
                     <span className="font-semibold text-green-600 dark:text-green-400">+${Math.round(monthlyRentalIncome).toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between">
@@ -3304,8 +3346,12 @@ const PropertyInvestmentCalculator = () => {
 
               {/* Property Summary section - only meaningful when the property actually
                   earns rental income; otherwise it's just expenses restated as a
-                  negative "balance" against nothing, which duplicates Monthly Expenses. */}
-              {monthlyRentalIncome > 0 && (
+                  negative "balance" against nothing, which duplicates Monthly Expenses.
+                  TODO-150: gated on the PRE-vacancy figure - this asks "does this
+                  property earn rent?", not "how much arrives". At the slider's max
+                  of 52 weeks the adjusted figure is exactly 0, which would have
+                  made the whole card vanish for someone who did enter rent. */}
+              {hasRentalIncome && (
                 <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
                   <h3 className="font-semibold text-gray-700 dark:text-gray-200 mb-2">📊 Property Summary</h3>
                   <div className="space-y-1">
@@ -3425,6 +3471,7 @@ const PropertyInvestmentCalculator = () => {
                   classification={housingCostRatioClass}
                 >
                   <p>Total property cost (loan repayment + property expenses) as a share of your total monthly income.</p>
+                  <p className="mt-2">Any rental income in that total is counted after your Vacancy assumption, matching the projection.</p>
                   <p className="mt-2">&lt;30% excellent, 30-40% good, 40-50% caution, ≥50% high risk.</p>
                   <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled - with growth rates applied.</p>
                 </HealthCheckIndicator>
@@ -3469,6 +3516,7 @@ const PropertyInvestmentCalculator = () => {
                       classification={gearingClass}
                     >
                       <p>Rental income minus the loan repayment and property expenses. Not itself good or bad - negative gearing (a shortfall) just needs to be affordable from your other income.</p>
+                      <p className="mt-2">Rental income here is after your Vacancy assumption, the same haircut the projection applies every month - so this figure and the simulation agree.</p>
                       <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled - with growth rates applied.</p>
                     </HealthCheckIndicator>
 
@@ -3493,6 +3541,7 @@ const PropertyInvestmentCalculator = () => {
                         classification={rentalYieldClass}
                       >
                         <p>Annualized rental income (House Rent/Room Rent) as a share of the property price.</p>
+                        <p className="mt-2">Quoted <strong>before</strong> the Vacancy assumption, unlike the other indicators - the bands below are the standard gross-yield benchmark, so netting it for vacancy would make them mean something different from what they cite.</p>
                         <p className="mt-2">&lt;3% weak, 3-5% average, ≥5% strong.</p>
                         <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled - with growth rates applied.</p>
                       </HealthCheckIndicator>
@@ -3890,7 +3939,17 @@ const PropertyInvestmentCalculator = () => {
                         <div className="space-y-1 text-xs">
                           {(() => {
                             const houseRentActiveHere = incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name) && isScheduleActive(i, timelineMonth));
-                            const rentalIncomeHere = calculateMonthlyFromWeekly(getActiveAmount(incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), timelineMonth, effectiveTaxRate));
+                            // TODO-150: vacancy-adjusted, same definition as everywhere else.
+                            // Known and deliberate: this line still shows UN-GROWN rent while
+                            // the trajectory it annotates applies rentGrowthRate, so at a high
+                            // timelineMonth it reads low against the simulation - and because
+                            // the two omissions used to partially cancel, adding vacancy alone
+                            // widens that gap slightly. Accepted here because a figure that is
+                            // consistently defined is worth more than one that is accidentally
+                            // closer, and because personalIncomeHere on the line above has the
+                            // same growth gap - fixing rent alone would trade a cross-layer
+                            // inconsistency for one inside this panel. Recorded as its own TODO.
+                            const rentalIncomeHere = calculateMonthlyFromWeekly(getActiveAmount(incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), timelineMonth, effectiveTaxRate) * calculateVacancyFactor(vacancyWeeksPerYear));
                             const personalIncomeHere = calculateMonthlyFromWeekly(getActiveAmount(incomeSources.filter(i => !RENTAL_INCOME_CATEGORIES.includes(i.name)), timelineMonth, effectiveTaxRate));
                             return (
                               <>

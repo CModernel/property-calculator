@@ -30,11 +30,13 @@ import { sumClosingCosts } from './closingCosts';
 import { safePercentage } from './safePercentage';
 import { getStateModule } from './states';
 import { calculateTotalCashRequired, calculateLiquidSavings } from './totalCashRequired';
+import { calculateVacancyFactor } from './vacancyFactor';
 import {
   calculateEmergencyBufferMonths, classifyEmergencyBuffer,
   calculateHousingCostRatio, classifyHousingCostRatio,
   calculateStressTestSurvivedDelta, classifyStressTest,
   calculateUpfrontCostRatio, classifyUpfrontCostRatio,
+  calculateRentalYield, hasEnoughDataForRentalYield,
 } from './purchaseHealthCheck';
 import defaultConfig from '../../config.default.json';
 
@@ -46,6 +48,8 @@ function runScenario(overrides = {}) {
     ...overrides,
     effectiveTaxRate: overrides.effectiveTaxRate ?? 20,
     payLmiUpfront: overrides.payLmiUpfront ?? false,
+    // Same fallback chain App.jsx:395 uses (`config.vacancyWeeksPerYear ?? 2`).
+    vacancyWeeksPerYear: overrides.vacancyWeeksPerYear ?? defaultConfig.vacancyWeeksPerYear ?? 2,
   };
   const stateModule = getStateModule(c.state);
 
@@ -86,7 +90,12 @@ function runScenario(overrides = {}) {
 
   const monthlyPersonalExpenses = getActiveAmount(c.personalExpenseItems, 1);
   const weeklyIncome = getActiveAmount(c.incomeSources.filter((i) => !RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, c.effectiveTaxRate);
-  const weeklyRentalIncome = getActiveAmount(c.incomeSources.filter((i) => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, c.effectiveTaxRate);
+  // TODO-150: mirrors App.jsx's vacancy haircut. config.default.json has no
+  // vacancyWeeksPerYear key at all - App.jsx supplies the default itself - so
+  // this must fall back the same way or the factor is NaN and every row in the
+  // MATRIX fails, rental income or not.
+  const weeklyRentalIncomeBeforeVacancy = getActiveAmount(c.incomeSources.filter((i) => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, c.effectiveTaxRate);
+  const weeklyRentalIncome = weeklyRentalIncomeBeforeVacancy * calculateVacancyFactor(c.vacancyWeeksPerYear);
   const monthlyIncome = calculateMonthlyFromWeekly(weeklyIncome);
   const monthlyRentalIncome = calculateMonthlyFromWeekly(weeklyRentalIncome);
 
@@ -99,6 +108,12 @@ function runScenario(overrides = {}) {
   const upfrontCostRatio = calculateUpfrontCostRatio(totalCashRequired, c.downPayment, c.propertyPrice);
 
   return {
+    // TODO-150: exposed so the investment-property block below can assert on the
+    // vacancy haircut and on Rental Yield's deliberate exemption from it.
+    monthlyRentalIncome,
+    gearingCashflow: monthlyRentalIncome - monthlyPayment - monthlyPropertyExpenses,
+    rentalYield: calculateRentalYield(weeklyRentalIncomeBeforeVacancy, c.propertyPrice),
+    rentalYieldHasData: hasEnoughDataForRentalYield(weeklyRentalIncomeBeforeVacancy),
     emergencyBufferMonths, emergencyBufferClass: classifyEmergencyBuffer(emergencyBufferMonths),
     housingCostRatio, housingCostRatioClass: classifyHousingCostRatio(housingCostRatio),
     stressTestSurvivedDelta, stressTestClass: classifyStressTest(stressTestSurvivedDelta),
@@ -212,6 +227,56 @@ describe('Purchase Health Check Tier-1 indicators - scenario matrix (TODO-147)',
       const at0 = runScenario({ effectiveTaxRate: 0 });
       const at20 = runScenario({ effectiveTaxRate: 20 });
       expect(at0).toEqual(at20);
+    });
+  });
+
+  // TODO-150: the MATRIX above deliberately has no rental/investment row (every
+  // scenario is salary-only), so this whole code path had no coverage at all -
+  // which is how the Day-1 figure could disagree with both the engine and the
+  // Stabilized reading unnoticed. Kept as its own block rather than as MATRIX
+  // rows because it.each asserts all four of EB/HCR/ST/UCR unconditionally, and
+  // these cases are about different indicators.
+  describe('investment-property indicators and the vacancy haircut (TODO-150)', () => {
+    const investmentWithRent = (vacancyWeeksPerYear) => runScenario({
+      isInvestmentProperty: true,
+      vacancyWeeksPerYear,
+      incomeSources: [
+        { id: 1, name: 'Salary/Wages', amount: 1614, startMonth: 1, recurrence: 'monthly', endMonth: 360 },
+        { id: 2, name: 'House Rent', amount: 600, startMonth: 1, recurrence: 'monthly', endMonth: 360 },
+      ],
+    });
+
+    it('haircuts Day-1 rental income by exactly the vacancy factor', () => {
+      const none = investmentWithRent(0);
+      const fourWeeks = investmentWithRent(4);
+      expect(fourWeeks.monthlyRentalIncome).toBeCloseTo(none.monthlyRentalIncome * (1 - 4 / 52), 6);
+    });
+
+    it('a vacancy assumption makes Housing Cost Ratio worse and Gearing weaker', () => {
+      const none = investmentWithRent(0);
+      const fourWeeks = investmentWithRent(4);
+      expect(fourWeeks.housingCostRatio).toBeGreaterThan(none.housingCostRatio);
+      expect(fourWeeks.gearingCashflow).toBeLessThan(none.gearingCashflow);
+    });
+
+    // The locked decision, stated as a test: Rental Yield is quoted gross of
+    // vacancy on purpose, because its 3%/5% bands are the gross benchmark.
+    // Without this, "helpfully" netting the yield later would look like a
+    // consistency improvement rather than a redefinition of the bands.
+    it('leaves Rental Yield untouched at every vacancy level', () => {
+      const yields = [0, 4, 52].map((weeks) => investmentWithRent(weeks).rentalYield);
+      expect(yields[1]).toBe(yields[0]);
+      expect(yields[2]).toBe(yields[0]);
+      expect(yields[0]).toBeCloseTo((600 * 52) / 850000 * 100, 6);
+    });
+
+    // The slider's max. The adjusted figure is exactly 0 here, so anything that
+    // asks "did the user enter a rent?" must read the pre-vacancy figure or it
+    // silently reports missing data for a property that plainly has a tenant.
+    it('still reports rental data present at 52 weeks vacancy, even though income is 0', () => {
+      const neverRented = investmentWithRent(52);
+      expect(neverRented.monthlyRentalIncome).toBe(0);
+      expect(neverRented.rentalYieldHasData).toBe(true);
     });
   });
 });

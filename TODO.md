@@ -4766,32 +4766,29 @@ optionally reuse in the commit message when you implement it.
   still opens it for power users. Added App-level coverage for the default
   collapsed state and expand/collapse interaction.
 
-- [ ] **TODO-150: Day-1 rental income skips the vacancy factor but the Stabilized reading applies it**
-  Found in the same audit. `App.jsx:550-552` builds the Day-1
-  `monthlyRentalIncome` straight from `getActiveAmount(...)` with no vacancy
-  adjustment, while `resolveProjectedFinancials`
-  (`src/calculations/projectedHealthCheck.js`) multiplies rental income by
-  `1 - vacancyWeeksPerYear/52`. So for an investment property, part of every
-  Day1 -> Stabilized movement in Housing Cost Ratio, Gearing and Rental Yield
-  is a change in *definition*, not a projection - the two readings are not
-  apples to apples.
-  **The tie-breaker is already settled by the engine**: verified
-  `offsetSimulation.js:246` applies `vacancyFactor` inside the monthly loop
-  unconditionally, and that loop's `months` counter is 1 on its first
-  iteration - so the simulation vacancy-adjusts from month 1. It is the Day-1
-  Health Check figure that is the outlier, disagreeing with the simulation that
-  drives every other panel on the page.
-  **Fix**: apply the vacancy factor to the Day-1 `monthlyRentalIncome` too, so
-  all three consumers agree. Note this is not a purely cosmetic change - Day-1
-  `monthlyRentalIncome` also feeds `monthlyNetBalance`, `monthlyToOffset` and
-  the weekly/fortnightly cash-flow cards, so the blast radius is wider than the
-  Health Check and every affected figure should be re-checked. Consider whether
-  the "TO OFFSET (automatic)" figure should be vacancy-adjusted as well or
-  deliberately kept optimistic; if they must differ, say why in a comment.
-  **Tests**: an investment-property scenario in TODO-147's matrix with
-  `vacancyWeeksPerYear` at 0 vs 4, asserting Day-1 and Stabilized move
-  together; plus a check that the Day-1 rental figure matches what
-  `offsetSimulation.js` computes for month 1.
+- [ ] **TODO-152 (small, contained): Timeline Explorer's Income Context shows un-grown income while the trajectory beside it applies growth rates**
+  Found while implementing TODO-150. The Income Context column
+  (`App.jsx`, inside the Timeline Explorer's per-month panel) computes both
+  `personalIncomeHere` and `rentalIncomeHere` with `getActiveAmount(...,
+  timelineMonth, ...)` - i.e. no growth multiplier - while the simulation
+  trajectory the panel annotates uses `getActiveAmountWithGrowth` with
+  `salaryGrowthRate`/`rentGrowthRate`. Unlike the Day-1 Health Check figures
+  (where "today, before growth" is a defensible meaning, see TODO-150), this
+  panel is explicitly headed "at Month {timelineMonth}", so there is no
+  reading under which omitting growth is correct.
+  Scale of the error: at month 120 with 3%/yr growth the displayed figure is
+  ~26% below what the simulation used. TODO-150 applied the vacancy factor
+  here and deliberately left the growth gap, noting that the two omissions had
+  been partially cancelling - so this is now the whole remaining divergence.
+  **Fix**: use `getActiveAmountWithGrowth` for both lines, which needs the
+  three-way salary/rental/other split (`SALARY_INCOME_CATEGORY` plus the
+  existing `RENTAL_INCOME_CATEGORIES`) that `offsetSimulation.js` and
+  `projectedHealthCheck.js` already do internally - the reason to fix both
+  lines together rather than rent alone, which would leave the two adjacent
+  rows on different definitions.
+  **Tests**: assert the panel's rental and personal figures at a high
+  `timelineMonth` match what the simulation computed for that same month;
+  a growth-rate of 0 must leave both unchanged from today's behaviour.
 
 - [ ] **TODO-151 (needs a product call before coding - biggest blast radius): Housing Cost Ratio applies gross-income bands to a net-income figure**
   Found in the same audit, and it is the reason the indicator feels stuck on
@@ -5161,6 +5158,84 @@ optionally reuse in the commit message when you implement it.
   reverted `SimpleModeView.jsx`'s indicator alone (confirmed only the Simple
   mode test failed), restored.
   Suite 778 passing, lint and build clean, no Spanish text in changed files.
+
+- [x] **TODO-150: Day-1 rental income skipped the vacancy factor while the Stabilized reading applied it**
+  `App.jsx`'s Day-1 `weeklyRentalIncome`/`monthlyRentalIncome` now apply the
+  same `vacancyFactor` `offsetSimulation.js` applies from month 1 and
+  `resolveProjectedFinancials` applies to the Stabilized reading, so part of
+  every Day1 -> Stabilized movement in Housing Cost Ratio and Gearing is no
+  longer a change in *definition*. Governed by TODO-146's precedent: the engine
+  is the tie-breaker, the App-level figure was the outlier.
+  Implemented as a **naming inversion** - the plain names carry the ADJUSTED
+  figure so all ~20 consumers get the haircut with no edits, and the deliberate
+  exceptions carry an explicit `BeforeVacancy` suffix. Named `BeforeVacancy`
+  rather than `Gross` on purpose: `getActiveAmount(..., effectiveTaxRate)`
+  already nets tax, so a `Gross` variable sitting near `taxRateSuggestion.js`
+  (where "gross" means pre-tax) would have been actively misleading, especially
+  with TODO-151 about to touch exactly that area.
+  **Three decisions locked with the user before coding:**
+  1. **Rental Yield stays before-vacancy on BOTH readings** - it is the one
+     indicator where the *Stabilized* side changed instead. Yield is
+     conventionally quoted gross and its own 3%/5% bands cite that benchmark;
+     netting it would have recreated TODO-151's defect (gross-defined bands on
+     a net figure) in a second indicator. Honest caveat left in a comment: this
+     is gross of *vacancy* only, still net of `effectiveTaxRate` for
+     `isGross`-marked items, so TODO-151's question applies here too.
+     `resolveProjectedFinancials` gained an additive
+     `monthlyRentalIncomeBeforeVacancy` field rather than dividing the factor
+     back out - at the slider's max of 52 weeks the factor is exactly 0.
+  2. **"TO OFFSET (automatic)" and the weekly/fortnightly cards do get the
+     adjustment** (they flow from `monthlyNetBalance`), narrowing the gap
+     between that headline and what the engine actually deposits in month 1.
+  3. **The Timeline Explorer's own `rentalIncomeHere` was in scope.**
+  **Three things the plan missed and a design review caught:**
+  - A **third** site needing the before-vacancy figure, and it is a *render
+    gate*, not a number: `{monthlyRentalIncome > 0 && ...}` guarding the
+    "📊 Property Summary" card. At 52 weeks the adjusted figure is 0, so the
+    whole card silently vanished for a property that plainly has a tenant.
+    Same class as Rental Yield's `hasEnoughDataForRentalYield` gate. Both now
+    read `hasRentalIncome`/`weeklyRentalIncomeBeforeVacancy` - a data-presence
+    question, not a how-much-arrives one.
+  - `runScenario` in `purchaseHealthCheck.scenarios.test.js` needed the SAME
+    fallback App.jsx uses (`?? 2`), because `config.default.json` has no
+    `vacancyWeeksPerYear` key at all - without it the factor is `NaN` and
+    `0 * NaN === NaN` would have failed all 12 existing MATRIX rows.
+  - The engine equivalence test the entry asked for IS feasible after all (I
+    had written it off, since `monthlyData` carries no rental-income field):
+    the existing vacancy tests read month-1 income through
+    `monthlyData[0].offset` with `monthlyToOffset: 0` and `maxMonths: 1`.
+  **Deliberately not fixed, and pinned as deliberate rather than left as prose:**
+  `getActiveAmountWithGrowth` uses `(1 + monthlyRate) ** month`, so the engine's
+  month 1 already carries one month of growth while App's Day 1 carries none.
+  The same offset exists on salary, personal expenses and property expenses, so
+  chasing it for rent alone would create a NEW inconsistency inside the Day-1
+  snapshot. `offsetSimulation.test.js` now has both an equivalence test (growth
+  at 0) and a **divergence** test asserting the engine runs exactly
+  `(1 + rate/12)x` ahead, so a future audit can't re-report it as a bug. Also
+  renamed `projectedHealthCheck.test.js`'s 'matches the Day-1 figures at month
+  1' test, whose title was already false (SNAPSHOT_PARAMS sets 3%/5% growth).
+  New `src/calculations/vacancyFactor.js` (`calculateVacancyFactor`) replaces
+  the expression duplicated in `offsetSimulation.js` and
+  `projectedHealthCheck.js`, which this change would have grown to four sites -
+  a pure substitution, engine diff is one line plus the import.
+  Copy: Gearing and Housing Cost Ratio tooltips now say rental income is
+  after the vacancy assumption; Rental Yield's says it is deliberately before
+  it; and the Monthly Income card's rental line gained an "After N weeks/yr
+  vacancy" sub-label, without which the figure silently contradicts that card's
+  own "52 / 12 = 4.33" tooltip (the TODO-60 mental-math complaint).
+  **Tests**: 16 new (4 in a new `src/App.vacancyDay1.test.jsx` - the only place
+  the two render gates are reachable; 4 in a new investment-property block in
+  `purchaseHealthCheck.scenarios.test.js` including a guard that Rental Yield is
+  byte-identical at vacancy 0/4/52; 6 in `projectedHealthCheck.test.js` as an
+  `it.each` **invariant** over vacancy levels rather than hand-pinned pairs;
+  2 in `offsetSimulation.test.js`). Verified all three edits catch real
+  regressions by reverting each separately: the core haircut (3 of 4 App tests
+  failed), the two render gates alone (exactly the 2 gate tests failed, with the
+  card and the indicator disappearing), and `runScenario` (the 3 numeric
+  investment tests failed while all 12 MATRIX rows stayed green).
+  Acceptance criterion met: **no existing test's expected value changed.**
+  Suite 794 passing, lint and build clean, no Spanish text in changed files.
+  Recorded the Timeline Explorer's remaining *growth* divergence as TODO-152.
 
 ---
 
