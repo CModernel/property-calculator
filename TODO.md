@@ -4766,30 +4766,6 @@ optionally reuse in the commit message when you implement it.
   still opens it for power users. Added App-level coverage for the default
   collapsed state and expand/collapse interaction.
 
-- [ ] **TODO-152 (small, contained): Timeline Explorer's Income Context shows un-grown income while the trajectory beside it applies growth rates**
-  Found while implementing TODO-150. The Income Context column
-  (`App.jsx`, inside the Timeline Explorer's per-month panel) computes both
-  `personalIncomeHere` and `rentalIncomeHere` with `getActiveAmount(...,
-  timelineMonth, ...)` - i.e. no growth multiplier - while the simulation
-  trajectory the panel annotates uses `getActiveAmountWithGrowth` with
-  `salaryGrowthRate`/`rentGrowthRate`. Unlike the Day-1 Health Check figures
-  (where "today, before growth" is a defensible meaning, see TODO-150), this
-  panel is explicitly headed "at Month {timelineMonth}", so there is no
-  reading under which omitting growth is correct.
-  Scale of the error: at month 120 with 3%/yr growth the displayed figure is
-  ~26% below what the simulation used. TODO-150 applied the vacancy factor
-  here and deliberately left the growth gap, noting that the two omissions had
-  been partially cancelling - so this is now the whole remaining divergence.
-  **Fix**: use `getActiveAmountWithGrowth` for both lines, which needs the
-  three-way salary/rental/other split (`SALARY_INCOME_CATEGORY` plus the
-  existing `RENTAL_INCOME_CATEGORIES`) that `offsetSimulation.js` and
-  `projectedHealthCheck.js` already do internally - the reason to fix both
-  lines together rather than rent alone, which would leave the two adjacent
-  rows on different definitions.
-  **Tests**: assert the panel's rental and personal figures at a high
-  `timelineMonth` match what the simulation computed for that same month;
-  a growth-rate of 0 must leave both unchanged from today's behaviour.
-
 - [ ] **TODO-151 (needs a product call before coding - biggest blast radius): Housing Cost Ratio applies gross-income bands to a net-income figure**
   Found in the same audit, and it is the reason the indicator feels stuck on
   red. `HOUSING_COST_RATIO_BANDS` uses the standard 30/40/50% thresholds, and
@@ -5236,6 +5212,27 @@ optionally reuse in the commit message when you implement it.
   Acceptance criterion met: **no existing test's expected value changed.**
   Suite 794 passing, lint and build clean, no Spanish text in changed files.
   Recorded the Timeline Explorer's remaining *growth* divergence as TODO-152.
+
+- [x] **TODO-152: Timeline Explorer's Income Context showed un-grown income while the trajectory beside it applies growth rates**
+  `App.jsx`'s Income Context column now uses the same three-way
+  salary/rental/other split `offsetSimulation.js` applies internally -
+  `getActiveAmountWithGrowth` for the Salary/Wages group at `salaryGrowthRate`
+  and for the rental group at `rentGrowthRate` (still vacancy-adjusted per
+  TODO-150), plain `getActiveAmount` for everything else, matching the
+  engine's own no-growth treatment of Dividends/Bonus/etc. Unlike the Day-1
+  Health Check figures (TODO-150, where "today, before growth" is a defensible
+  meaning), this panel is explicitly headed "at Month {timelineMonth}", so
+  there was no reading under which omitting growth was correct - fixed both
+  lines together rather than rent alone, since fixing one would have left the
+  two adjacent rows on different definitions.
+  **Tests**: new `src/App.timelineIncomeGrowth.test.jsx` (2 tests) - the panel's
+  Personal/Rental Income at month 60 matches `calculateCompoundedValue` +
+  `calculateVacancyFactor` computed independently (the same formula the engine
+  uses, not re-derived), and every growth rate at 0 leaves both figures
+  unchanged from pre-fix behavior. Verified the test catches the regression:
+  reverted to the old no-growth expressions, confirmed the Personal Income
+  assertion failed with the exact pre-fix number ($6,994 vs $8,124), restored.
+  Suite 796 passing, lint and build clean, no Spanish text in changed files.
 
 ---
 

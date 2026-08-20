@@ -65,9 +65,9 @@ import { findStabilizationMonth, resolveProjectedFinancials, worseOf } from './c
 import HealthCheckIndicator from './components/HealthCheckIndicator';
 import { calculateTotalCashRequired, calculateCashRemaining, calculateLiquidSavings } from './calculations/totalCashRequired';
 import { getSteppedValue } from './calculations/steppedValue';
-import { getActiveAmount, isScheduleActive, countOccurrencesUpTo, classifyScheduleStatus, formatScheduleLabel } from './calculations/recurringAmount';
+import { getActiveAmount, getActiveAmountWithGrowth, isScheduleActive, countOccurrencesUpTo, classifyScheduleStatus, formatScheduleLabel } from './calculations/recurringAmount';
 import { getTimelineSnapshot, calculateEffectiveProgress, calculateTimeRemaining } from './calculations/timelineSnapshot';
-import { INCOME_CATEGORIES, INCOME_CATEGORY_DEFAULTS, RENTAL_INCOME_CATEGORIES } from './calculations/incomeCategories';
+import { INCOME_CATEGORIES, INCOME_CATEGORY_DEFAULTS, RENTAL_INCOME_CATEGORIES, SALARY_INCOME_CATEGORY } from './calculations/incomeCategories';
 import { getSuggestedTaxRate, getMarginalRentalTaxRate } from './calculations/taxRateSuggestion';
 import { useSteppedValue } from './hooks/useSteppedValue';
 import { useDarkMode } from './hooks/useDarkMode';
@@ -3939,18 +3939,20 @@ const PropertyInvestmentCalculator = () => {
                         <div className="space-y-1 text-xs">
                           {(() => {
                             const houseRentActiveHere = incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name) && isScheduleActive(i, timelineMonth));
-                            // TODO-150: vacancy-adjusted, same definition as everywhere else.
-                            // Known and deliberate: this line still shows UN-GROWN rent while
-                            // the trajectory it annotates applies rentGrowthRate, so at a high
-                            // timelineMonth it reads low against the simulation - and because
-                            // the two omissions used to partially cancel, adding vacancy alone
-                            // widens that gap slightly. Accepted here because a figure that is
-                            // consistently defined is worth more than one that is accidentally
-                            // closer, and because personalIncomeHere on the line above has the
-                            // same growth gap - fixing rent alone would trade a cross-layer
-                            // inconsistency for one inside this panel. Recorded as its own TODO.
-                            const rentalIncomeHere = calculateMonthlyFromWeekly(getActiveAmount(incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), timelineMonth, effectiveTaxRate) * calculateVacancyFactor(vacancyWeeksPerYear));
-                            const personalIncomeHere = calculateMonthlyFromWeekly(getActiveAmount(incomeSources.filter(i => !RENTAL_INCOME_CATEGORIES.includes(i.name)), timelineMonth, effectiveTaxRate));
+                            // TODO-152: same three-way salary/rental/other split
+                            // offsetSimulation.js uses internally, with growth applied to
+                            // each group exactly as the simulation does - this panel is
+                            // headed "at Month {timelineMonth}", so unlike the Day-1 Health
+                            // Check figures (TODO-150), there's no reading under which
+                            // un-grown income is correct here.
+                            const salarySourcesHere = incomeSources.filter(i => i.name === SALARY_INCOME_CATEGORY);
+                            const rentalSourcesHere = incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name));
+                            const otherSourcesHere = incomeSources.filter(i => i.name !== SALARY_INCOME_CATEGORY && !RENTAL_INCOME_CATEGORIES.includes(i.name));
+                            const rentalIncomeHere = calculateMonthlyFromWeekly(getActiveAmountWithGrowth(rentalSourcesHere, timelineMonth, rentGrowthRate, effectiveTaxRate) * calculateVacancyFactor(vacancyWeeksPerYear));
+                            const personalIncomeHere = calculateMonthlyFromWeekly(
+                              getActiveAmountWithGrowth(salarySourcesHere, timelineMonth, salaryGrowthRate, effectiveTaxRate)
+                                + getActiveAmount(otherSourcesHere, timelineMonth, effectiveTaxRate)
+                            );
                             return (
                               <>
                                 <p className="flex justify-between">
