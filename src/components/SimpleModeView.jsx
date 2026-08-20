@@ -42,7 +42,7 @@ const SimpleModeView = ({
   monthlyPersonalExpenses,
   // Health Check subset (classifications already computed, incl. TODO-134
   // Day-1/Stabilized annotations)
-  housingCostRatio, housingCostRatioClass,
+  housingCostRatio, housingCostRatioClass, totalMonthlyIncomeBeforeTax,
   stressTestSurvivedDelta, stressTestClass,
   emergencyBufferMonths, emergencyBufferClass, liquidSavings,
   // Disclosure of what's included but not editable here
@@ -151,11 +151,22 @@ const SimpleModeView = ({
           Standard rules of thumb, not financial advice. Advanced mode shows the full set of indicators.
         </p>
 
+        {/* TODO-151: the only indicator in Simple mode that needs a tooltip.
+            The "Income in" line above shows NET income, but this ratio is
+            measured against before-tax income, so a user who divides the two
+            figures on screen gets a different number and concludes the app is
+            broken - the same mental-math complaint TODO-60's tooltip exists to
+            answer. HealthCheckIndicator only renders a tooltip when given
+            children, which is why the other two here still have none. */}
         <HealthCheckIndicator
           label="Housing Cost Ratio"
+          tooltipLabel="Why doesn't this match my own arithmetic?"
           valueDisplay={`${housingCostRatio.toFixed(0)}%`}
           classification={housingCostRatioClass}
-        />
+        >
+          <p>Measured against your <strong>before-tax</strong> income, not the net figure shown above, because the thresholds are the standard housing-stress benchmark and that benchmark is defined on gross income.</p>
+          <p className="mt-2">{money(totalMonthlyIncomeBeforeTax)}/month before tax vs {money(totalMonthlyIncome)}/month net. Advanced mode explains how the two relate.</p>
+        </HealthCheckIndicator>
         <HealthCheckIndicator
           label="Interest Rate Stress Test"
           valueDisplay={stressTestSurvivedDelta > 0 ? `Survives +${stressTestSurvivedDelta}%` : 'Fails at +1%'}

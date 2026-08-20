@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import '../test/reactTestSetup';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SimpleModeView from './SimpleModeView';
 
@@ -34,7 +34,10 @@ function makeProps(overrides = {}) {
     monthlyRentalIncome: 0,
     totalPropertyCost: 3844,
     monthlyPersonalExpenses: 680,
-    housingCostRatio: 55, housingCostRatioClass: GREEN,
+    // TODO-151: before-tax income, the denominator Housing Cost Ratio is
+    // measured against. $6,994 net grossed up at 20% - the shipped default.
+    // Omitting it renders a literal "$NaN" in the indicator's tooltip.
+    housingCostRatio: 44, housingCostRatioClass: GREEN, totalMonthlyIncomeBeforeTax: 8743,
     stressTestSurvivedDelta: 3, stressTestClass: GREEN,
     emergencyBufferMonths: 6.3, emergencyBufferClass: GREEN,
     incomeSourceCount: 1,
@@ -62,6 +65,31 @@ describe('SimpleModeView', () => {
     expect(screen.queryByText('Gearing')).not.toBeInTheDocument();
     expect(screen.queryByText('Vacancy Buffer')).not.toBeInTheDocument();
     expect(screen.queryByText('Upfront Cost Ratio')).not.toBeInTheDocument();
+  });
+
+  // TODO-151 gave Housing Cost Ratio the only tooltip in Simple mode, because
+  // this view shows NET income on screen while the ratio is measured against
+  // before-tax income - a user who divides the two visible figures otherwise
+  // gets a different number and concludes the app is broken.
+  //
+  // Added on review of PCALC-100, which changed this component without touching
+  // its test: `money(undefined)` renders the literal string "$NaN", so a
+  // missing prop was silently shipping "$NaN/month before tax" in every render
+  // here with nothing to catch it.
+  it('reconciles the before-tax and net figures in the Housing Cost Ratio tooltip', () => {
+    render(<SimpleModeView {...makeProps()} />);
+    const row = screen.getByText('Housing Cost Ratio').closest('div').parentElement;
+    const tooltip = within(row).getByRole('tooltip');
+    expect(tooltip).toHaveTextContent('$8,743/month before tax vs $6,994/month net');
+    expect(tooltip.textContent).not.toContain('NaN');
+  });
+
+  it('gives the other two indicators no tooltip - only this one needs reconciling', () => {
+    render(<SimpleModeView {...makeProps()} />);
+    for (const label of ['Interest Rate Stress Test', 'Emergency Buffer']) {
+      const row = screen.getByText(label).closest('div').parentElement;
+      expect(within(row).queryByRole('tooltip')).not.toBeInTheDocument();
+    }
   });
 
   it('exposes the six core inputs as editable controls', () => {

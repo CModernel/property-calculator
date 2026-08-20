@@ -4766,44 +4766,6 @@ optionally reuse in the commit message when you implement it.
   still opens it for power users. Added App-level coverage for the default
   collapsed state and expand/collapse interaction.
 
-- [ ] **TODO-151 (needs a product call before coding - biggest blast radius): Housing Cost Ratio applies gross-income bands to a net-income figure**
-  Found in the same audit, and it is the reason the indicator feels stuck on
-  red. `HOUSING_COST_RATIO_BANDS` uses the standard 30/40/50% thresholds, and
-  that rule of thumb (the "30% rule", and the housing-stress "30/40 rule") is
-  defined on **gross** household income - as is any lender's serviceability
-  assessment. But the app's income sources default to net/take-home (the
-  "This is a gross (pre-tax) amount" checkbox is off by default), so the
-  denominator is net while the thresholds assume gross. At a 20% effective
-  rate, 30% of gross is about 37.5% of net, making the bands roughly a quarter
-  stricter than the benchmark they cite.
-  Concrete evidence of the distortion: the **shipped default scenario** reads
-  55% -> "High risk" 🔴 while simultaneously running a **+$2,470/month
-  surplus**. It takes a $3,000/week salary to reach "Excellent". An indicator
-  whose out-of-the-box state is a false alarm trains users to ignore it.
-  Three ways out, to choose between explicitly:
-  1. **Gross up the denominator for this indicator only** (recommended). The
-     inputs already exist - each income item carries `isGross`, and
-     `effectiveTaxRate` is a user-set flat rate, so `gross = net / (1 - rate)`
-     is recoverable rather than circular (unlike the case TODO-122 rejected,
-     which had no rate to work from). Bands keep their standard meaning and
-     the tooltip's "30% rule" reference stays true. Caveat to state in the
-     tooltip: the grossed-up figure is only as good as the flat rate.
-     Note this makes the indicator move with Effective Tax Rate for the first
-     time, which is a visible behaviour change in its own right.
-  2. **Recalibrate the bands for net income.** Avoids synthesising a gross
-     figure, but the thresholds stop matching any published benchmark and
-     would arguably have to shift with the tax rate, which is worse.
-  3. **Leave the maths, fix the copy** - relabel it as a net-income ratio and
-     drop the "30% rule" framing. Cheapest, but keeps shipping a default
-     scenario that reads High risk at a healthy surplus.
-  Whichever wins, the Stabilized reading (TODO-134) must use the same
-  convention as Day 1.
-  **Tests**: every HCR expectation in TODO-147's matrix changes, so update
-  them deliberately as part of this item rather than in bulk; add cases at
-  `effectiveTaxRate` 0 (gross == net, so option 1 must be a no-op) and at a
-  high rate; and add a case asserting the shipped default scenario no longer
-  classifies as High risk while in surplus - the symptom that opened this.
-
 - [x] **TODO-139: Meaningful slider colors based on financial impact**
   Added a new `impact` prop to `NumberSliderField` (`'negative'|'positive'|
   'neutral'`), additive to the existing decorative `color` - `color` still
@@ -5233,6 +5195,156 @@ optionally reuse in the commit message when you implement it.
   reverted to the old no-growth expressions, confirmed the Personal Income
   assertion failed with the exact pre-fix number ($6,994 vs $8,124), restored.
   Suite 796 passing, lint and build clean, no Spanish text in changed files.
+
+- [x] **TODO-151: Housing Cost Ratio applied gross-income bands to a net-income figure**
+  `HOUSING_COST_RATIO_BANDS`' 30/40/50 thresholds - and every lender's
+  serviceability assessment - are defined on **gross** income, but the app's
+  income sources default to take-home, so the bands were about a quarter
+  stricter than the benchmark they represent. Symptom: the shipped default read
+  **55% "High risk" 🔴** while running a **+$2,470/month surplus**.
+  **Now measured against before-tax income**, so the default reads **44%
+  "Caution" 🟠**. Deliberately NOT green - 44% of gross on housing genuinely is
+  caution territory - but no longer a false alarm, and `critical` is now false.
+  **Four decisions locked with the user before coding:**
+  1. **Gross up the denominator** (`gross = net / (1 - rate)`) rather than
+     recalibrating the bands for net income or fixing only the copy. The only
+     principled option: the bands keep the meaning they cite.
+  2. **Only where tax is WITHHELD AT SOURCE**, which turned out to be the real
+     test rather than "is it taxable". New `TAXABLE_INCOME_CATEGORIES` whitelist
+     in `incomeCategories.js` - the first place a category affects tax treatment
+     in this app. Excludes Government Benefits, Child Support, Tax Refund, Gift
+     and Pension (super pension is tax-free after 60; the Age Pension usually
+     sits under the effective threshold with SAPTO). A whitelist so a category
+     added later defaults to non-taxable, and so an `'Other'` item - which
+     stores free text in `name` - never matches. Erring strict is the point:
+     grossing up income nobody withheld from FABRICATES it, making a risk
+     indicator read optimistically for the users with the least margin.
+  3. **Rate source is the existing flat `effectiveTaxRate` slider**, not ATO
+     bracket inversion, so it respects the rate the user set deliberately.
+  4. **Rental Yield was in scope too.** TODO-150 had left a comment recording
+     that it had the same defect on the tax axis and deferring it here by name.
+     It is now quoted before tax AND before vacancy, matching its 3%/5% gross
+     benchmark. That also resolved TODO-150's naming caveat: the figure is
+     genuinely gross on both axes now, so `…BeforeVacancy` became
+     `…BeforeTaxAndVacancy` and the caveat paragraph was deleted, not amended.
+  **Mid-implementation correction, caught by wiring it up:** the design review
+  recommended INCLUDING rental categories in the whitelist (they're taxable).
+  That was wrong, and the user was consulted: rent has **no withholding** - the
+  tenant pays $600 and the landlord receives $600 - so dividing by `(1 - rate)`
+  invents $150/week nobody paid. Rental yield is rent over price where rent is
+  an observable market figure, and lender serviceability assesses the actual
+  rent. Excluding rent also left TODO-150's two failing tests passing untouched,
+  which was independent confirmation.
+  **New `src/calculations/grossIncome.js`** (`isGrossUppable`,
+  `calculateGrossUpFactor`, `getGrossActiveAmount`, and a growth-aware sibling).
+  Three groups, three treatments: an `isGross`-marked item is taken at face
+  value (its stored amount already IS pre-tax - dividing again would inflate it
+  twice), a non-gross withheld-from item is divided, and everything else is left
+  alone. Deliberately its OWN module rather than a sibling of `getNetAmount`:
+  `incomeCategories.js` imports `MAX_MONTH` from `recurringAmount.js` and
+  dereferences it at module-evaluation time, so a taxability-aware helper living
+  there would close an import cycle whose failure is order-dependent - the app
+  would crash on boot while a unit test importing `incomeCategories` first
+  would pass.
+  **Two design-review corrections adopted into code already written:**
+  - Written as an **additive delta** on the untouched full-array sum rather than
+    as two sums over two subsets. Reads like a micro-optimisation, is actually
+    an exactness guarantee: float addition isn't associative, so partitioning
+    could differ in the last bit. The delta form makes the 0%-rate case
+    **bitwise** equal to the net figure, pinnable with `toBe`.
+  - `calculateGrossUpFactor` **clamps at `rate >= 100`**, deliberately unlike
+    `vacancyFactor.js`'s documented "not clamped". Reachable from a hand-edited
+    or stale saved scenario (the slider clamps to 90, the initial value gets no
+    validation), and unclamped it gives an Infinite denominator → HCR 0% →
+    "Excellent, plenty of headroom": falsely reassuring, the one direction a
+    risk indicator must never fail in.
+  **Knock-on consequences handled rather than discovered later:**
+  - The indicator now moves with Effective Tax Rate, and *improves* as the rate
+    rises (a higher assumed rate implies a bigger gross salary behind the same
+    take-home). The slider stays `impact="negative"` (TODO-139) because that is
+    about cash flow, and its tooltip now explains the interaction.
+  - That slider's tooltip promised *"Only affects income sources checked Gross"*
+    - now false, rewritten.
+  - The ⚠️ critical banner does **not** disappear on the default scenario:
+    `healthCheckHasCritical` is `fhbConcessionLost || …` and NSW FHB duty at
+    $850k is $9,797 > 0, so it was already independently triggered. Pinned in a
+    test so nobody later "notices" the banner and reverts this.
+  - **Simple mode got its only tooltip.** It shows net "Income in" on screen next
+    to a 44% ratio, so a user who divides gets 55% and concludes the app is
+    broken - the same mental-math complaint TODO-60 exists to answer. The
+    Advanced tooltip also now quotes both figures ($6,994 net → $8,743).
+  **Tests**: 61 new (796 -> 857). New `grossIncome.test.js` (24, incl. the
+  bitwise no-op, the clamp, and a round-trip proving a Gross-marked $1,000 and a
+  net $800 agree) and `App.grossHousingCostRatio.test.jsx` (6), plus 26 in
+  `purchaseHealthCheck.scenarios.test.js` and 5 in
+  `projectedHealthCheck.test.js`. All 12 MATRIX HCR values re-pinned (each
+  `old × 0.8`; **five** changed label - all four of the 55% rows, baseline
+  included, went `High risk → 44 Caution`, and the cheap-property row went
+  `34 Good → 27 Excellent`), with a new
+  `HCR0` column and a rate-0 `it.each` that keeps the original 2026-08-17 audit
+  figures alive as an exact no-op guard instead of deleting them. The
+  load-bearing `'effectiveTaxRate changes nothing'` test was **narrowed, not
+  deleted**, to "changes nothing OUTSIDE Housing Cost Ratio", omitting the two
+  HCR keys rather than allow-listing the rest so future fields stay covered -
+  it now pins that the change was surgical.
+  Verified all four moving parts catch a real regression by reverting each
+  separately: the gross-up itself (4 App tests failed showing the original
+  `🔴 55%`), the rental exclusion (7 failures across 3 files), the `>= 100`
+  clamp (3), and the `isGross` face-value branch (5).
+  Scope held: `offsetSimulation.js` diff is **empty** - the simulation still
+  reads only net income, keeping TODO-122's boundary intact - and the donut's
+  `expenseRatio`, which uses the *identical* `monthlyIncome + monthlyRentalIncome`
+  expression 40 lines above HCR, deliberately still does.
+  Suite 857 passing, lint and build clean, no Spanish text in changed files.
+  **CORRECTION (review of PCALC-100, requested by the user).** A second pass
+  over the shipped commit found the change correct and correctly scoped, but
+  turned up six things worth recording rather than quietly fixing:
+  1. **A real latent bug.** `SimpleModeView.jsx` gained a required
+     `totalMonthlyIncomeBeforeTax` prop but `SimpleModeView.test.jsx` was never
+     touched, so its fixture omitted it and `money(undefined)` rendered a literal
+     **"$NaN/month before tax"** in all 10 of that file's passing tests -
+     `InfoTooltip` always mounts its children, so the text was genuinely in the
+     DOM with nothing asserting it. Fixture fixed and two component tests added.
+  2. **The ticket's Stabilized requirement shipped effectively untested.** The
+     wiring was right, but the only thing standing on it was an incidental
+     symbol flip in the 40%-rate test (via `worseOf`); the Stabilized VALUE was
+     asserted nowhere, and on the default scenario reverting the denominator to
+     net went completely unnoticed. Two direct tests added, pinning "stabilizes
+     to 39%" before tax vs 48% net.
+  3. **`TAXABLE_INCOME_CATEGORIES` contradicted the rule documented beside it.**
+     The comment said the test was "withheld at source" - which is what
+     correctly excluded rent - but the list included `Dividends` and `Interest`,
+     where a resident quoting a TFN has nothing withheld and the amount received
+     already IS the gross. Both removed; the rule reworded to state its two
+     genuine criteria (withheld at source, OR plausibly entered post-tax, which
+     is what keeps the self-employment trio in). No MATRIX row moved.
+  4. **Two comments were left factually wrong by the change.** One still listed
+     "Rental Yield's value" among the sites reading the pre-vacancy figure after
+     this commit had moved it; the other pointed at `grossTotalMonthlyIncome`, a
+     draft name that never existed in the shipped code.
+  5. **Three factual errors in this very entry**, now corrected above: the test
+     count ("32" -> 61), the label-change count ("two" -> five, which I should
+     have caught precisely *because* four rows shared 55%), and the FHB duty
+     figure ($9,796 -> $9,797, which is what the app itself renders).
+  6. **Robustness**: `grossIncome.js`'s helpers now short-circuit when the
+     gross-up delta is 0. Not a micro-optimisation - `0 * NaN` is `NaN`, so a
+     single malformed `amount` could otherwise break the documented no-op at a
+     0% rate, where nothing should be able to change the answer.
+  Also added the coverage the original commit should have had: a
+  `TAXABLE_INCOME_CATEGORIES` block in `incomeCategories.test.js` including a
+  guard that **fails when a new picklist category is classified in neither
+  bucket** (they were silently defaulting to non-taxable) and one pinning the
+  disjointness from `RENTAL_INCOME_CATEGORIES` that `grossIncome.js` relies on;
+  a cross-module Day-1 invariant built from `getGrossActiveAmount` rather than
+  hand-derived constants, checking App.jsx's two-way income split against the
+  projected module's three-way one; and a test documenting that the two readings
+  scale by *different* factors when the income mix changes between them (a
+  non-grossable Gift expiring), which is correct but reads like a bug.
+  One consequence of the fix worth stating for anyone who remembers the old
+  heuristic: the ticket's "it takes a $3,000/week salary to reach Excellent" is
+  now stale - since every salary-only ratio scales by `(1 - rate)`, the boundary
+  moved to roughly **$2,365/week**.
+  Suite 874 passing, lint and build clean.
 
 ---
 

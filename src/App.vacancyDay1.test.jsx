@@ -115,7 +115,13 @@ describe('Day-1 vacancy haircut (TODO-150)', () => {
     const yieldAtZero = primary(yieldRow());
     const hcrAtZero = primary(hcrRow());
 
-    await setVacancy(user, 4);
+    // 52 rather than 4 weeks: TODO-151 made Housing Cost Ratio's denominator
+    // before-tax, so the rent's share of it shrank and a 4-week haircut no
+    // longer always survives rounding to a whole percent. Going to the slider's
+    // max drops the rent contribution to zero outright, which keeps this
+    // assertion about the behaviour rather than about a rounding boundary. The
+    // Rental Yield half is unaffected either way - that's the point of it.
+    await setVacancy(user, 52);
 
     expect(primary(yieldRow())).toBe(yieldAtZero);
     expect(primary(hcrRow())).not.toBe(hcrAtZero);

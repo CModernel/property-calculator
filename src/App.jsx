@@ -47,6 +47,7 @@ import { calculatePresentValueOfInterest } from './calculations/inflation';
 import { clampToRange } from './calculations/clampToRange';
 import { safePercentage } from './calculations/safePercentage';
 import { calculateVacancyFactor } from './calculations/vacancyFactor';
+import { getGrossActiveAmount } from './calculations/grossIncome';
 import { estimateLmi } from './calculations/lmi';
 import { sumClosingCosts } from './calculations/closingCosts';
 import { getStateModule } from './calculations/states';
@@ -633,19 +634,36 @@ const PropertyInvestmentCalculator = () => {
   // would just re-create the same divergence one layer down.
   //
   // The plain names carry the ADJUSTED figure so every consumer gets the
-  // haircut by default. Exactly three sites want the pre-vacancy figure, all
-  // of them below, and all for a reason other than "how much cash arrives":
-  //   1. Rental Yield's value  - quoted gross of vacancy, matching its bands
-  //   2. Rental Yield's data gate - "did you enter a rent?", not "how much?"
-  //   3. Property Summary's render gate - same data-presence question
-  // Sites 2 and 3 matter because the slider allows 52 weeks (factor exactly 0),
-  // which would otherwise read as "no rental income entered" and silently hide
-  // both the indicator and the whole card.
+  // haircut by default. Only two sites want the pre-vacancy figure, and both
+  // ask a data-presence question ("did you enter a rent?") rather than "how
+  // much cash arrives": Rental Yield's own gate, and the Property Summary
+  // card's render gate. Both matter because the slider allows 52 weeks (factor
+  // exactly 0), which would otherwise read as "no rental income entered" and
+  // silently hide the indicator and the whole card. Rental Yield's VALUE used
+  // to be a third site here; PCALC-100 moved it to the before-tax figure below.
+  const vacancyFactor = calculateVacancyFactor(vacancyWeeksPerYear);
   const weeklyRentalIncomeBeforeVacancy = getActiveAmount(incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
-  const weeklyRentalIncome = weeklyRentalIncomeBeforeVacancy * calculateVacancyFactor(vacancyWeeksPerYear);
+  const weeklyRentalIncome = weeklyRentalIncomeBeforeVacancy * vacancyFactor;
   const hasRentalIncome = weeklyRentalIncomeBeforeVacancy > 0;
   const monthlyIncome = calculateMonthlyFromWeekly(weeklyIncome);
   const monthlyRentalIncome = calculateMonthlyFromWeekly(weeklyRentalIncome);
+  const totalMonthlyIncome = monthlyIncome + monthlyRentalIncome;
+
+  // TODO-151: the BEFORE-TAX counterparts, used by exactly two indicators whose
+  // bands cite an externally-defined pre-tax benchmark - Housing Cost Ratio
+  // (30/40/50) and Rental Yield (3%/5%). Everything else on this page is about
+  // actual cash and keeps the net figures above; see the note at
+  // `totalMonthlyIncomeBeforeTax` for the one expression these must NOT be
+  // unified with. At a 0% rate these are bitwise equal to the net figures.
+  //
+  // The rental call passes `effectiveTaxRate` for shape-consistency with the
+  // non-rental one, but it can never matter: TAXABLE_INCOME_CATEGORIES and
+  // RENTAL_INCOME_CATEGORIES are disjoint (pinned in incomeCategories.test.js),
+  // so rent is always taken at face value here.
+  const weeklyIncomeBeforeTax = getGrossActiveAmount(incomeSources.filter(i => !RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
+  const weeklyRentalIncomeBeforeTaxAndVacancy = getGrossActiveAmount(incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
+  const monthlyIncomeBeforeTax = calculateMonthlyFromWeekly(weeklyIncomeBeforeTax);
+  const monthlyRentalIncomeBeforeTax = calculateMonthlyFromWeekly(weeklyRentalIncomeBeforeTaxAndVacancy * vacancyFactor);
 
   // TODO-122: a suggested Effective Tax Rate from real ATO brackets and the
   // user's own Gross-marked income. Display only - nothing here feeds the
@@ -791,7 +809,7 @@ const PropertyInvestmentCalculator = () => {
   // paint a reassuring all-green ring for someone earning nothing.
   const expenseRatio = Math.min(
     100,
-    safePercentage(totalPropertyCost + monthlyPersonalExpenses, monthlyIncome + monthlyRentalIncome, 100)
+    safePercentage(totalPropertyCost + monthlyPersonalExpenses, totalMonthlyIncome, 100)
   );
 
   // Purchase Health Check panel (TODO-68/69/70) - all "month 1"/"right now"
@@ -817,8 +835,23 @@ const PropertyInvestmentCalculator = () => {
   const stabilizedEmergencyBufferMonths = calculateEmergencyBufferMonths(liquidSavings, projectedTotalPropertyCost + projected.monthlyPersonalExpenses);
   const emergencyBufferClass = classifyEmergencyBuffer(worseOf(emergencyBufferMonths, stabilizedEmergencyBufferMonths, 'higherIsBetter'));
 
-  const housingCostRatio = calculateHousingCostRatio(totalPropertyCost, monthlyIncome + monthlyRentalIncome);
-  const stabilizedHousingCostRatio = calculateHousingCostRatio(projectedTotalPropertyCost, projected.monthlyIncome + projected.monthlyRentalIncome);
+  // TODO-151: measured against GROSS income, because HOUSING_COST_RATIO_BANDS'
+  // 30/40/50 thresholds - and every lender's serviceability assessment - are
+  // defined on pre-tax income, while this app's income sources default to
+  // take-home. Comparing a net figure to gross-defined bands made them about a
+  // quarter stricter than the benchmark they represent, which is why the
+  // shipped default scenario read 55% "High risk" while running a healthy
+  // monthly surplus.
+  //
+  // NOTE the deliberately distinct name: `expenseRatio` above (the donut) uses
+  // the NET `monthlyIncome + monthlyRentalIncome`, and correctly so - it's a
+  // "where does my actual money go" ring. These two expressions must not be
+  // unified. Every other indicator likewise stays on net income; only this one
+  // and Rental Yield cite an externally-defined gross benchmark.
+  const totalMonthlyIncomeBeforeTax = monthlyIncomeBeforeTax + monthlyRentalIncomeBeforeTax;
+  const stabilizedTotalMonthlyIncomeBeforeTax = projected.monthlyIncomeBeforeTax + projected.monthlyRentalIncomeBeforeTax;
+  const housingCostRatio = calculateHousingCostRatio(totalPropertyCost, totalMonthlyIncomeBeforeTax);
+  const stabilizedHousingCostRatio = calculateHousingCostRatio(projectedTotalPropertyCost, stabilizedTotalMonthlyIncomeBeforeTax);
   const housingCostRatioClass = classifyHousingCostRatio(worseOf(housingCostRatio, stabilizedHousingCostRatio, 'higherIsWorse'));
 
   const stressTestSurvivedDelta = calculateStressTestSurvivedDelta({
@@ -859,19 +892,23 @@ const PropertyInvestmentCalculator = () => {
   const stabilizedVacancyBufferMonths = calculateVacancyBufferMonths(liquidSavings, projected.monthlyPayment + projected.monthlyPropertyExpenses);
   const vacancyBufferClass = classifyVacancyBuffer(worseOf(vacancyBufferMonths, stabilizedVacancyBufferMonths, 'higherIsBetter'));
 
-  // TODO-150: the ONE indicator that deliberately reads the pre-vacancy figure
-  // on BOTH readings. "Gross rental yield" is the standard quoted metric and
-  // the 3%/5% bands below cite that gross benchmark - netting it for vacancy
-  // would make the bands wrong by definition, which is exactly the defect
-  // TODO-151 exists to fix in Housing Cost Ratio. Honest caveat: this is gross
-  // of VACANCY only - it's still net of effectiveTaxRate for any income item
-  // marked "gross (pre-tax)" (pre-existing, TODO-94), so TODO-151's question
-  // applies here too.
+  // TODO-150/151: the ONE indicator that deliberately reads a figure quoted
+  // before BOTH the vacancy haircut and tax, on both readings. "Gross rental
+  // yield" is the standard quoted metric and the 3%/5% bands below cite that
+  // gross benchmark, so applying either haircut would make the bands wrong by
+  // definition - the same defect TODO-151 fixed in Housing Cost Ratio.
+  // TODO-150 closed the vacancy half and left a note that the tax half was
+  // still open; TODO-151 closed it, which is why the caveat that used to sit
+  // here is gone rather than amended.
+  //
+  // The data-presence gate deliberately keeps reading the pre-vacancy figure:
+  // `> 0` is unaffected by these positive multipliers, so the 52-week edge case
+  // TODO-150 fixed (a 0 factor reading as "no rent entered") stays covered.
   const rentalYieldHasData = hasEnoughDataForRentalYield(weeklyRentalIncomeBeforeVacancy);
-  const rentalYield = calculateRentalYield(weeklyRentalIncomeBeforeVacancy, propertyPrice);
+  const rentalYield = calculateRentalYield(weeklyRentalIncomeBeforeTaxAndVacancy, propertyPrice);
   // Inverse of calculateMonthlyFromWeekly (weekly * 52 / 12) - no dedicated
   // helper exists, and adding one for this single call site isn't warranted.
-  const stabilizedWeeklyRentalIncome = projected.monthlyRentalIncomeBeforeVacancy * 12 / 52;
+  const stabilizedWeeklyRentalIncome = projected.monthlyRentalIncomeBeforeTaxAndVacancy * 12 / 52;
   const stabilizedRentalYield = calculateRentalYield(stabilizedWeeklyRentalIncome, propertyPrice);
   const rentalYieldClass = rentalYieldHasData ? classifyRentalYield(worseOf(rentalYield, stabilizedRentalYield, 'higherIsBetter')) : null;
 
@@ -1253,7 +1290,7 @@ const PropertyInvestmentCalculator = () => {
           monthlyRentalIncome={monthlyRentalIncome}
           totalPropertyCost={totalPropertyCost}
           monthlyPersonalExpenses={monthlyPersonalExpenses}
-          housingCostRatio={housingCostRatio} housingCostRatioClass={housingCostRatioClass}
+          housingCostRatio={housingCostRatio} housingCostRatioClass={housingCostRatioClass} totalMonthlyIncomeBeforeTax={totalMonthlyIncomeBeforeTax}
           stressTestSurvivedDelta={stressTestSurvivedDelta} stressTestClass={stressTestClass}
           emergencyBufferMonths={emergencyBufferMonths} emergencyBufferClass={emergencyBufferClass} liquidSavings={liquidSavings}
           incomeSourceCount={incomeSources.length}
@@ -1529,7 +1566,7 @@ const PropertyInvestmentCalculator = () => {
                   impact="negative"
                   suffix="%"
                 >
-                  Only affects income sources checked "Gross (pre-tax)" below - converts them to net using this rate. Defaults to 20%. If you enter every income figure as net (take-home), set this to 0% and it becomes a no-op. Simplification: applied smoothly every month (PAYG-style), not as an annual tax return - typically well under 5% off for salary-only income, more with substantial Gross rental/investment income on top.
+                  Converts any income source checked "Gross (pre-tax)" below into net using this rate. It also works in reverse for <strong>only the Housing Cost Ratio</strong>, which is measured against before-tax income: a net-entered salary is grossed up by this rate to compare against that indicator's standard pre-tax thresholds. Defaults to 20%. If you enter every income figure as net (take-home), set this to 0% and it becomes a complete no-op. Simplification: applied smoothly every month (PAYG-style), not as an annual tax return - typically well under 5% off for salary-only income, more with substantial Gross rental/investment income on top.
                 </NumberSliderField>
 
                 <div className="mt-2 p-2 rounded-lg bg-purple-50 dark:bg-purple-950 border border-purple-100 dark:border-purple-800 text-xs">
@@ -3470,7 +3507,11 @@ const PropertyInvestmentCalculator = () => {
                   secondaryValueDisplay={`${stabilizedArrow(housingCostRatio, stabilizedHousingCostRatio, 'higherIsWorse')} stabilizes to ${stabilizedHousingCostRatio.toFixed(0)}%`}
                   classification={housingCostRatioClass}
                 >
-                  <p>Total property cost (loan repayment + property expenses) as a share of your total monthly income.</p>
+                  <p>Total property cost (loan repayment + property expenses) as a share of your total <strong>before-tax</strong> monthly income.</p>
+                  <p className="mt-2">Before-tax, because the thresholds below are the standard housing-stress benchmark, which is defined on gross income - as is any lender's serviceability assessment.{effectiveTaxRate > 0
+                    ? <> Your ${Math.round(totalMonthlyIncome).toLocaleString()}/month of net income counts as <strong>${Math.round(totalMonthlyIncomeBeforeTax).toLocaleString()}</strong> here, grossed up at your {effectiveTaxRate}% Effective Tax Rate - so this figure is only as good as that flat rate.</>
+                    : ' Your Effective Tax Rate is 0%, so nothing is grossed up and this reads exactly as your entered income.'}</p>
+                  <p className="mt-2">Income that has no tax withheld from it is counted exactly as entered, never grossed up - rent (the tenant pays what you entered), government benefits, child support, gifts, tax refunds and pensions. Anything you marked "Gross (pre-tax)" is used as-is.</p>
                   <p className="mt-2">Any rental income in that total is counted after your Vacancy assumption, matching the projection.</p>
                   <p className="mt-2">&lt;30% excellent, 30-40% good, 40-50% caution, ≥50% high risk.</p>
                   <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled - with growth rates applied.</p>
@@ -3541,7 +3582,7 @@ const PropertyInvestmentCalculator = () => {
                         classification={rentalYieldClass}
                       >
                         <p>Annualized rental income (House Rent/Room Rent) as a share of the property price.</p>
-                        <p className="mt-2">Quoted <strong>before</strong> the Vacancy assumption, unlike the other indicators - the bands below are the standard gross-yield benchmark, so netting it for vacancy would make them mean something different from what they cite.</p>
+                        <p className="mt-2">Quoted <strong>before tax and before</strong> the Vacancy assumption, unlike the other indicators - the bands below are the standard gross-yield benchmark, so applying either haircut would make them mean something different from what they cite.</p>
                         <p className="mt-2">&lt;3% weak, 3-5% average, ≥5% strong.</p>
                         <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled - with growth rates applied.</p>
                       </HealthCheckIndicator>

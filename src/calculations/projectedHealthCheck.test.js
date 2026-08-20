@@ -7,6 +7,8 @@ import {
 } from './projectedHealthCheck';
 import { calculateCompoundedValue } from './growthRate';
 import { calculateVacancyFactor } from './vacancyFactor';
+import { getGrossActiveAmount } from './grossIncome';
+import { RENTAL_INCOME_CATEGORIES } from './incomeCategories';
 
 // getActiveAmountWithGrowth's multiplier is `(1 + monthlyRate) ** month` -
 // already one month of compounding at month 1, not a no-op (matches
@@ -164,9 +166,13 @@ describe('resolveProjectedFinancials', () => {
       expect(projected.monthlyIncome).toBeCloseTo(2000 * 52 / 12, 5);
     });
 
+    // TODO-151 renamed this field from monthlyRentalIncomeBeforeVacancy: it is
+    // now gross of tax as well as of vacancy, so "Gross" became the accurate
+    // word (TODO-150 had avoided it precisely because the figure was still net
+    // of tax back then).
     it('exposes the pre-vacancy rental figure for Rental Yield, unaffected by vacancy', () => {
       const gross = [0, 4, 52].map(
-        (weeks) => resolveProjectedFinancials(1, { ...NO_GROWTH, vacancyWeeksPerYear: weeks }).monthlyRentalIncomeBeforeVacancy
+        (weeks) => resolveProjectedFinancials(1, { ...NO_GROWTH, vacancyWeeksPerYear: weeks }).monthlyRentalIncomeBeforeTaxAndVacancy
       );
       expect(gross[1]).toBeCloseTo(gross[0], 5);
       expect(gross[2]).toBeCloseTo(gross[0], 5);
@@ -178,7 +184,117 @@ describe('resolveProjectedFinancials', () => {
     it('still reports the pre-vacancy figure when the adjusted one is 0 at 52 weeks', () => {
       const neverRented = resolveProjectedFinancials(1, { ...NO_GROWTH, vacancyWeeksPerYear: 52 });
       expect(neverRented.monthlyRentalIncome).toBe(0);
-      expect(neverRented.monthlyRentalIncomeBeforeVacancy).toBeGreaterThan(0);
+      expect(neverRented.monthlyRentalIncomeBeforeTaxAndVacancy).toBeGreaterThan(0);
+    });
+
+    // TODO-151's before-tax fields, held to the same standard. Added on review
+    // of PCALC-100, whose own tests compared against hand-derived constants like
+    // `(2000 / 0.8) * 52 / 12` - that only proves the module is self-consistent.
+    // Building the expectation from getGrossActiveAmount instead cross-checks
+    // TWO partitions against each other: App.jsx splits income two ways
+    // (rental vs not) while this module splits it three ways (salary / rental /
+    // other), and those two partitions agreeing is the riskiest part of the
+    // change. The salary+other buckets here must sum to App.jsx's non-rental one.
+    it.each([0, 20, 45, 100])('resolves before-tax income identically to App.jsx Day-1 at a %i%% rate', (rate) => {
+      const params = { ...NO_GROWTH, effectiveTaxRate: rate };
+      const projected = resolveProjectedFinancials(1, params);
+
+      const nonRental = params.incomeSources.filter((i) => !RENTAL_INCOME_CATEGORIES.includes(i.name));
+      const rental = params.incomeSources.filter((i) => RENTAL_INCOME_CATEGORIES.includes(i.name));
+      const day1NonRental = getGrossActiveAmount(nonRental, 1, rate);
+      const day1Rental = getGrossActiveAmount(rental, 1, rate);
+
+      expect(projected.monthlyIncomeBeforeTax).toBeCloseTo(day1NonRental * 52 / 12, 5);
+      expect(projected.monthlyRentalIncomeBeforeTax).toBeCloseTo(day1Rental * calculateVacancyFactor(NO_GROWTH.vacancyWeeksPerYear) * 52 / 12, 5);
+      expect(projected.monthlyRentalIncomeBeforeTaxAndVacancy).toBeCloseTo(day1Rental * 52 / 12, 5);
+    });
+  });
+
+  // TODO-151: the pre-tax fields feeding Housing Cost Ratio and Rental Yield,
+  // whose bands are both defined on gross income.
+  describe('gross (pre-tax) fields (TODO-151)', () => {
+    const GROSS_MARKED = {
+      ...SNAPSHOT_PARAMS,
+      salaryGrowthRate: 0, rentGrowthRate: 0, expenseGrowthRate: 0,
+      incomeSources: [
+        { name: 'Salary/Wages', amount: 2000, startMonth: 1, recurrence: 'monthly', endMonth: 360, isGross: true },
+        { name: 'House Rent', amount: 400, startMonth: 1, recurrence: 'monthly', endMonth: 360, isGross: true },
+      ],
+    };
+
+    it('equals the net fields exactly at a 0% tax rate', () => {
+      const at0 = resolveProjectedFinancials(1, { ...SNAPSHOT_PARAMS, effectiveTaxRate: 0 });
+      expect(at0.monthlyIncomeBeforeTax).toBeCloseTo(at0.monthlyIncome, 5);
+      expect(at0.monthlyRentalIncomeBeforeTax).toBeCloseTo(at0.monthlyRentalIncome, 5);
+    });
+
+    it('grosses a net-entered salary up by the flat rate', () => {
+      const at20 = resolveProjectedFinancials(1, {
+        ...SNAPSHOT_PARAMS, salaryGrowthRate: 0, rentGrowthRate: 0, effectiveTaxRate: 20,
+      });
+      expect(at20.monthlyIncomeBeforeTax).toBeCloseTo((2000 / 0.8) * 52 / 12, 5);
+      // The net field is untouched by the rate for a non-gross item - that's
+      // the asymmetry TODO-151 exists to reconcile for the banded indicators.
+      expect(at20.monthlyIncome).toBeCloseTo(2000 * 52 / 12, 5);
+    });
+
+    // For a Gross-marked item the stored amount already IS pre-tax, so the
+    // gross field must report it unchanged while the net field deducts tax.
+    it('reports a Gross-marked item at face value while the net field nets it down', () => {
+      const at20 = resolveProjectedFinancials(1, { ...GROSS_MARKED, effectiveTaxRate: 20 });
+      expect(at20.monthlyIncomeBeforeTax).toBeCloseTo(2000 * 52 / 12, 5);
+      expect(at20.monthlyIncome).toBeCloseTo(2000 * 0.8 * 52 / 12, 5);
+      expect(at20.monthlyRentalIncomeBeforeTaxAndVacancy).toBeCloseTo(400 * 52 / 12, 5);
+    });
+
+    // The whole point of the Rental Yield half: the yield must not move with
+    // the tax rate, because its bands are the gross-yield benchmark.
+    it('leaves the pre-vacancy gross rental figure unmoved by the tax rate', () => {
+      const rates = [0, 20, 45].map(
+        (rate) => resolveProjectedFinancials(1, { ...GROSS_MARKED, effectiveTaxRate: rate }).monthlyRentalIncomeBeforeTaxAndVacancy
+      );
+      expect(rates[1]).toBeCloseTo(rates[0], 5);
+      expect(rates[2]).toBeCloseTo(rates[0], 5);
+    });
+
+    it('never grosses up a non-taxable category', () => {
+      const withBenefits = resolveProjectedFinancials(1, {
+        ...SNAPSHOT_PARAMS, salaryGrowthRate: 0, rentGrowthRate: 0, effectiveTaxRate: 20,
+        incomeSources: [{ name: 'Government Benefits', amount: 500, startMonth: 1, recurrence: 'monthly', endMonth: 360 }],
+      });
+      expect(withBenefits.monthlyIncomeBeforeTax).toBeCloseTo(500 * 52 / 12, 5);
+    });
+
+    // Added on review of PCALC-100. The gross-up is a UNIFORM rescale of both
+    // readings only when the income mix is the same in both months. Here a
+    // non-grossable Gift is active on Day 1 but gone by the stabilization month,
+    // so the grossable SHARE differs and the two readings scale by different
+    // factors. That is correct behaviour, not a bug - but it means the Day1 ->
+    // Stabilized arrow can move for a reason that has nothing to do with income
+    // actually changing, which is the kind of thing that gets reported as one.
+    it('scales the two readings by DIFFERENT factors when the income mix changes between them', () => {
+      const mixed = {
+        ...SNAPSHOT_PARAMS,
+        salaryGrowthRate: 0, rentGrowthRate: 0, expenseGrowthRate: 0,
+        effectiveTaxRate: 20,
+        incomeSources: [
+          { name: 'Salary/Wages', amount: 1000, startMonth: 1, recurrence: 'monthly', endMonth: 360 },
+          { name: 'Gift', amount: 1000, startMonth: 1, recurrence: 'monthly', endMonth: 12 },
+        ],
+      };
+      const day1 = resolveProjectedFinancials(1, mixed);
+      const stabilized = resolveProjectedFinancials(24, mixed);
+
+      // Day 1: only the $1,000 salary is grossable, the Gift is not.
+      expect(day1.monthlyIncome).toBeCloseTo(2000 * 52 / 12, 5);
+      expect(day1.monthlyIncomeBeforeTax).toBeCloseTo((1000 / 0.8 + 1000) * 52 / 12, 5);
+      // Month 24: the Gift has ended, so 100% of what remains is grossable.
+      expect(stabilized.monthlyIncome).toBeCloseTo(1000 * 52 / 12, 5);
+      expect(stabilized.monthlyIncomeBeforeTax).toBeCloseTo((1000 / 0.8) * 52 / 12, 5);
+
+      const day1Factor = day1.monthlyIncomeBeforeTax / day1.monthlyIncome;
+      const stabilizedFactor = stabilized.monthlyIncomeBeforeTax / stabilized.monthlyIncome;
+      expect(stabilizedFactor).toBeGreaterThan(day1Factor);
     });
   });
 

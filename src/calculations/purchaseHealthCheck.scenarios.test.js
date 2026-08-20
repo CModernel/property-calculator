@@ -21,7 +21,7 @@ import {
   calculateLoanAmount, calculateMonthlyRate, calculateMonthlyPayment,
   calculateMonthlyStrata, calculateMonthlyCouncil, calculateMonthlyWaterRates,
   calculateMonthlyLandTax, calculateMonthlyPropertyExpenses,
-  calculateTotalPropertyCost, calculateMonthlyFromWeekly,
+  calculateTotalPropertyCost, calculateMonthlyFromWeekly, calculateMonthlyNetBalance,
 } from './loan';
 import { getActiveAmount } from './recurringAmount';
 import { RENTAL_INCOME_CATEGORIES } from './incomeCategories';
@@ -31,6 +31,7 @@ import { safePercentage } from './safePercentage';
 import { getStateModule } from './states';
 import { calculateTotalCashRequired, calculateLiquidSavings } from './totalCashRequired';
 import { calculateVacancyFactor } from './vacancyFactor';
+import { getGrossActiveAmount } from './grossIncome';
 import {
   calculateEmergencyBufferMonths, classifyEmergencyBuffer,
   calculateHousingCostRatio, classifyHousingCostRatio,
@@ -98,9 +99,16 @@ function runScenario(overrides = {}) {
   const weeklyRentalIncome = weeklyRentalIncomeBeforeVacancy * calculateVacancyFactor(c.vacancyWeeksPerYear);
   const monthlyIncome = calculateMonthlyFromWeekly(weeklyIncome);
   const monthlyRentalIncome = calculateMonthlyFromWeekly(weeklyRentalIncome);
+  // TODO-151: mirrors App.jsx's before-tax figures, used ONLY by Housing Cost
+  // Ratio and Rental Yield. Must stay expression-for-expression identical to
+  // App.jsx or the MATRIX silently pins something the app doesn't do.
+  const weeklyIncomeBeforeTax = getGrossActiveAmount(c.incomeSources.filter((i) => !RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, c.effectiveTaxRate);
+  const weeklyRentalIncomeBeforeTaxAndVacancy = getGrossActiveAmount(c.incomeSources.filter((i) => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, c.effectiveTaxRate);
+  const monthlyIncomeBeforeTax = calculateMonthlyFromWeekly(weeklyIncomeBeforeTax);
+  const monthlyRentalIncomeBeforeTax = calculateMonthlyFromWeekly(weeklyRentalIncomeBeforeTaxAndVacancy * calculateVacancyFactor(c.vacancyWeeksPerYear));
 
   const emergencyBufferMonths = calculateEmergencyBufferMonths(liquidSavings, totalPropertyCost + monthlyPersonalExpenses);
-  const housingCostRatio = calculateHousingCostRatio(totalPropertyCost, monthlyIncome + monthlyRentalIncome);
+  const housingCostRatio = calculateHousingCostRatio(totalPropertyCost, monthlyIncomeBeforeTax + monthlyRentalIncomeBeforeTax);
   const stressTestSurvivedDelta = calculateStressTestSurvivedDelta({
     loanAmount, interestRate: c.interestRate, totalMonths, monthlyPropertyExpenses,
     monthlyIncome, monthlyRentalIncome, monthlyPersonalExpenses,
@@ -112,7 +120,11 @@ function runScenario(overrides = {}) {
     // vacancy haircut and on Rental Yield's deliberate exemption from it.
     monthlyRentalIncome,
     gearingCashflow: monthlyRentalIncome - monthlyPayment - monthlyPropertyExpenses,
-    rentalYield: calculateRentalYield(weeklyRentalIncomeBeforeVacancy, c.propertyPrice),
+    // TODO-151: the symptom that opened the TODO was a red indicator sitting
+    // next to a healthy surplus, so the surplus has to be assertable here.
+    // Uses the real helper rather than re-deriving the formula.
+    monthlyNetBalance: calculateMonthlyNetBalance(monthlyIncome, monthlyRentalIncome, monthlyPersonalExpenses, totalPropertyCost),
+    rentalYield: calculateRentalYield(weeklyRentalIncomeBeforeTaxAndVacancy, c.propertyPrice),
     rentalYieldHasData: hasEnoughDataForRentalYield(weeklyRentalIncomeBeforeVacancy),
     emergencyBufferMonths, emergencyBufferClass: classifyEmergencyBuffer(emergencyBufferMonths),
     housingCostRatio, housingCostRatioClass: classifyHousingCostRatio(housingCostRatio),
@@ -132,66 +144,78 @@ const groceriesOnly = (monthlyAmount) => ([
 // current code before writing this file. A future change to any of these four
 // indicators (or anything they depend on) must update a row here on purpose -
 // that's the entire point of this test existing.
+//
+// TODO-151 re-pinned every HCR value: the denominator became before-tax income,
+// so at runScenario's 20% default each one is the old value x 0.8 (every
+// scenario here is salary-only and net-entered, so the whole denominator is
+// grossed up uniformly). `HCR0` carries the ORIGINAL audit figure, asserted by
+// the rate-0 block below - keeping the 2026-08-17 numbers alive as an exact
+// no-op guard instead of deleting them.
+//
+// Watch the rounding: the pinned integer is Math.round(ratio) while the label
+// comes from the UNROUNDED value. The old `HCR: [30, 'Excellent']` row was the
+// standing proof - 30 would classify as 'Good', and it read 'Excellent' only
+// because the true value was 29.566. Never derive a label from the integer.
 const MATRIX = [
   {
     name: 'baseline (config.default.json)',
     overrides: {},
-    expect: { EB: [6.3, 'Good'], HCR: [55, 'High risk'], ST: [3, 'Excellent'], UCR: [1.7, 'Excellent'] },
+    expect: { EB: [6.3, 'Good'], HCR: [44, 'Caution'], HCR0: [55, 'High risk'], ST: [3, 'Excellent'], UCR: [1.7, 'Excellent'] },
   },
   {
     name: 'not a first home buyer - loses the stamp duty concession',
     overrides: { isFirstHomeBuyer: false },
-    expect: { EB: [1.3, 'High risk'], HCR: [55, 'High risk'], ST: [3, 'Excellent'], UCR: [4.4, 'High'] },
+    expect: { EB: [1.3, 'High risk'], HCR: [44, 'Caution'], HCR0: [55, 'High risk'], ST: [3, 'Excellent'], UCR: [4.4, 'High'] },
   },
   {
     name: 'a much more expensive property',
     overrides: { propertyPrice: 1200000 },
-    expect: { EB: [-1.5, 'High risk'], HCR: [85, 'High risk'], ST: [0, 'High risk'], UCR: [4.4, 'High'] },
+    expect: { EB: [-1.5, 'High risk'], HCR: [68, 'High risk'], HCR0: [85, 'High risk'], ST: [0, 'High risk'], UCR: [4.4, 'High'] },
   },
   {
     name: 'more available savings',
     overrides: { totalSavings: 500000 },
-    expect: { EB: [39.4, 'Excellent'], HCR: [55, 'High risk'], ST: [3, 'Excellent'], UCR: [1.7, 'Excellent'] },
+    expect: { EB: [39.4, 'Excellent'], HCR: [44, 'Caution'], HCR0: [55, 'High risk'], ST: [3, 'Excellent'], UCR: [1.7, 'Excellent'] },
   },
   {
     name: 'a higher interest rate',
     overrides: { interestRate: 10 },
-    expect: { EB: [4.8, 'Moderate'], HCR: [76, 'High risk'], ST: [2, 'Good'], UCR: [1.7, 'Excellent'] },
+    expect: { EB: [4.8, 'Moderate'], HCR: [61, 'High risk'], HCR0: [76, 'High risk'], ST: [2, 'Good'], UCR: [1.7, 'Excellent'] },
   },
   {
     name: 'a shorter loan term',
     overrides: { loanTermYears: 15 },
-    expect: { EB: [4.9, 'Moderate'], HCR: [74, 'High risk'], ST: [3, 'Excellent'], UCR: [1.7, 'Excellent'] },
+    expect: { EB: [4.9, 'Moderate'], HCR: [59, 'High risk'], HCR0: [74, 'High risk'], ST: [3, 'Excellent'], UCR: [1.7, 'Excellent'] },
   },
   {
     name: 'a smaller deposit',
     overrides: { downPayment: 100000 },
-    expect: { EB: [40.7, 'Excellent'], HCR: [73, 'High risk'], ST: [2, 'Good'], UCR: [1.7, 'Excellent'] },
+    expect: { EB: [40.7, 'Excellent'], HCR: [58, 'High risk'], HCR0: [73, 'High risk'], ST: [2, 'Good'], UCR: [1.7, 'Excellent'] },
   },
   {
     name: 'a smaller deposit with LMI paid upfront',
     overrides: { downPayment: 100000, payLmiUpfront: true },
-    expect: { EB: [37.2, 'Excellent'], HCR: [73, 'High risk'], ST: [2, 'Good'], UCR: [4.1, 'High'] },
+    expect: { EB: [37.2, 'Excellent'], HCR: [58, 'High risk'], HCR0: [73, 'High risk'], ST: [2, 'Good'], UCR: [4.1, 'High'] },
   },
   {
     name: 'a much higher salary',
     overrides: { incomeSources: salaryOnly(3000) },
-    expect: { EB: [6.3, 'Good'], HCR: [30, 'Excellent'], ST: [3, 'Excellent'], UCR: [1.7, 'Excellent'] },
+    expect: { EB: [6.3, 'Good'], HCR: [24, 'Excellent'], HCR0: [30, 'Excellent'], ST: [3, 'Excellent'], UCR: [1.7, 'Excellent'] },
   },
   {
     name: 'a much lower salary',
     overrides: { incomeSources: salaryOnly(800) },
-    expect: { EB: [6.3, 'Good'], HCR: [111, 'High risk'], ST: [0, 'High risk'], UCR: [1.7, 'Excellent'] },
+    expect: { EB: [6.3, 'Good'], HCR: [89, 'High risk'], HCR0: [111, 'High risk'], ST: [0, 'High risk'], UCR: [1.7, 'Excellent'] },
   },
   {
     name: 'higher personal expenses',
     overrides: { personalExpenseItems: groceriesOnly(1300) },
-    expect: { EB: [5.5, 'Moderate'], HCR: [55, 'High risk'], ST: [3, 'Excellent'], UCR: [1.7, 'Excellent'] },
+    expect: { EB: [5.5, 'Moderate'], HCR: [44, 'Caution'], HCR0: [55, 'High risk'], ST: [3, 'Excellent'], UCR: [1.7, 'Excellent'] },
   },
   {
     name: 'a cheaper property with a smaller deposit',
     overrides: { propertyPrice: 400000, downPayment: 100000 },
-    expect: { EB: [80.5, 'Excellent'], HCR: [34, 'Good'], ST: [3, 'Excellent'], UCR: [1.2, 'Excellent'] },
+    expect: { EB: [80.5, 'Excellent'], HCR: [27, 'Excellent'], HCR0: [34, 'Good'], ST: [3, 'Excellent'], UCR: [1.2, 'Excellent'] },
   },
 ];
 
@@ -212,6 +236,16 @@ describe('Purchase Health Check Tier-1 indicators - scenario matrix (TODO-147)',
     expect(result.upfrontCostRatioClass.label).toBe(exp.UCR[1]);
   });
 
+  // TODO-151: at a 0% rate the before-tax reconstruction is a no-op, so every
+  // row must reproduce the ORIGINAL 2026-08-17 audit figure exactly. This is
+  // the whole-matrix version of grossIncome.test.js's bitwise no-op test, and
+  // it's what makes the tax-rate default the only thing that moved.
+  it.each(MATRIX)('$name - unchanged from the original audit at a 0% tax rate', ({ overrides, expect: exp }) => {
+    const result = runScenario({ ...overrides, effectiveTaxRate: 0 });
+    expect(Math.round(result.housingCostRatio)).toBe(exp.HCR0[0]);
+    expect(result.housingCostRatioClass.label).toBe(exp.HCR0[1]);
+  });
+
   // Two properties worth pinning explicitly because they surprise people and
   // are correct, per the TODO's own note - a regression here would be easy to
   // mistake for "fixing" a bug that isn't one.
@@ -223,10 +257,90 @@ describe('Purchase Health Check Tier-1 indicators - scenario matrix (TODO-147)',
       expect(low.emergencyBufferMonths).toBeCloseTo(6.3, 1);
     });
 
-    it('effectiveTaxRate changes nothing when no income item is Gross-marked', () => {
+    // TODO-151 narrowed this rather than deleting it. It used to assert the
+    // WHOLE result object was identical at 0% vs 20% - the exact property
+    // grossing up the Housing Cost Ratio denominator breaks, on purpose.
+    // Omitting the two HCR keys (rather than allow-listing the others) keeps it
+    // strong: any field added to runScenario later is covered automatically, so
+    // this still pins that the change was surgical.
+    const withoutHcr = (result) => {
+      const rest = { ...result };
+      delete rest.housingCostRatio;
+      delete rest.housingCostRatioClass;
+      return rest;
+    };
+
+    it('effectiveTaxRate still changes nothing OUTSIDE Housing Cost Ratio when no income item is Gross-marked', () => {
+      expect(withoutHcr(runScenario({ effectiveTaxRate: 0 }))).toEqual(withoutHcr(runScenario({ effectiveTaxRate: 20 })));
+    });
+
+    it('Housing Cost Ratio alone now moves with effectiveTaxRate (TODO-151)', () => {
       const at0 = runScenario({ effectiveTaxRate: 0 });
       const at20 = runScenario({ effectiveTaxRate: 20 });
-      expect(at0).toEqual(at20);
+      // A higher assumed rate implies a bigger gross salary behind the same
+      // take-home, so the ratio improves. Counterintuitive next to the slider's
+      // "higher = worse" colouring (TODO-139), which stays correct because it is
+      // about cash flow - documented in App.jsx and in the slider's tooltip.
+      expect(at20.housingCostRatio).toBeCloseTo(at0.housingCostRatio * 0.8, 10);
+      expect(at0.housingCostRatioClass.label).toBe('High risk');
+      expect(at20.housingCostRatioClass.label).toBe('Caution');
+    });
+
+    // The symptom that opened TODO-151: a red indicator sitting next to a
+    // healthy surplus, out of the box. Not "now green" - 44% of gross on
+    // housing is genuinely caution territory - but no longer a false alarm.
+    it('no longer classifies the shipped default as High risk while it runs a surplus', () => {
+      const result = runScenario();
+      expect(result.monthlyNetBalance).toBeGreaterThan(0);
+      expect(Math.round(result.housingCostRatio)).toBe(44);
+      expect(result.housingCostRatioClass.label).not.toBe('High risk');
+      expect(result.housingCostRatioClass.critical).toBe(false);
+    });
+
+    it('moves Housing Cost Ratio further at a high tax rate, monotonically', () => {
+      const ratios = [0, 20, 45, 90].map((rate) => runScenario({ effectiveTaxRate: rate }).housingCostRatio);
+      expect(ratios[1]).toBeLessThan(ratios[0]);
+      expect(ratios[2]).toBeLessThan(ratios[1]);
+      expect(ratios[3]).toBeLessThan(ratios[2]);
+      expect(ratios.every(Number.isFinite)).toBe(true);
+    });
+
+    // Reachable only from a hand-edited or stale saved scenario (the slider
+    // clamps to 90), and the failure it prevents is the one direction a risk
+    // indicator must never fail in: an Infinite denominator would read 0% ->
+    // "Excellent, plenty of headroom".
+    it('falls back to the un-grossed ratio at a nonsensical 100% tax rate rather than reading Excellent', () => {
+      const result = runScenario({ effectiveTaxRate: 100 });
+      expect(Number.isFinite(result.housingCostRatio)).toBe(true);
+      expect(Math.round(result.housingCostRatio)).toBe(55);
+      expect(result.housingCostRatioClass.label).toBe('High risk');
+    });
+
+    // The locked decision, stated as a test: grossing up income nobody withheld
+    // tax from would fabricate it, making the indicator read optimistically for
+    // the users with the least margin. Same net income, different category ->
+    // the non-withheld one must read WORSE (a smaller denominator).
+    it.each(['Government Benefits', 'Child Support', 'Tax Refund', 'Gift', 'Pension', 'Dividends', 'Interest', 'Some side thing'])(
+      'does not fabricate a gross figure for %s',
+      (name) => {
+        const asSalary = runScenario({ incomeSources: salaryOnly(1614) });
+        const asOther = runScenario({
+          incomeSources: [{ id: 1, name, amount: 1614, startMonth: 1, recurrence: 'monthly', endMonth: 360 }],
+        });
+        expect(asOther.housingCostRatio).toBeGreaterThan(asSalary.housingCostRatio);
+        expect(Math.round(asOther.housingCostRatio)).toBe(55);
+      }
+    );
+
+    // Exercises the isGross branch end-to-end: a Gross-marked $2,017.50 and a
+    // net-entered $1,614 are the same person at a 20% rate, so both must give
+    // the same before-tax denominator - i.e. the same Housing Cost Ratio.
+    it('agrees between a Gross-marked salary and the equivalent net-entered one', () => {
+      const asNet = runScenario({ incomeSources: salaryOnly(1614) });
+      const asGross = runScenario({
+        incomeSources: [{ id: 1, name: 'Salary/Wages', amount: 1614 / 0.8, startMonth: 1, recurrence: 'monthly', endMonth: 360, isGross: true }],
+      });
+      expect(asGross.housingCostRatio).toBeCloseTo(asNet.housingCostRatio, 10);
     });
   });
 
@@ -277,6 +391,39 @@ describe('Purchase Health Check Tier-1 indicators - scenario matrix (TODO-147)',
       const neverRented = investmentWithRent(52);
       expect(neverRented.monthlyRentalIncome).toBe(0);
       expect(neverRented.rentalYieldHasData).toBe(true);
+    });
+
+    // TODO-151 closed the other half of the same defect: TODO-150 made Rental
+    // Yield gross of VACANCY but it was still net of tax for a Gross-marked
+    // rental item, while its 3%/5% bands are the gross benchmark on both axes.
+    describe('Rental Yield is gross of tax too (TODO-151)', () => {
+      const withRent = (extra, rate) => runScenario({
+        isInvestmentProperty: true,
+        effectiveTaxRate: rate,
+        incomeSources: [{ id: 1, name: 'House Rent', amount: 600, startMonth: 1, recurrence: 'monthly', endMonth: 360, ...extra }],
+      });
+
+      it('reports the declared rent for a Gross-marked item instead of netting it down', () => {
+        const grossMarked = withRent({ isGross: true }, 20);
+        // The rent the tenant actually pays - NOT 600 * 0.8.
+        expect(grossMarked.rentalYield).toBeCloseTo((600 * 52) / 850000 * 100, 10);
+      });
+
+      it('does not move with the tax rate, on either entry style', () => {
+        for (const extra of [{}, { isGross: true }]) {
+          const rates = [0, 20, 45].map((rate) => withRent(extra, rate).rentalYield);
+          expect(rates[1]).toBeCloseTo(rates[0], 10);
+          expect(rates[2]).toBeCloseTo(rates[0], 10);
+        }
+      });
+
+      // Rent has no withholding: the tenant pays 600 and the landlord receives
+      // 600, so a net-entered rent must NOT be grossed up - that would invent
+      // rent nobody paid, and rental yield is rent over price where rent is an
+      // observable market figure.
+      it('never grosses up a net-entered rent - there is no withholding to reverse', () => {
+        expect(withRent({}, 45).rentalYield).toBeCloseTo((600 * 52) / 850000 * 100, 10);
+      });
     });
   });
 });

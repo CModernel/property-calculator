@@ -40,6 +40,61 @@ export const RENTAL_INCOME_CATEGORIES = ['House Rent', 'Room Rent'];
 // future investment-return growth.
 export const SALARY_INCOME_CATEGORY = 'Salary/Wages';
 
+// TODO-151: which categories a net-entered amount can be grossed UP from, for
+// the two indicators whose bands cite an externally-defined pre-tax benchmark
+// (Housing Cost Ratio, Rental Yield - see src/calculations/grossIncome.js).
+// This is the FIRST place a category affects tax treatment in this app -
+// everywhere else, tax is keyed purely off the per-item `isGross` boolean.
+//
+// The test is NOT "is this income taxable". It is "would a net-entered figure
+// here hide a larger gross one worth recovering", which holds in two cases:
+//  1. Tax is WITHHELD AT SOURCE. Salary/Wages, Bonus and Commission are paid
+//     through payroll with PAYG withheld, so take-home $1,614 really does sit
+//     behind a gross $2,017. Dividing recovers a real number.
+//  2. No withholding, but the user plausibly enters a post-tax figure anyway.
+//     The self-employment trio qualifies: someone running a business pays
+//     quarterly instalments rather than having tax withheld, but naturally
+//     thinks in terms of what they pay themselves, which may well be net.
+// Everything else fails both tests, so grossing it up would invent money:
+//  - House Rent / Room Rent have no withholding AND no "take-home" reading:
+//    the tenant pays $600 and the landlord receives $600, with tax settled
+//    later via the return. Dividing would invent $150/week of rent nobody ever
+//    paid - and rental yield is defined as rent over price, where rent is an
+//    observable market figure. Lender serviceability likewise assesses the
+//    actual (shaded) rent.
+//  - Dividends and Interest are the same shape (excluded on review of
+//    PCALC-100): a resident quoting a TFN has nothing withheld, and there is no
+//    "take-home dividend" - the amount received already IS the gross.
+//
+// Deliberately a WHITELIST, which errs strict in two further ways on purpose:
+//  - a category added to the picklist later defaults to non-taxable, so it
+//    can't be silently inflated by a future edit;
+//  - an 'Other' item stores free text in `name` (App.jsx's addIncomeSource),
+//    never a category constant, so it never matches. This is the same
+//    mechanism RENTAL_INCOME_CATEGORIES already relies on.
+// Erring strict matters because grossing up income that hides no larger gross
+// figure FABRICATES income, which makes a risk indicator read too optimistic -
+// the dangerous direction, and worst for the users with the least margin.
+// `incomeCategories.test.js` pins the membership, the disjointness from
+// RENTAL_INCOME_CATEGORIES that grossIncome.js relies on, and a guard that
+// fails when a new picklist category is classified in neither bucket.
+//
+// Also excluded, and why: Government Benefits and Child Support are largely
+// not assessable income; a Tax Refund is a return of tax already paid, not
+// income; a Gift isn't taxed; and Pension is genuinely ambiguous (an Australian
+// super pension is tax-free after 60, and the Age Pension usually sits under
+// the effective threshold once SAPTO applies). Anyone affected has the app's
+// existing escape hatch: enter the pre-tax figure and tick "Gross (pre-tax)",
+// which counts it at face value here AND nets it correctly for cash flow.
+export const TAXABLE_INCOME_CATEGORIES = [
+  'Salary/Wages',
+  'Bonus',
+  'Commission',
+  'Self-Employment',
+  'Freelance/Contracting',
+  'Business Income',
+];
+
 // Default Schedule applied when a category is picked in the Income Name
 // dropdown, so the form reflects how that income naturally recurs instead of
 // always defaulting the same way. Categories omitted here (House Rent, Room

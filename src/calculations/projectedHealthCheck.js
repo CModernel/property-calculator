@@ -3,6 +3,7 @@ import { getSteppedValue } from './steppedValue';
 import { calculateCompoundedValue } from './growthRate';
 import { SALARY_INCOME_CATEGORY, RENTAL_INCOME_CATEGORIES } from './incomeCategories';
 import { calculateVacancyFactor } from './vacancyFactor';
+import { getGrossActiveAmount, getGrossActiveAmountWithGrowth } from './grossIncome';
 import {
   calculateMonthlyFromWeekly,
   calculateMonthlyRate,
@@ -95,12 +96,28 @@ export function resolveProjectedFinancials(month, {
   // sub-cent drift against tests that assert to 5 decimals.
   const weeklyRentalBeforeVacancy = getActiveAmountWithGrowth(rentalSources, month, rentGrowthRate, effectiveTaxRate);
   const monthlyRentalIncome = calculateMonthlyFromWeekly(weeklyRentalBeforeVacancy * vacancyFactor);
-  // TODO-150: Rental Yield is quoted BEFORE the vacancy haircut on both its
-  // Day-1 and Stabilized readings, because its 3%/5% bands cite the standard
-  // gross-yield benchmark. Exposed as its own field rather than recovered by
-  // dividing vacancyFactor back out of monthlyRentalIncome, which is a
-  // division by zero at the slider's max of 52 weeks.
-  const monthlyRentalIncomeBeforeVacancy = calculateMonthlyFromWeekly(weeklyRentalBeforeVacancy);
+
+  // TODO-151: the BEFORE-TAX counterparts, for the two indicators whose bands
+  // cite an externally-defined pre-tax benchmark - Housing Cost Ratio (30/40/50)
+  // and Rental Yield (3%/5%). Purely additive: every field above keeps its net
+  // meaning and its existing consumers, so nothing picks these up by accident.
+  // Named `BeforeTax` to mirror TODO-150's `BeforeVacancy` convention rather
+  // than "Gross", which in this codebase already means the per-item, user-
+  // declared `isGross` basis - a different concept from a derived figure.
+  const weeklyRentalBeforeTaxAndVacancy = getGrossActiveAmountWithGrowth(rentalSources, month, rentGrowthRate, effectiveTaxRate);
+  const monthlyIncomeBeforeTax = calculateMonthlyFromWeekly(
+    getGrossActiveAmountWithGrowth(salarySources, month, salaryGrowthRate, effectiveTaxRate)
+      + getGrossActiveAmount(otherNonRentalSources, month, effectiveTaxRate)
+  );
+  // Vacancy and tax are independent axes: how much rent actually arrives, versus
+  // whether the figure is stated before or after tax. Housing Cost Ratio wants
+  // the rent that actually arrives, stated before tax, so it gets both.
+  const monthlyRentalIncomeBeforeTax = calculateMonthlyFromWeekly(weeklyRentalBeforeTaxAndVacancy * vacancyFactor);
+  // TODO-150/151: Rental Yield is quoted before BOTH the vacancy haircut and
+  // tax, because its 3%/5% bands are the standard gross-yield benchmark.
+  // Exposed as its own field rather than recovered by dividing the factors back
+  // out - vacancyFactor is exactly 0 at the slider's max of 52 weeks.
+  const monthlyRentalIncomeBeforeTaxAndVacancy = calculateMonthlyFromWeekly(weeklyRentalBeforeTaxAndVacancy);
 
   const expenseGrowthMultiplier = calculateCompoundedValue(1, expenseGrowthRate, month);
   const monthlyPersonalExpenses = getActiveAmount(personalExpenseItems, month) * expenseGrowthMultiplier;
@@ -147,7 +164,9 @@ export function resolveProjectedFinancials(month, {
   return {
     monthlyIncome,
     monthlyRentalIncome,
-    monthlyRentalIncomeBeforeVacancy,
+    monthlyIncomeBeforeTax,
+    monthlyRentalIncomeBeforeTax,
+    monthlyRentalIncomeBeforeTaxAndVacancy,
     monthlyPersonalExpenses,
     monthlyPropertyExpenses,
     monthlyPayment: resolvedMonthlyPayment,
