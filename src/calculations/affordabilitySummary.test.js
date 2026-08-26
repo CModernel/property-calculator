@@ -5,11 +5,16 @@ const GREEN = { label: 'Good', symbol: '🟢', textClass: 'text-green-600 dark:t
 const ORANGE = { label: 'Moderate', symbol: '🟠', textClass: 'text-orange-600 dark:text-orange-400', critical: false };
 const RED_CRITICAL = { label: 'High risk', symbol: '🔴', textClass: 'text-red-600 dark:text-red-400', critical: true };
 
+// Every indicator Simple mode renders belongs here. Omitting one silently
+// filters it out of the roll-up instead of failing, which is exactly how the
+// Stress Test went unconsidered - so this fixture is the thing that has to
+// stay in step with the component.
 const healthy = {
   cashRemaining: 28000,
   monthlyNetBalance: 2400,
   emergencyBufferClass: GREEN,
   housingCostRatioClass: GREEN,
+  stressTestClass: GREEN,
 };
 
 describe('summariseAffordability', () => {
@@ -45,6 +50,39 @@ describe('summariseAffordability', () => {
       ...healthy, monthlyNetBalance: -1, emergencyBufferClass: GREEN, housingCostRatioClass: GREEN,
     });
     expect(result.bindingConstraint).toBe('monthlyNetBalance');
+  });
+
+  // The roll-up considered only Emergency Buffer and Housing Cost Ratio, so a
+  // scenario that is positive TODAY but fails at +1% - which is 🔴 critical -
+  // rolled up to "Funded ... with room in the indicators below", printed
+  // directly above its own red row. Both hard constraints clear here and the
+  // other two indicators are green, which is precisely the combination that
+  // used to slip through.
+  it('lets a critical Stress Test bind even when both other indicators are green', () => {
+    const result = summariseAffordability({ ...healthy, stressTestClass: RED_CRITICAL });
+    expect(result.label).toBe('Tight but funded');
+    expect(result.symbol).toBe('🔴');
+    expect(result.bindingConstraint).toBe('stressTest');
+    expect(result.headline).not.toContain('with room');
+  });
+
+  it('still names the right indicator when the Stress Test is not the worst', () => {
+    const result = summariseAffordability({
+      ...healthy, stressTestClass: ORANGE, emergencyBufferClass: RED_CRITICAL,
+    });
+    expect(result.bindingConstraint).toBe('emergencyBuffer');
+    expect(result.symbol).toBe('🔴');
+  });
+
+  // Backwards compatibility: an omitted classification is filtered, not
+  // treated as a zero-severity vote that could outrank a real one.
+  it('tolerates a missing Stress Test classification', () => {
+    // Explicit delete rather than a destructuring omit - the discarded binding
+    // trips no-unused-vars.
+    const withoutStressTest = { ...healthy, housingCostRatioClass: ORANGE };
+    delete withoutStressTest.stressTestClass;
+    const result = summariseAffordability(withoutStressTest);
+    expect(result.bindingConstraint).toBe('housingCostRatio');
   });
 
   it('surfaces the worse of the two indicators when neither hard constraint binds', () => {

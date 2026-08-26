@@ -153,11 +153,21 @@ export function resolveProjectedFinancials(month, {
   // re-amortization uses.
   let resolvedInterestRate = interestRate;
   let resolvedMonthlyPayment = monthlyPayment;
+  // The term `resolvedMonthlyPayment` was amortized over. Exported because any
+  // caller that re-derives a payment from these figures - the Stabilized
+  // Interest Rate Stress Test does exactly that, at a stressed rate - has to
+  // use the SAME term, or it compares two payments computed on different
+  // bases. It stays at the full `totalMonths` when no re-amortization
+  // happened, because a fixed-rate installment doesn't change with time
+  // elapsed: month 60 of a 30-year loan is still paying the original
+  // 360-month figure.
+  let resolvedRemainingMonths = totalMonths;
   if (interestRateField) {
     const scheduledRate = getSteppedValue(interestRateField.base, interestRateField.changes, month);
     if (scheduledRate !== interestRate) {
       resolvedInterestRate = scheduledRate;
-      resolvedMonthlyPayment = calculateMonthlyPayment(loanAmount, calculateMonthlyRate(scheduledRate), totalMonths - month + 1);
+      resolvedRemainingMonths = totalMonths - month + 1;
+      resolvedMonthlyPayment = calculateMonthlyPayment(loanAmount, calculateMonthlyRate(scheduledRate), resolvedRemainingMonths);
     }
   }
 
@@ -171,6 +181,7 @@ export function resolveProjectedFinancials(month, {
     monthlyPropertyExpenses,
     monthlyPayment: resolvedMonthlyPayment,
     interestRate: resolvedInterestRate,
+    remainingMonths: resolvedRemainingMonths,
   };
 }
 

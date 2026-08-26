@@ -858,12 +858,22 @@ const PropertyInvestmentCalculator = () => {
     loanAmount, interestRate, totalMonths, monthlyPropertyExpenses,
     monthlyIncome, monthlyRentalIncome, monthlyPersonalExpenses,
   });
-  // Same original loanAmount/totalMonths as Day 1 (never the offset-reduced
-  // balance - that's the simulation's concern, kept out of this calculation
-  // entirely), but the rate/payment reflect whatever's scheduled by the
-  // Stabilized month.
+  // Same original loanAmount as Day 1 (never the offset-reduced balance -
+  // that's the simulation's concern, kept out of this calculation entirely),
+  // but the rate/payment/term reflect whatever's scheduled by the Stabilized
+  // month.
+  //
+  // `projected.remainingMonths`, NOT `totalMonths`: this call re-amortizes at
+  // rate+1/2/3 and compares the result against projectedTotalPropertyCost,
+  // which is built from projected.monthlyPayment. Amortizing the stressed
+  // payment over a longer term than the baseline made the stressed payment
+  // CHEAPER, so the test could report "Survives +3%" for a month the app had
+  // already computed as being in deficit at the unstressed rate - the two
+  // figures on the same row contradicting each other. With an $800k loan and
+  // a 6%->8% change scheduled at month 96 or later, the term difference
+  // outweighs a full 1-point rise.
   const stabilizedStressTestSurvivedDelta = calculateStressTestSurvivedDelta({
-    loanAmount, interestRate: projected.interestRate, totalMonths, monthlyPropertyExpenses: projected.monthlyPropertyExpenses,
+    loanAmount, interestRate: projected.interestRate, totalMonths: projected.remainingMonths, monthlyPropertyExpenses: projected.monthlyPropertyExpenses,
     monthlyIncome: projected.monthlyIncome, monthlyRentalIncome: projected.monthlyRentalIncome, monthlyPersonalExpenses: projected.monthlyPersonalExpenses,
   });
   const stressTestClass = classifyStressTest(worseOf(stressTestSurvivedDelta, stabilizedStressTestSurvivedDelta, 'higherIsBetter'));
@@ -922,7 +932,7 @@ const PropertyInvestmentCalculator = () => {
   // TODO-135: Simple mode's roll-up line. A re-reading of figures and
   // classifications Simple already displays underneath it - no new threshold.
   const affordability = summariseAffordability({
-    cashRemaining, monthlyNetBalance, emergencyBufferClass, housingCostRatioClass,
+    cashRemaining, monthlyNetBalance, emergencyBufferClass, housingCostRatioClass, stressTestClass,
   });
 
   // TODO-135: Simple hides these editors but the model still applies them, so
@@ -3479,14 +3489,23 @@ const PropertyInvestmentCalculator = () => {
               </button>
             </div>
 
+            {/* Deliberately OUTSIDE the collapse gate below. TODO-68 moved this
+                banner out of the page-top hero and into the card on the
+                reasoning that it was "impossible to miss without expanding the
+                card, which is open by default anyway" - then TODO-140 flipped
+                the default to collapsed and silently voided that premise,
+                leaving a critical indicator (or a lost FHB stamp-duty
+                concession, which drives this independently) with no visible
+                signal anywhere on the page. The wording follows the panel's
+                state because "below" is a lie while the card is shut. */}
+            {healthCheckHasCritical && (
+              <div className="mb-3 p-3 bg-red-100 dark:bg-red-900 rounded text-red-800 dark:text-red-400 text-sm font-semibold">
+                ⚠️ One or more indicators {showHealthCheck ? 'below' : 'in this panel'} need attention - not financial advice, just standard rules of thumb.
+              </div>
+            )}
+
             {showHealthCheck && (
               <>
-                {healthCheckHasCritical && (
-                  <div className="mb-3 p-3 bg-red-100 dark:bg-red-900 rounded text-red-800 dark:text-red-400 text-sm font-semibold">
-                    ⚠️ One or more indicators below need attention - not financial advice, just standard rules of thumb.
-                  </div>
-                )}
-
                 <HealthCheckIndicator
                   label="Emergency Buffer"
                   tooltipLabel="What is the Emergency Buffer?"

@@ -24,6 +24,7 @@ export function summariseAffordability({
   monthlyNetBalance,
   emergencyBufferClass,
   housingCostRatioClass,
+  stressTestClass,
 }) {
   if (cashRemaining < 0) {
     return {
@@ -46,27 +47,44 @@ export function summariseAffordability({
   }
 
   // Neither hard constraint binds, so the binding signal is whichever of the
-  // two Health Check indicators Simple already shows reads worse. `critical`
-  // then `symbol` is enough to order them without duplicating either band
-  // table's own thresholds here.
-  const worst = [emergencyBufferClass, housingCostRatioClass]
-    .filter(Boolean)
+  // Health Check indicators Simple already shows reads worse. `critical` then
+  // `symbol` is enough to order them without duplicating any band table's own
+  // thresholds here.
+  //
+  // All THREE indicators Simple renders, not two. Leaving the Stress Test out
+  // meant a scenario that is positive today but fails at +1% - a 🔴 critical
+  // reading - could still roll up to "Funded ... with room in the indicators
+  // below", directly above its own red row. That contradicts this module's
+  // whole premise: every branch here is supposed to be something the user can
+  // independently verify on the same screen. Ordered as Simple renders them.
+  //
+  // Carried as [class, name] pairs because the name can no longer be recovered
+  // from a two-way identity check on the winner.
+  const CANDIDATES = [
+    [housingCostRatioClass, 'housingCostRatio'],
+    [stressTestClass, 'stressTest'],
+    [emergencyBufferClass, 'emergencyBuffer'],
+  ];
+
+  const worst = CANDIDATES
+    .filter(([classification]) => Boolean(classification))
     .reduce((worstSoFar, candidate) => {
       if (!worstSoFar) return candidate;
-      if (candidate.critical && !worstSoFar.critical) return candidate;
-      if (worstSoFar.critical && !candidate.critical) return worstSoFar;
-      return SYMBOL_SEVERITY[candidate.symbol] > SYMBOL_SEVERITY[worstSoFar.symbol]
-        ? candidate
-        : worstSoFar;
+      const [c] = candidate;
+      const [w] = worstSoFar;
+      if (c.critical && !w.critical) return candidate;
+      if (w.critical && !c.critical) return worstSoFar;
+      return SYMBOL_SEVERITY[c.symbol] > SYMBOL_SEVERITY[w.symbol] ? candidate : worstSoFar;
     }, null);
 
-  if (worst && (worst.critical || SYMBOL_SEVERITY[worst.symbol] >= SYMBOL_SEVERITY['🟠'])) {
+  if (worst && (worst[0].critical || SYMBOL_SEVERITY[worst[0].symbol] >= SYMBOL_SEVERITY['🟠'])) {
+    const [classification, name] = worst;
     return {
       label: 'Tight but funded',
-      symbol: worst.symbol,
-      textClass: worst.textClass,
+      symbol: classification.symbol,
+      textClass: classification.textClass,
       headline: 'Settlement and monthly costs are covered, but one indicator below needs attention.',
-      bindingConstraint: worst === emergencyBufferClass ? 'emergencyBuffer' : 'housingCostRatio',
+      bindingConstraint: name,
     };
   }
 

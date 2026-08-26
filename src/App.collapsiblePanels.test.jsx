@@ -77,6 +77,27 @@ describe('Purchase Health Check panel', () => {
     expect(within(heading.parentElement).getByRole('button', { name: '▾ Hide' })).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('Emergency Buffer')).toBeInTheDocument();
   });
+
+  // TODO-68 put the critical banner inside this card rather than the page-top
+  // hero, reasoning it was "impossible to miss without expanding the card,
+  // which is open by default anyway". TODO-140 then flipped the default to
+  // collapsed and voided that premise - a critical indicator, or the lost FHB
+  // stamp-duty concession that drives the banner independently, had no visible
+  // signal anywhere on the page. The shipped default IS that case: a first
+  // home buyer at $850k loses the concession.
+  it('shows the critical banner while the panel is still collapsed', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const heading = screen.getByText('🩺 Purchase Health Check');
+    const toggle = within(heading.parentElement).getByRole('button', { name: '▸ Show' });
+    // Collapsed - "below" would be a lie, so the wording follows the state.
+    expect(screen.getByText(/One or more indicators in this panel need attention/)).toBeInTheDocument();
+    expect(screen.queryByText(/One or more indicators below need attention/)).not.toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(screen.getByText(/One or more indicators below need attention/)).toBeInTheDocument();
+  });
 });
 
 describe('results-panel breakdown toggles', () => {
