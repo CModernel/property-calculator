@@ -3853,6 +3853,13 @@ const PropertyInvestmentCalculator = () => {
 
               const effectiveProgress = calculateEffectiveProgress(loanAmount, snapshot.effectiveBalance);
               const { years: yearsRem, months: monthsRem } = calculateTimeRemaining(loanSimulation.months, timelineMonth);
+              // TODO-164: computed once and shared by the value display and
+              // its classification below - they used to be two separate calls
+              // with identical arguments, so editing one (an argument-order
+              // slip is plausible, since offset/balance are both plain
+              // snapshot fields) would make the number and its colour disagree
+              // forever, with nothing to notice.
+              const offsetUtilisationPct = calculateOffsetUtilisation(snapshot.offset, snapshot.balance);
 
               return (
                 <div className="space-y-6">
@@ -3925,8 +3932,8 @@ const PropertyInvestmentCalculator = () => {
                   <HealthCheckIndicator
                     label="Offset Utilisation (this month)"
                     tooltipLabel="What is Offset Utilisation?"
-                    valueDisplay={`${calculateOffsetUtilisation(snapshot.offset, snapshot.balance).toFixed(1)}%`}
-                    classification={classifyOffsetUtilisation(calculateOffsetUtilisation(snapshot.offset, snapshot.balance))}
+                    valueDisplay={`${offsetUtilisationPct.toFixed(1)}%`}
+                    classification={classifyOffsetUtilisation(offsetUtilisationPct)}
                   >
                     <p>Offset balance divided by (offset + remaining loan balance) at the month selected above - how much of what you still owe is already covered by your offset. A snapshot of the selected month, not a guarantee of future progress - a deficit month can drain the offset instead of growing it.</p>
                     {/* TODO-161: classifyByBands takes value >= band.min, so

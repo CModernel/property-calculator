@@ -4798,6 +4798,65 @@ optionally reuse in the commit message when you implement it.
   simulation's own arithmetic), each test renders comfortably inside the
   "highest" band and asserts the tooltip's own claim agrees with the rendered
   classification. Verified by revert (both wording changes independently).
+
+- [x] **TODO-162: Render coverage for the Stress Test value and the Stabilized annotations**
+  From the Phase 2B coverage audit. `Survives +N%` was asserted nowhere in the
+  tree (only the two `survivedDelta === 0` strings were pinned), and five of
+  the six "stabilizes to" annotations had no VALUE assertion - only Housing
+  Cost Ratio did. The sharp one: Rental Yield's Stabilized reading is a
+  hand-inlined `* 12 / 52` unit conversion with no shared helper (`App.jsx`);
+  swapping the factors inflates the yield ~18.8x, and because
+  `worseOf(..., 'higherIsBetter')` then keeps the Day-1 value for the
+  CLASSIFICATION, the colour never moves and nothing else fails.
+  Rather than hand-deriving each Stabilized figure a second time - its own
+  risk, per TODO-151's review, where a second independently-computed
+  expectation was itself wrong - every new test zeroes every growth rate
+  first. With nothing scheduled and no growth, the Stabilized reading is
+  mathematically required to equal Day-1 exactly, so the app's own Day-1
+  render becomes the oracle: no external arithmetic, and a broken conversion
+  still shows up as an inequality between two numbers pulled off the same
+  render. Bisected against the real app (not computed by hand) to confirm the
+  default scenario's Stress Test reads "Survives +3%" both Day-1 and
+  Stabilized.
+  Also closed TODO-155's known gap: `App.jsx` wiring that passes
+  `stressTestClass` into `summariseAffordability` was pinned only by
+  `affordabilitySummary.test.js`'s unit fixture, not by anything that renders
+  Simple mode. Isolating Stress Test's own effect on the roll-up needed a
+  bisected scenario (a large personal expense, which moves Stress Test's
+  margin without moving Housing Cost Ratio's ratio, unlike a salary cut which
+  moves both together) so that Stress Test is the ONLY critical indicator -
+  otherwise Housing Cost Ratio's own Caution/High-risk crossing would make the
+  roll-up red regardless of whether the wiring was correct. Asserted on the
+  rendered SYMBOL, not just the "Tight but funded" text, since that label is
+  identical for the merely-orange and the critical case.
+  7 new tests in `App.healthCheckStabilized.test.jsx`. Verified each by
+  revert - the wiring test fails with
+  `expected '🟠 Tight but funded' to be '🔴 Tight but funded'`.
+  Suite 918 passing, lint and build clean.
+
+- [x] **TODO-164: Mortgage-Free Age and Offset Utilisation are never rendered in any test**
+  Both existed only in `purchaseHealthCheck.test.js` unit tests.
+  - **Offset Utilisation's double call fixed.** `App.jsx` called
+    `calculateOffsetUtilisation(snapshot.offset, snapshot.balance)` twice with
+    identical arguments - once for the value, once for the classification.
+    Computed once now (`offsetUtilisationPct`) and shared. New tests cross-check
+    the rendered symbol against `classifyOffsetUtilisation` (the real function,
+    not a re-derivation) at two months, plus a monotonic sanity check
+    (utilisation must rise as the offset grows against the shrinking balance -
+    a swapped `(balance, offset)` call would invert this). Verified by
+    reintroducing the double call with swapped arguments:
+    `expected '🟢' to be '🔴'`.
+  - **Mortgage-Free Age's simulation-output dependency pinned.** It reads
+    `loanSimulation.years` (a simulation output, offset-accelerated payoff -
+    not `loanTermYears`). The test reads the same figure the app already
+    renders elsewhere ("Time to pay off: X years") as its oracle rather than
+    re-deriving it by hand, so it can't drift from the simulation's own
+    arithmetic, and still catches the defect this entry named: verified by
+    swapping in `.months` (a raw month count, ~12x too large), which fails by
+    `expected 143 to be less than or equal to 45` - hundreds of months off, not
+    a rounding hair.
+  New `src/App.mortgageFreeAge.test.jsx` (4 tests).
+  Suite 918 passing, lint and build clean.
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -5557,25 +5616,6 @@ optionally reuse in the commit message when you implement it.
   Simple on Day-1 alone (which would under-report risk). Analysis first.
 
 
-- [ ] **TODO-162: Render coverage for the Stress Test value and the Stabilized annotations**
-  From the Phase 2B coverage audit. Two gaps that let real defects ship green:
-  - **`Survives +N%` is asserted nowhere in the tree** (grepped `Survives` across
-    every test file - zero hits). Only the two `survivedDelta === 0` strings are
-    pinned, so the reading the DEFAULT scenario renders is untested. Swapping
-    `stressTestSurvivedDelta` for `stabilizedStressTestSurvivedDelta` at
-    `App.jsx:3523` - they differ by a prefix and sit two lines apart - shows a
-    different scenario's figure with a green suite.
-  - **Five of the six "stabilizes to" annotations have no value assertion.** Only
-    Housing Cost Ratio is pinned with a value. The sharp one is Rental Yield:
-    `App.jsx:911` is a hand-inlined `* 12 / 52` (its comment admits it inverts
-    `calculateMonthlyFromWeekly` with no helper). Writing `* 52 / 12` inflates
-    the stabilized yield ~18.8x, and because `worseOf(..., 'higherIsBetter')`
-    then keeps the Day-1 value, **the classification does not move and nothing
-    fails**.
-  Also covers TODO-155's known gap: a render test that the roll-up actually
-  receives `stressTestClass`, and `liquidSavings` added to `SimpleModeView.test.jsx`'s
-  `makeProps()`, which never supplies it today - leaving TODO-149's branch dead
-  code under test in all 12 of that file's cases.
 
 - [ ] **TODO-163: Pin worseOf's direction, and the Stabilized-worse case, at render level**
   `worseOf` is unit-tested, but at the render level its `direction` argument is
@@ -5590,19 +5630,6 @@ optionally reuse in the commit message when you implement it.
   unexercised: the arrows appear in exactly one place in the tree
   (`HealthCheckIndicator.test.jsx:58`) and are hard-coded there as a prop.
 
-- [ ] **TODO-164: Mortgage-Free Age and Offset Utilisation are never rendered in any test**
-  Both exist only in `purchaseHealthCheck.test.js` unit tests; grepped, neither
-  appears in any `.test.jsx`.
-  - Mortgage-Free Age is fed `loanSimulation.years` (`App.jsx:922`) - a
-    SIMULATION OUTPUT, not `loanTermYears`. Nothing pins that the rendered age
-    equals `currentAge` plus the simulated payoff; a months/years slip renders
-    an age like 390 in silence. It defaults off, so its whole opt-in path is
-    unrendered.
-  - Offset Utilisation calls `calculateOffsetUtilisation` **twice with identical
-    arguments** (`App.jsx:3908-3910`), once for the value and once for the
-    classification. Editing one - argument order is a plausible slip, since both
-    are `snapshot` fields - yields a number and a colour derived from different
-    quantities, disagreeing forever.
 
 - [ ] **TODO-165: The scenario matrix pins Day-1 classifications the panel never renders**
   `purchaseHealthCheck.scenarios.test.js` (TODO-147) is the broadest regression
