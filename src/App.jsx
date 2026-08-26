@@ -54,7 +54,7 @@ import { getStateModule } from './calculations/states';
 // TODO-156: shared with SimpleModeView and RiskToleranceProfiles - three
 // inline copies of these is how TODO-148's and TODO-149's fixes reached some
 // display sites and not others.
-import { stressTestDisplay, bufferDisplay, bufferShortfallAction, stabilizedArrow } from './calculations/healthCheckDisplay';
+import { stressTestDisplay, bufferDisplay, bufferShortfallAction, stabilizedArrow, housingCostRatioDisplay } from './calculations/healthCheckDisplay';
 import {
   calculateEmergencyBufferMonths, classifyEmergencyBuffer,
   calculateHousingCostRatio, classifyHousingCostRatio,
@@ -3515,8 +3515,8 @@ const PropertyInvestmentCalculator = () => {
                 <HealthCheckIndicator
                   label="Housing Cost Ratio"
                   tooltipLabel="What is the Housing Cost Ratio?"
-                  valueDisplay={`${housingCostRatio.toFixed(0)}%`}
-                  secondaryValueDisplay={`${stabilizedArrow(housingCostRatio, stabilizedHousingCostRatio, 'higherIsWorse')} stabilizes to ${stabilizedHousingCostRatio.toFixed(0)}%`}
+                  valueDisplay={housingCostRatioDisplay(housingCostRatio)}
+                  secondaryValueDisplay={`${stabilizedArrow(housingCostRatio, stabilizedHousingCostRatio, 'higherIsWorse')} stabilizes to ${housingCostRatioDisplay(stabilizedHousingCostRatio)}`}
                   classification={housingCostRatioClass}
                 >
                   <p>Total property cost (loan repayment + property expenses) as a share of your total <strong>before-tax</strong> monthly income.</p>
@@ -3614,7 +3614,14 @@ const PropertyInvestmentCalculator = () => {
                     classification={mortgageFreeAgeClass}
                   >
                     <p>Your current age plus how long the loan simulation takes to pay off.</p>
-                    <p className="mt-2">&lt;60 comfortably early, 60-67 reasonable, 67-70 cutting it close, &gt;70 late - based on typical retirement age.</p>
+                    {/* TODO-161: classifyByBands takes value >= band.min, so age
+                        exactly 70 is Late, not "cutting it close" - matching the
+                        ≥ phrasing every other tooltip in this panel uses. The
+                        60-67/67-70 boundary is unchanged - restating a
+                        threshold across two adjacent ranges is this panel's own
+                        convention (see Emergency Buffer's "6-12 good, 3-6
+                        moderate" a few rows up), not the part that was wrong. */}
+                    <p className="mt-2">&lt;60 comfortably early, 60-67 reasonable, 67-70 cutting it close, ≥70 late - based on typical retirement age.</p>
                   </HealthCheckIndicator>
                 )}
               </>
@@ -3922,7 +3929,10 @@ const PropertyInvestmentCalculator = () => {
                     classification={classifyOffsetUtilisation(calculateOffsetUtilisation(snapshot.offset, snapshot.balance))}
                   >
                     <p>Offset balance divided by (offset + remaining loan balance) at the month selected above - how much of what you still owe is already covered by your offset. A snapshot of the selected month, not a guarantee of future progress - a deficit month can drain the offset instead of growing it.</p>
-                    <p className="mt-2">&gt;20% strong, 10-20% moderate, 5-10% low, &lt;5% just started.</p>
+                    {/* TODO-161: classifyByBands takes value >= band.min, so
+                        exactly 20.0% is Strong, not "moderate" - matching the ≥
+                        phrasing every other tooltip in this panel uses. */}
+                    <p className="mt-2">≥20% strong, 10-20% moderate, 5-10% low, &lt;5% just started.</p>
                   </HealthCheckIndicator>
 
                   {/* SECONDARY METRICS */}

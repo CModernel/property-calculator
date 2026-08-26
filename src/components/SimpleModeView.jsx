@@ -9,7 +9,7 @@ import {
 // TODO-156: the same wording the Advanced panel uses. These used to be
 // re-implemented inline here, which is how this view kept saying "Fails at
 // +1%" long after TODO-148 taught Advanced to say "Already in deficit".
-import { stressTestDisplay, bufferDisplay, bufferShortfallAction } from '../calculations/healthCheckDisplay';
+import { stressTestDisplay, bufferDisplay, bufferShortfallAction, housingCostRatioDisplay } from '../calculations/healthCheckDisplay';
 
 // TODO-135: the "can I afford this?" view. Presentation ONLY - every figure
 // here is passed in already computed by App.jsx, and this file performs no
@@ -165,7 +165,7 @@ const SimpleModeView = ({
         <HealthCheckIndicator
           label="Housing Cost Ratio"
           tooltipLabel="Why doesn't this match my own arithmetic?"
-          valueDisplay={`${housingCostRatio.toFixed(0)}%`}
+          valueDisplay={housingCostRatioDisplay(housingCostRatio)}
           classification={housingCostRatioClass}
         >
           <p>Measured against your <strong>before-tax</strong> income, not the net figure shown above, because the thresholds are the standard housing-stress benchmark and that benchmark is defined on gross income.</p>

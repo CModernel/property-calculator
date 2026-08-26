@@ -146,4 +146,22 @@ describe('Housing Cost Ratio on before-tax income (TODO-151)', () => {
     expect(primaryValue(hcrRow())).toBe('🟠 44%');
     expect(within(hcrRow()).getByRole('tooltip')).toHaveTextContent('$8,743/month before tax vs $6,994/month net');
   });
+
+  // TODO-159: calculateHousingCostRatio returns Infinity at zero income, and
+  // Infinity.toFixed(0) used to render the literal string "Infinity%" - the one
+  // Infinity-capable Health Check figure with no symbol guard.
+  it('shows the infinity symbol, not the literal string "Infinity%", with no income entered', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openHealthCheck(user);
+    await user.click(screen.getByRole('button', { name: /Income breakdown/ }));
+    await user.click(within(screen.getByText('Salary/Wages').closest('div').parentElement).getByRole('button', { name: '✕' }));
+
+    expect(primaryValue(hcrRow())).toBe('🔴 ∞%');
+    expect(screen.queryByText(/Infinity/)).not.toBeInTheDocument();
+
+    // Simple mode reads the same computed figure through the same helper.
+    await user.click(screen.getByRole('button', { name: /Simple mode/ }));
+    expect(primaryValue(hcrRow())).toBe('🔴 ∞%');
+  });
 });

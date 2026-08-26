@@ -53,3 +53,13 @@ export function stabilizedArrow(day1Value, stabilizedValue, direction) {
   const improved = direction === 'higherIsBetter' ? stabilizedValue > day1Value : stabilizedValue < day1Value;
   return improved ? '↗' : '↘';
 }
+
+// TODO-159: calculateHousingCostRatio returns Infinity at zero income
+// (purchaseHealthCheck.js), and Infinity.toFixed(0) is the literal string
+// "Infinity" - the one Infinity-capable Health Check figure that rendered it
+// raw instead of a symbol, unlike every buffer figure above. The 🔴 High risk
+// classification is already correct at that value (Infinity >= the highest
+// band's threshold); this only fixes what gets printed.
+export function housingCostRatioDisplay(ratioPct) {
+  return Number.isFinite(ratioPct) ? `${ratioPct.toFixed(0)}%` : '∞%';
+}

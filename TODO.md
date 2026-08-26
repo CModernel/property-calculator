@@ -4760,6 +4760,44 @@ optionally reuse in the commit message when you implement it.
   Property Summary card. Hiding it is defensible (there genuinely is no rent at
   Day 1) and it shows no misleading copy, so it is a judgement call rather than
   a defect.
+
+- [x] **TODO-159: Housing Cost Ratio rendered the literal string "Infinity%"**
+  `calculateHousingCostRatio` returns `Infinity` at zero income
+  (`purchaseHealthCheck.js`), and `Infinity.toFixed(0)` is the literal string
+  `"Infinity"`. The Advanced panel and Simple mode had no `Number.isFinite`
+  guard on this one figure - the only Infinity-capable Health Check value
+  without one, unlike every buffer figure (which render `∞`).
+  Added `housingCostRatioDisplay` to `src/calculations/healthCheckDisplay.js`
+  (TODO-156's shared module) rather than a third inline guard, and wired it
+  into both the Day-1/Stabilized pair in the Advanced panel and Simple mode's
+  value. The 🔴 High risk classification was already correct at `Infinity`
+  (it clears the highest band's threshold) - this only fixes what gets printed.
+  2 unit tests plus a render test that deletes the default income source and
+  asserts `∞%` appears in both display modes with no `Infinity` text anywhere
+  on the page. Verified by revert
+  (`expected '🔴 Infinity%' to be '🔴 ∞%'`).
+  Suite 908 passing, lint and build clean.
+
+- [x] **TODO-161: Two tooltips stated exclusive bounds where the bands are inclusive**
+  `classifyByBands` resolves a band with `value >= band.min`, so the boundary
+  value belongs to the HIGHER band. Two tooltips disagreed with their own row's
+  classification: Mortgage-Free Age said *">70 late"* when `MORTGAGE_FREE_AGE_BANDS`
+  has `min: 70 -> 'Late'`, and Offset Utilisation said *">20% strong"* when
+  `OFFSET_UTILISATION_BANDS` has `min: 20 -> 'Strong'`. Drift, not house style -
+  the other five tooltips in the panel already use `≥`.
+  Fixed both to `≥`, changing only the boundary operator - the internal range
+  boundaries (e.g. "60-67 reasonable, 67-70 cutting it close") were left as-is,
+  since restating a threshold across two adjacent bands is this panel's own
+  established convention (see Emergency Buffer's "6-12 good, 3-6 moderate"),
+  not the part that was wrong.
+  2 new tests in `App.tooltipBandBoundaries.test.jsx` - the only render coverage
+  either indicator had at all (TODO-164 covers the rest of that gap). Rather
+  than trying to land exactly on the float boundary (Mortgage-Free Age is
+  `currentAge` plus a simulated, offset-accelerated payoff duration - not a
+  value this suite can dial to an exact integer without hard-coding the
+  simulation's own arithmetic), each test renders comfortably inside the
+  "highest" band and asserts the tooltip's own claim agrees with the rendered
+  classification. Verified by revert (both wording changes independently).
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -5503,16 +5541,6 @@ optionally reuse in the commit message when you implement it.
   Suite 874 passing, lint and build clean.
 
 
-- [ ] **TODO-159: Housing Cost Ratio renders the literal string "Infinity%"**
-  `calculateHousingCostRatio` returns `Infinity` when income is 0
-  (`purchaseHealthCheck.js:44`, pinned by its own unit test), and
-  `Infinity.toFixed(0)` is `"Infinity"`. `App.jsx:3506-3507` and
-  `SimpleModeView.jsx:164` have no `Number.isFinite` guard - the only
-  Infinity-capable figure in the app that lacks one (compare `App.jsx:157`,
-  `SimpleModeView.jsx:180`, `RiskToleranceProfiles.jsx:37`, which all render
-  `∞`). Reachable by deleting every income source.
-  Display only: the 🔴 High risk classification is correct (`Infinity >= 50`),
-  so this is about not showing a debug-looking string, not about the reading.
 
 - [ ] **TODO-160: Simple mode pairs a Day-1 value with a Stabilized-derived classification and explains neither**
   Simple receives Day-1 VALUES (`housingCostRatio`, `stressTestSurvivedDelta`,
@@ -5528,17 +5556,6 @@ optionally reuse in the commit message when you implement it.
   simplify-the-view premise), show the Stabilized value instead, or classify
   Simple on Day-1 alone (which would under-report risk). Analysis first.
 
-- [ ] **TODO-161: Two tooltips state exclusive bounds where the bands are inclusive**
-  `classifyByBands` uses `value >= band.min`, so the boundary value belongs to
-  the HIGHER band. Two tooltips say otherwise:
-  - `App.jsx:3605` reads *"67-70 cutting it close, >70 late"*, but
-    `MORTGAGE_FREE_AGE_BANDS` has `min: 70 -> 'Late'`. Age exactly 70 renders
-    🔴 "Late" while the tooltip on that same row calls it 🟠.
-  - `App.jsx:3913` reads *">20% strong, 10-20% moderate"*, but
-    `OFFSET_UTILISATION_BANDS` has `min: 20 -> 'Strong'`. Exactly 20.0% renders
-    🟢 "Strong" while the tooltip calls it moderate.
-  Drift, not house style: the other five tooltips in the panel use `≥`
-  (`App.jsx:3499, 3516, 3539, 3572, 3586`). Copy-only fix.
 
 - [ ] **TODO-162: Render coverage for the Stress Test value and the Stabilized annotations**
   From the Phase 2B coverage audit. Two gaps that let real defects ship green:

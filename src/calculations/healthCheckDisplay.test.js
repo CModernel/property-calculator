@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { stressTestDisplay, bufferDisplay, bufferShortfallAction, stabilizedArrow } from './healthCheckDisplay';
+import { stressTestDisplay, bufferDisplay, bufferShortfallAction, stabilizedArrow, housingCostRatioDisplay } from './healthCheckDisplay';
 
 // TODO-156 extracted these from App.jsx so the Advanced panel, Simple mode and
 // RiskToleranceProfiles stop each keeping their own copy. Before that, the
@@ -73,5 +73,18 @@ describe('stabilizedArrow', () => {
   it('is flat when the two readings are identical, in either direction', () => {
     expect(stabilizedArrow(6, 6, 'higherIsBetter')).toBe('→');
     expect(stabilizedArrow(44, 44, 'higherIsWorse')).toBe('→');
+  });
+});
+
+describe('housingCostRatioDisplay', () => {
+  it('renders a whole-number percentage', () => {
+    expect(housingCostRatioDisplay(44.4)).toBe('44%');
+  });
+
+  // TODO-159: calculateHousingCostRatio returns Infinity at zero income, and
+  // Infinity.toFixed(0) is the literal string "Infinity" - this was the one
+  // Infinity-capable Health Check figure rendered raw instead of a symbol.
+  it('renders infinity as a symbol rather than the literal string "Infinity%"', () => {
+    expect(housingCostRatioDisplay(Infinity)).toBe('∞%');
   });
 });
