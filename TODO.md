@@ -4859,6 +4859,247 @@ optionally reuse in the commit message when you implement it.
   Suite 918 passing, lint and build clean.
 ---
 
+## 🔴 HIGH PRIORITY (Wrong dollar figures shown to the user)
+
+New section, added when the Phase-3-deep audit of `offsetSimulation.js` found
+defects that put a wrong, plausible-looking dollar figure on screen - a class
+that did not previously exist in this file's backlog. Work these before
+MEDIUM regardless of numbering.
+
+Shared context for every entry below (read once, applies to all of them):
+
+**The sentinel.** `src/calculations/offsetSimulation.js:183` has an early-out
+that returns `{ years: 999, months: maxMonths, totalInterest: 999999,
+totalSavingsInterest: 0, totalNegativeGearingBenefit: 0, totalCashShortfall: 0,
+monthsWithShortfall: 0, monthlyData: [] }`. Those are MAGIC SENTINEL VALUES
+meaning "this loan never pays off early", NOT real figures. It fires when ALL
+of these hold (`offsetSimulation.js:176-182`):
+- `monthlyToOffset <= 0`, AND
+- `incomeSources.length === 0`, AND
+- `contributions.reduce((s, c) => s + c.amount, 0) === 0`, AND
+- NOT (`initialSavingsBalance > 0` AND `savingsInterestRate > 0`)
+
+**How to reach it from the running app:** open the Income breakdown and delete
+the one default Salary/Wages source with its `✕` button. That alone satisfies
+all four clauses on the shipped default scenario (`monthlyToOffset` is
+`-monthlyPayment`, there are no offset contributions, and `savingsInterestRate`
+defaults to 0).
+
+**How to reproduce in a test** without a render, which is much easier - import
+`calculateLoanWithOffset` from `src/calculations/offsetSimulation` and pass
+`incomeSources: []`, `contributions: []`, `monthlyToOffset: -3301.0812`,
+`loanAmount: 543000`, `savingsInterestRate: 0`. Check `result.totalInterest === 999999`.
+
+**Shipped default numbers**, for building expectations: `loanAmount` $543,000,
+rate 6.13%, 360 months, `monthlyPayment` $3,301.0812, `cashRemaining`
+$28,453.25, `baseMonthlySurplus` -$3,301.0812, personal expenses $680/mo,
+property expenses $542.50/mo. A correct full-term run with no offset activity
+gives `totalInterest` **$645,389.22**.
+
+- [ ] **TODO-167: The engine's sentinel values escape to the screen through three unguarded paths**
+  Three separate render sites treat the sentinel numbers above as real figures.
+  **All three must be fixed in the same piece of work.** This is deliberately
+  ONE entry and not three, because it is the identical failure class as
+  TODO-156: there, a fix was applied to one display site and silently missed
+  two others, and it took a full audit to notice. Do not close this entry
+  having fixed only the site you find easiest.
+
+  **Site 1 - the worst, because the wrong number looks right.** `App.jsx:764`
+  computes `interestSaved = baselineSimulation.totalInterest - loanSimulation.totalInterest`
+  and `App.jsx:2531` renders it as `~${Math.round(interestSaved).toLocaleString()} saved in interest`,
+  gated only on `totalScheduledOffset > 0`. `baselineSimulation` (built around
+  `App.jsx:737-763`) ALWAYS passes `contributions: []`, so its contributions
+  clause is always satisfied - meaning the BASELINE can take the sentinel while
+  the real `loanSimulation`, which does have contributions, does not. The
+  subtraction then mixes a sentinel with a real figure.
+  *Reproduced:* delete the income source, then add one $10,000 one-time offset
+  contribution at month 1. `loanSimulation.totalInterest` = $645,184.79 (real),
+  `baselineSimulation.totalInterest` = 999999 (sentinel). The app renders
+  **"~$354,814 saved in interest"**. The TRUE saving from that $10,000
+  contribution is **$204.43** - off by a factor of about 1,736. A user has no
+  way to tell: $354,814 reads as a plausible number.
+
+  **Site 2.** The Strategy Comparison grid at `App.jsx:2072` is the only one of
+  the four extra engine consumers with no sentinel guard - the other three call
+  `hasUsableData` (`App.jsx:2245`, `:2309`, `:2321`, `:2380`); the grid's only
+  condition is `etfInvestingActive`. `strategyComparison.js:26` copies
+  `totalInterestPaid: Math.round(result.totalInterest)` into every one of the
+  441 grid cells.
+  *Reproduced:* delete the income source and turn on ETF investing. All 441
+  cells carry `totalInterestPaid: 999999`; the table renders
+  **"Interest Paid $999,999"**. It ALSO renders **"🟢 50% (Very resilient)"**
+  in the Crash Test column, because `calculateEtfCrashSurvivedPct` is handed
+  `999999 - 999999 = 0`, and `0 >= 0` scores as maximum resilience. Two wrong
+  figures on one row, one of them reassuring.
+
+  **Site 3.** `App.jsx:914` computes
+  `calculateMortgageFreeAge(currentAge, loanSimulation.years)` and `App.jsx:3613`
+  renders it as `${Math.round(mortgageFreeAge)}` with no guard. Its sibling at
+  `App.jsx:3730` guards the very same field (`loanSimulation.years < 100 ? … : '30+'`).
+  *Reproduced:* delete the income source, tick "Show my Mortgage-Free Age", open
+  the Purchase Health Check. `years: 999` + `currentAge: 30` renders
+  **"Mortgage-Free Age: 1029"**, classified 🔴 **"Late - Consider a shorter term
+  or higher contributions."**
+
+  **Suggested fix - decide the approach before writing code.** The cheapest
+  patch is a guard at each of the three sites, but that leaves the trap armed
+  for the next consumer. The better fix is to stop returning magic numbers:
+  give the early-out an explicit flag (e.g. `paysOffEarly: false` or
+  `hasUsableProjection: false`) and have every consumer branch on that instead
+  of on a numeric value. If you take the flag route, `hasUsableData` in
+  `strategyScenarios.js` already exists and should be reused/extended rather
+  than duplicated. Either way, `interestSaved` must not be computed at all when
+  either simulation is sentinelled - returning 0 or hiding the line is correct,
+  showing a subtraction is not.
+
+  **Verification.** One test per site asserting the sentinel does not reach the
+  DOM, plus a unit test that the early-out's return shape is what consumers
+  branch on. Then verify by revert: undo the fix and confirm each test fails
+  with the specific wrong string ("$354,814", "$999,999", "1029").
+
+- [ ] **TODO-168: The payoff month's snapshot never shows the loan retired, which inverts the Strategy Comparison table**
+  `offsetSimulation.js:475-478` is:
+  ```js
+  if (effectiveOffset >= balance) {
+    balance = 0;
+    break;
+  }
+  ```
+  That `balance = 0` is **dead code**. The month's snapshot was already pushed
+  at `offsetSimulation.js:458`, the `break` follows immediately, and the return
+  object has no `balance` key - so nothing ever reads the assignment. The last
+  entry in `monthlyData` therefore keeps the loan balance that the offset just
+  extinguished.
+  *Reproduced on the shipped default:* the engine returns `months: 108` (loan
+  paid off in 9 years) while the final `monthlyData` entry reads
+  `balance: 357095, offset: 360396`. The Timeline Explorer at its "End" slider
+  position renders **"🏦 Loan: $357,095"** for a loan the headline on the same
+  page says is paid off.
+
+  **The serious consequence is the Strategy Comparison table, not the Timeline
+  Explorer.** `timelineSnapshot.js:34` clamps any month past a simulation's end
+  to `monthlyData[monthlyData.length - 1]`, and `getComparisonMonths`
+  (`strategyScenarios.js`) drives the shared month axis off the LONGEST-running
+  strategy. Two of the comparison metrics read `s.balance` directly:
+  `strategyScenarios.js:52` (`'balance'`, labelled "Loan balance") and `:54`
+  (`'propertyEquity'`, `s.propertyValue - s.balance`). So a strategy that
+  retired its loan at month 129 is reported, for every month from 130 to 360,
+  as still owing the un-retired balance.
+  *Net effect:* the table tells the user that the strategy which pays the loan
+  off FASTEST still owes hundreds of thousands at year 30, while the strategy
+  that never pays it down early owes $0 - and it understates the fast
+  strategy's property equity by the same amount. That is the exact opposite of
+  the truth, in the panel whose entire purpose is that comparison.
+
+  `strategyScenarios.js:189` documents the wrong assumption in plain words:
+  *"stopped changing because the loan was gone"*. The loan is not gone in that
+  snapshot. Fix that comment too.
+
+  **Suggested fix - two viable approaches, pick one deliberately.** (a) Have
+  the engine push a final, post-retirement snapshot (`balance: 0`, `offset`
+  reduced by whatever retired the loan) before breaking. (b) Leave the engine
+  alone and have `getTimelineSnapshot` synthesise the retired state when
+  `timelineMonth >= simulation.months`. Approach (a) is more honest but changes
+  `monthlyData`'s length and is pinned by existing tests - check
+  `offsetSimulation.test.js` around the "should reflect the balance after the
+  regular payment, not 0" assertion before choosing, because that test
+  deliberately pins the CURRENT engine field values and may need updating
+  rather than treating as a contract.
+  **Careful:** the Net Worth metric (`propertyValue - balance + offset + savings + etf`)
+  is currently NEARLY right by accident - the `-balance` and `+offset` errors
+  mostly cancel. Whichever fix you choose must not break Net Worth while fixing
+  Loan balance and Property equity. Assert all three in the tests.
+
+  **Verification.** A test that a scenario which pays off early reports
+  `balance: 0` (or an equivalent retired reading) at and after its payoff
+  month, plus a Strategy Comparison test that the fastest-paying strategy shows
+  the LOWEST loan balance and the HIGHEST property equity at the final month.
+  Verify by revert.
+
+- [ ] **TODO-169: A scheduled interest-rate change accepts 0% and negative values, producing $NaN and fabricated payoff dates**
+  The hazard is already known and documented. `coreFieldConfigs.js:70` says, in
+  a comment above `INTEREST_RATE_FIELD`: *"min must stay above 0: a 0% rate
+  makes calculateMonthlyPayment divide 0 by 0, turning every figure on the page
+  into NaN"* - and sets `min: 0.1`.
+  **That guard protects only the base slider.** The same field also accepts
+  SCHEDULED changes, and that path is completely unvalidated:
+  - `App.jsx` renders the rate as `<SteppedExpenseField {...INTEREST_RATE_FIELD} field={interestRateField} />`,
+    but `SteppedExpenseField.jsx:39` is a bare `<input type="number">` for the
+    "New amount" with **no `min` and no `max`** attribute.
+  - `useSteppedValue.js:11` (`addChange`) validates ONLY that no change already
+    exists for the same `startMonth`. The amount is never checked.
+
+  *Reproduced:* shipped default plus one scheduled rate change with amount `0`
+  starting month 25. The engine returns `totalInterest: NaN`, `months: 25`,
+  `years: 2.0833`, and every field of the final `monthlyData` entry is `NaN`.
+  The app would render **"Time to pay off: 2.1 years"** - a completely
+  fabricated date, and one that is NOT caught by the `'30+'` fallback at
+  `App.jsx:3730` because `2.08 < 100` - alongside **"$NaN"** for total interest.
+  The same root cause also NaNs `projectedHealthCheck.js`'s "Stabilized"
+  readings, since it calls `calculateMonthlyPayment` with the scheduled rate too.
+
+  A NEGATIVE scheduled rate (e.g. `-1`) is also accepted and does not NaN - it
+  produces `totalInterest` $50,160 instead of the correct $196,743, which looks
+  plausible and is therefore arguably worse than the NaN.
+
+  **Suggested fix.** Validate in `useSteppedValue.addChange` and/or pass
+  `min`/`max` through `SteppedExpenseField` to its "New amount" input. Prefer
+  validating in `addChange` as well as the input, since the input's `min`
+  attribute does not stop a programmatic or pasted value. The bound to enforce
+  is the owning field's own `min`/`max` (0.1 and whatever
+  `INTEREST_RATE_FIELD.max` is) rather than a hardcoded number, so the other
+  seven `SteppedExpenseField` users get the same protection for free.
+  **Note:** the other seven fields are dollar amounts where 0 is legitimate, so
+  do NOT blanket-reject 0 - the bound must come from each field's config.
+
+  **Verification.** A unit test on `addChange` rejecting an out-of-range amount,
+  plus an engine test that no reachable input produces a non-finite
+  `totalInterest`. Verify by revert.
+
+- [ ] **TODO-170: The reported cash shortfall ignores the savings balance, and contradicts the Emergency Buffer indicator on the same screen**
+  `offsetSimulation.js:405` draws a deficit month from `offsetBalance` only:
+  ```js
+  const drawnFromOffset = Math.min(deficit, offsetBalance);
+  ```
+  `savingsBalance` is initialised at `offsetSimulation.js:202`, compounded, and
+  reported into `monthlyData` - and **never debited**. Grep `savingsBalance` in
+  that file: it appears at lines 202, 347, 348, 462 and nowhere else. So the
+  simulation reports money as "unfunded" while the cash it was seeded with
+  (`initialSavingsBalance`, which the real caller sets to `cashRemaining`) sits
+  untouched.
+  *Reproduced:* shipped default plus one $60,000 one-time personal expense at
+  month 6 (a car, a renovation). The engine reports
+  `totalCashShortfall: $45,616` across 1 month, and the month-6 snapshot
+  reports `savings: $28,453`. `App.jsx:3719` renders
+  **"⚠️ Cash shortfall: $45,616 across 1 month"** with the text *"your offset
+  balance is already empty, so the figures below assume money you don't have"* -
+  while `App.jsx:3882`, on the same screen, renders **"🐖 Savings: $28,453"**.
+  The genuinely unfunded amount is **$17,163**.
+
+  It also contradicts the Purchase Health Check: `App.jsx:3505`'s Emergency
+  Buffer reads **🟢 6.3 months, "Solid buffer for most emergencies"**, and its
+  tooltip promises *"how many months you could cover if income stopped
+  entirely"* and *"the simulation itself draws the offset down first to cover a
+  shortfall"*. The indicator is counting 6.3 months of runway the engine will
+  never spend.
+
+  **This needs a decision before code.** Either (a) the engine should draw a
+  deficit from `savingsBalance` after the offset is exhausted and before
+  reporting a shortfall - which changes simulation output and every pinned
+  expectation that involves a shortfall; or (b) the savings balance is
+  deliberately "not for this" and the UI must stop implying otherwise (reword
+  the shortfall banner and the Emergency Buffer tooltip, and reconsider whether
+  Emergency Buffer should count it at all). (a) is more intuitive; (b) is
+  cheaper and may match an intent recorded in TODO-136's own entry - read that
+  entry before deciding.
+
+  **Verification.** Whichever branch: a test on the $60,000-expense scenario
+  asserting the reported shortfall and the on-screen savings figure are
+  mutually consistent, and that the Emergency Buffer indicator agrees with
+  them. Verify by revert.
+
+---
+
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
 
 - [ ] **TODO-124 (Superseded by TODO-136/137/138 — do not implement independently): Should "Invest in ETFs" divert from Savings instead of from the Offset's own share?**
@@ -5668,6 +5909,116 @@ optionally reuse in the commit message when you implement it.
   turned out to be real CODE defects hiding as documentation drift (shipped here
   as TODO-154 and TODO-155) - stale entries are how the next one hides.
 
+- [ ] **TODO-171: Negative gearing moves the headline figures with no disclosure anywhere in the app**
+  `offsetSimulation.js:430-451` credits a monthly negative-gearing tax benefit
+  straight into `offsetBalance`, which accelerates the payoff and cuts total
+  interest. The engine also accumulates `totalNegativeGearingBenefit` - and
+  **that field has no UI consumer at all.** Grep it across `src/`: the only hits
+  are its own definition/accumulation in `offsetSimulation.js` and assertions in
+  `offsetSimulation.test.js`. Nothing renders it.
+  Grep `-i "negative gearing"` across `src/`: the only user-facing strings are
+  the tax-suggestion tooltip (which says the suggestion *ignores* negative
+  gearing) and the Gearing indicator (which describes a cash-flow shortfall, a
+  different thing). The Investment Property checkbox's own explainer says only
+  *"Adds Land Tax and Property Management to Property Expenses."*
+  *Reproduced:* price $850,000, deposit $85,000 (loan $765,000), rate 8%/30y,
+  Salary/Wages $2,200/wk, House Rent $500/wk, land tax $2,000, property
+  management $200/mo, personal expenses $680/mo, tax rate 45%, Investment
+  Property ticked. With negative gearing active the app shows **"Time to pay
+  off: 7.0 years"** and **"Total interest paid: $233,991"**; with it suppressed
+  the same scenario is **7.7 years / $267,355**. $61,425 of tax-refund cash is
+  injected over 84 months with no line item and no mention. Adding a scheduled
+  rate change widens the swing in "Total interest paid" to **$290,326**.
+  **Suggested fix:** surface `totalNegativeGearingBenefit` somewhere the user
+  can see it (the Loan Simulation card already has sibling lines for savings
+  interest), and extend the Investment Property explainer to say that ticking
+  it also models tax relief on rental losses. No calculation change required -
+  this is a disclosure fix. Note the related rate/cap questions are TODO-172;
+  do not conflate them.
+
+- [ ] **TODO-172: `monthlyData`'s `effectiveBalance` and `balance` are measured at different instants, so the Timeline Explorer card never reconciles**
+  `offsetSimulation.js:415` and `:418` compute `effectiveOffset` and
+  `effectiveBalance` from the **pre-payment** balance; `:454-455` then pays the
+  installment and reduces `balance`; `:458` pushes the **post-payment**
+  `balance` into the same row as that pre-payment `effectiveBalance`. So in
+  EVERY month, `effectiveBalance - (balance - offset)` equals that month's
+  principal payment.
+  *Measured on the shipped default:* month 1 → $558, month 2 → $589, month 6 →
+  $720, growing to a full installment. `App.jsx:3870` renders "Net Effective
+  Balance" directly above `App.jsx:3873`/`:3875`'s "🏦 Loan: … | 💰 Offset: …",
+  and the two do not net out. The invariant IS intended elsewhere:
+  `timelineSnapshot.js`'s synthetic month-0 snapshot satisfies
+  `effectiveBalance = balance - offset`, and `timelineSnapshot.test.js`'s
+  fixtures are built that way.
+  **Suggested fix:** decide which instant the row represents and make all three
+  fields agree. Pushing a post-payment `effectiveBalance` is probably right
+  (the row already reports a post-payment `balance`), but check
+  `offsetSimulation.test.js` for what is pinned first - grep `effectiveBalance`
+  there; today the only assertion is a `toBeGreaterThanOrEqual(0)`, so the
+  convention is essentially unpinned and you are free to choose.
+  Related to TODO-168 (same row, different defect: that one is about the final
+  month only). Consider doing them together.
+
+- [ ] **TODO-173: The offset credits its interest saving on the post-deposit balance while savings and ETF use the pre-deposit convention**
+  `offsetSimulation.js:343-352` explicitly document savings and ETF growth as
+  *"interest accrues on last month's ending balance BEFORE this month's deposit
+  … matches how a real bank statement works"*. The offset does the opposite:
+  this month's contributions and surplus land in `offsetBalance` BEFORE
+  `effectiveOffset` (`:415`) and `monthlyInterest` (`:421`) are computed, with
+  no comment acknowledging the asymmetry.
+  *Measured:* re-running the shipped default with the pre-deposit convention for
+  the offset gives `totalInterest` **$173,003.07** versus the shipped
+  **$170,611.48** - the shipped convention is **$2,391.59 (1.4%) more
+  optimistic**. Payoff month is unchanged at 108. Per-month effect: $12.70
+  (m1), $13.55 (m12), $17.56 (m60).
+  This is a MODELLING CHOICE, not clearly a defect: a real offset account nets
+  interest daily, so money deposited early in the month genuinely does reduce
+  that month's interest - roughly half of that $2,392 is defensible. Decide and
+  document rather than silently keeping it.
+  Worth knowing while deciding: the savings comment's stated justification is
+  vacuous today. Since TODO-136 removed the ongoing savings destination,
+  `savingsBalance` receives no deposits at all - so "new deposits start earning
+  next month" describes an account that never gets one, while the only account
+  that DOES get deposits uses the other convention.
+
+- [ ] **TODO-174: Negative-gearing relief is uncapped by tax actually payable and uses the average rather than the marginal rate**
+  Two related questions about the same expression,
+  `offsetSimulation.js:447`: `-propertyCashFlow * (effectiveTaxRate / 100)`.
+  **(a) No cap.** The relief is unbounded, so it can exceed the tax the user
+  would actually pay. *Measured:* loan $807,500 (95% LVR), House Rent $300/wk,
+  other income $700/wk, tax rate 45%, land tax $2,000, property management
+  $200/mo → **$333,658 of relief over 359 months, about $11,153/yr**, against
+  $36,400/yr of other income whose real Australian tax is about **$2,730**. The
+  model is refunding roughly four times the tax paid.
+  **(b) Average vs marginal rate.** `App.jsx` tells the user, in the tax
+  suggestion tooltip, that the suggested rate is *"an average rate across all
+  your income - not the marginal rate on your top dollar, which matters most for
+  rental income"*, and it even computes a `marginalRentalRate` purely for
+  display. The engine then uses the average rate for what is by definition
+  marginal-rate relief. The direction of the error depends on the user's own
+  slider, so it can err either way.
+  **Suggested fix:** at minimum cap the relief at the tax actually payable on
+  other income (there is an existing `calculateIncomeTax` helper - grep for it),
+  and either use `marginalRentalRate` or document why the average rate is
+  deliberate. This changes simulation output, so expect to update pinned
+  expectations in `offsetSimulation.test.js`'s negative-gearing describe block.
+  Disclosure is TODO-171; keep the two separate.
+
+- [ ] **TODO-175: Growth makes month 1 disagree between the static cards and the Timeline Explorer**
+  `growthRate.js` applies `Math.pow(1 + rate/12, month)` with `month` 1-indexed,
+  so the engine's month 1 already carries one month of growth while the static
+  Day-1 cards carry none.
+  *Measured on the shipped default:* income **$7,011.48** (engine month 1) vs
+  **$6,994.00** (static card); property expenses $543.63 vs $542.50; personal
+  expenses $681.42 vs $680.00; month-1 net cash flow $2,485.36 vs the card's
+  $2,470.42. Roughly $17/month, on the same page.
+  This is defensible for `propertyValue` (a month really has elapsed) and
+  debatable for the first paycheque. It is ALREADY pinned deliberately in both
+  directions - `projectedHealthCheck.test.js` has both an equivalence test and a
+  divergence test for exactly this - so **do not "fix" it without reading those
+  tests first**; the likely correct outcome is a tooltip explaining the
+  difference rather than a calculation change (same resolution as TODO-60's
+  52/12 weeks-per-month tooltip).
 ---
 
 ## ⚪ LOW PRIORITY (Deprioritized - excluded from default TODO listings)
