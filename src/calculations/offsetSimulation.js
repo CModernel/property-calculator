@@ -180,7 +180,13 @@ export function calculateLoanWithOffset({
     contributions.reduce((s, c) => s + c.amount, 0) === 0 &&
     !(initialSavingsBalance > 0 && savingsInterestRate > 0)
   ) {
-    return { years: 999, months: maxMonths, totalInterest: 999999, totalSavingsInterest: 0, totalNegativeGearingBenefit: 0, totalCashShortfall: 0, monthsWithShortfall: 0, monthlyData: [] };
+    // TODO-167: hasUsableProjection is the ONLY sanctioned way to detect this
+    // path. Consumers used to branch on the magic numbers themselves and get
+    // it wrong - one guessed `months >= 999 * 12` when `months` is maxMonths
+    // here, and three display sites never checked at all and rendered
+    // "$999,999" / "1029" as if they were real. See hasUsableProjection in
+    // usableProjection.js, which every consumer must go through.
+    return { years: 999, months: maxMonths, totalInterest: 999999, totalSavingsInterest: 0, totalNegativeGearingBenefit: 0, totalCashShortfall: 0, monthsWithShortfall: 0, monthlyData: [], hasUsableProjection: false };
   }
 
   // TODO-90/91: split once outside the loop (incomeSources itself never
@@ -486,6 +492,10 @@ export function calculateLoanWithOffset({
     totalNegativeGearingBenefit: totalNegativeGearingBenefit,
     totalCashShortfall: totalCashShortfall,
     monthsWithShortfall: monthsWithShortfall,
-    monthlyData: monthlyData
+    monthlyData: monthlyData,
+    // TODO-167: these figures came out of the real loop, so they are real
+    // money. Note this says nothing about monthlyData being non-empty -
+    // maxMonths: 0 is a genuine projection with no months in it.
+    hasUsableProjection: true
   };
 }

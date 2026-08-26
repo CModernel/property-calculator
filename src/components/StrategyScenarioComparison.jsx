@@ -8,8 +8,14 @@ const money = (v) => `$${Math.round(v).toLocaleString()}`;
 
 // The simulation reports payoff in months; show both so a 112 and a 113 are
 // distinguishable without mental arithmetic.
+//
+// TODO-167: there used to be a `if (months >= 999 * 12) return 'never'` guard
+// here, and it never fired once. It was written against the sentinel's
+// `years: 999` but applied to `months`, which the early-out sets to maxMonths
+// (360) - never 11988. Removed rather than corrected: App.jsx already refuses
+// to render this panel unless hasUsableData passes, so every `months` reaching
+// here is a real payoff month.
 function payoff(months) {
-  if (months >= 999 * 12) return 'never';
   const y = Math.floor(months / 12);
   const m = months % 12;
   return m === 0 ? `${y}y` : `${y}y ${m}m`;

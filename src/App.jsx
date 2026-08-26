@@ -72,6 +72,7 @@ import { calculateTotalCashRequired, calculateCashRemaining, calculateLiquidSavi
 import { getSteppedValue } from './calculations/steppedValue';
 import { getActiveAmount, getActiveAmountWithGrowth, isScheduleActive, countOccurrencesUpTo, classifyScheduleStatus, formatScheduleLabel } from './calculations/recurringAmount';
 import { getTimelineSnapshot, calculateEffectiveProgress, calculateTimeRemaining } from './calculations/timelineSnapshot';
+import { hasUsableProjection } from './calculations/usableProjection';
 import { INCOME_CATEGORIES, INCOME_CATEGORY_DEFAULTS, RENTAL_INCOME_CATEGORIES, SALARY_INCOME_CATEGORY } from './calculations/incomeCategories';
 import { getSuggestedTaxRate, getMarginalRentalTaxRate } from './calculations/taxRateSuggestion';
 import { useSteppedValue } from './hooks/useSteppedValue';
@@ -761,7 +762,16 @@ const PropertyInvestmentCalculator = () => {
     etfReserveMonths: effectiveEtfReserveMonths,
     maxMonths: totalMonths,
   });
-  const interestSaved = baselineSimulation.totalInterest - loanSimulation.totalInterest;
+  // TODO-167: null, not 0, when either arm hit the engine's sentinel early-out.
+  // baselineSimulation always passes `contributions: []`, so it can take the
+  // early-out while loanSimulation - which has contributions - runs the real
+  // loop, making this a sentinel minus a real figure. That rendered
+  // "~$354,814 saved in interest" where the true saving was $204.43. A
+  // sentinelled baseline has no real interest to subtract from, so there is no
+  // saving to quote; $0 would be just as false as $354,814.
+  const interestSaved = hasUsableProjection(baselineSimulation) && hasUsableProjection(loanSimulation)
+    ? baselineSimulation.totalInterest - loanSimulation.totalInterest
+    : null;
 
   // TODO-93: "Total interest paid" in today's dollars - a pure display-layer
   // read of loanSimulation's own monthlyData, discounting each month's
@@ -911,7 +921,13 @@ const PropertyInvestmentCalculator = () => {
 
   // TODO-88: Mortgage-Free Age is opt-in via showMortgageFreeAge, rather than
   // overloading currentAge itself as a "not provided" sentinel.
-  const mortgageFreeAge = showMortgageFreeAge ? calculateMortgageFreeAge(currentAge, loanSimulation.years) : null;
+  // TODO-167: loanSimulation.years is the sentinel 999 on the early-out path,
+  // which rendered "Mortgage-Free Age: 1029" classified 🔴 Late - and silently,
+  // since the Late band is critical: false. Its sibling render of the very same
+  // field has guarded it all along (`years < 100 ? … : '30+'`).
+  const mortgageFreeAge = showMortgageFreeAge && hasUsableProjection(loanSimulation)
+    ? calculateMortgageFreeAge(currentAge, loanSimulation.years)
+    : null;
   const mortgageFreeAgeClass = mortgageFreeAge !== null ? classifyMortgageFreeAge(mortgageFreeAge) : null;
 
   const healthCheckHasCritical = fhbConcessionLost || [emergencyBufferClass, housingCostRatioClass, stressTestClass, upfrontCostRatioClass].some((c) => c.critical);
@@ -2108,6 +2124,13 @@ const PropertyInvestmentCalculator = () => {
                   maxMonths: totalMonths,
                 };
                 const gridResults = runStrategyGrid(gridBaseParams);
+                // TODO-167: the only one of the five extra engine consumers
+                // that had no sentinel guard - it rendered "Interest Paid
+                // $999,999" plus a falsely reassuring "🟢 50% (Very
+                // resilient)", because the crash scorer is handed
+                // 999999 - 999999 = 0 and 0 >= 0 scores as maximum
+                // resilience. Same `return null` as the four siblings below.
+                if (!gridResults.every((r) => r.hasUsableProjection)) return null;
                 const paretoFront = selectParetoFront(gridResults);
                 const baselineRow = gridResults.find((r) => r.etfAllocationPct === 0);
                 const baselineInterest = baselineRow ? baselineRow.totalInterestPaid : 0;
@@ -2527,9 +2550,12 @@ const PropertyInvestmentCalculator = () => {
                           Reduces {safePercentage(totalScheduledOffset, loanAmount).toFixed(1)}% of loan balance
                         </p>
                       )}
-                      <p className="text-xs font-semibold text-green-700 dark:text-green-400">
-                        ~${Math.round(interestSaved).toLocaleString()} saved in interest
-                      </p>
+                      {/* TODO-167: no baseline to compare against means no saving to quote. */}
+                      {interestSaved !== null && (
+                        <p className="text-xs font-semibold text-green-700 dark:text-green-400">
+                          ~${Math.round(interestSaved).toLocaleString()} saved in interest
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -3606,7 +3632,11 @@ const PropertyInvestmentCalculator = () => {
                   </>
                 )}
 
-                {mortgageFreeAgeClass && (
+                {/* TODO-167: three states, not two. The user ticked a checkbox
+                    asking for this row, so a sentinelled projection has to say
+                    WHY it can't answer rather than making the row vanish -
+                    same idiom as Rental Yield, its sibling a few rows up. */}
+                {showMortgageFreeAge && (mortgageFreeAgeClass ? (
                   <HealthCheckIndicator
                     label="Mortgage-Free Age"
                     tooltipLabel="What is Mortgage-Free Age?"
@@ -3623,7 +3653,11 @@ const PropertyInvestmentCalculator = () => {
                         moderate" a few rows up), not the part that was wrong. */}
                     <p className="mt-2">&lt;60 comfortably early, 60-67 reasonable, 67-70 cutting it close, ≥70 late - based on typical retirement age.</p>
                   </HealthCheckIndicator>
-                )}
+                ) : (
+                  <div className="py-2 text-sm text-gray-400 dark:text-gray-500 italic">
+                    Mortgage-Free Age: not enough data yet - add income, reduce expenses, or schedule a contribution.
+                  </div>
+                ))}
               </>
             )}
           </div>

@@ -1,4 +1,5 @@
 import { calculateLoanWithOffset } from './offsetSimulation';
+import { hasUsableProjection } from './usableProjection';
 import { classifyByBands } from './purchaseHealthCheck';
 
 // TODO-98: the grid this session's own analysis settled on - 5% steps
@@ -23,6 +24,12 @@ export function runStrategyGrid(baseParams) {
       results.push({
         switchThresholdPct,
         etfAllocationPct,
+        // TODO-167: monthlyData is dropped here (441 arrays is the whole point
+        // of this shape), so the row has to carry the verdict itself or no
+        // caller can tell a sentinelled cell from a real one. Every cell
+        // agrees, since the grid's two axes are not part of the early-out's
+        // condition - but say it per row rather than making callers assume.
+        hasUsableProjection: hasUsableProjection(result),
         totalInterestPaid: Math.round(result.totalInterest),
         etfBalance,
         offsetBalance,

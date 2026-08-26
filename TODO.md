@@ -4884,6 +4884,64 @@ optionally reuse in the commit message when you implement it.
   Suite 926 passing, lint and build clean.
 ---
 
+- [x] **TODO-167: The engine's sentinel values escaped to the screen through three unguarded paths**
+  Fixed as one piece of work, deliberately - it is TODO-156's failure class,
+  where one display site was fixed and two were silently missed.
+  **The approach, decided before writing code.** Rather than three local
+  guards, the engine now says what it did: `calculateLoanWithOffset` carries
+  `hasUsableProjection` on BOTH return paths (`false` on the early-out, `true`
+  on the real loop), and a new `src/calculations/usableProjection.js` holds the
+  single predicate every consumer branches on. `strategyScenarios.hasUsableData`
+  was reimplemented on top of it, so there is exactly one definition rather
+  than two that can drift. The predicate checks the flag **and**
+  `monthlyData.length > 0` on purpose: the flag says the FIGURES are real, the
+  array says there is a month-by-month series to read, and `maxMonths: 0` is a
+  real projection with no months in it - neither implies the other.
+  The magic numbers stay, now internal and read by nobody. Replacing them with
+  `NaN` would make a future unguarded consumer fail loudly, but that directly
+  contradicts TODO-169, which had just removed `$NaN` from the UI.
+  - **Site 1 - `interestSaved`.** `baselineSimulation` always passes
+    `contributions: []`, so it can take the early-out while `loanSimulation`
+    runs the real loop - a sentinel minus a real figure. Now `null` unless both
+    arms are usable, and the line is dropped rather than showing `$0` (which
+    would be just as false). Per-line guard with a one-line comment, copying
+    its immediate neighbour's idiom at `App.jsx:2524-2529`.
+  - **Site 2 - the Strategy Comparison grid.** `runStrategyGrid` discards
+    `monthlyData` (441 arrays is the point of that shape), so each row now
+    carries `hasUsableProjection`. App.jsx guards with `.every(...)` and
+    `return null`, matching the four sibling consumers exactly.
+    `calculateEtfCrashSurvivedPct` was left alone: its `(0, 0) -> 50` is a
+    deliberately pinned contract (`strategyComparison.test.js:115`), so the fix
+    belongs upstream.
+  - **Site 3 - Mortgage-Free Age.** Three states now, not two. The user ticked
+    a checkbox asking for this row, so a sentinelled projection explains itself
+    in italic grey instead of vanishing - the same idiom as Rental Yield, a
+    sibling row in the very same panel (`App.jsx:3588-3605`).
+  - **Site 4, not in the original entry.** `StrategyScenarioComparison.jsx:12`
+    had `if (months >= 999 * 12) return 'never'` - dead since it was written.
+    It was aimed at the sentinel's `years: 999` but applied to `months`, which
+    the early-out sets to `maxMonths` (at most 360, since the loan term caps at
+    30 years). Removed rather than corrected: the panel is already guarded
+    upstream by `hasUsableData`. Same failure class - a consumer guessing at
+    the sentinel numerically and guessing wrong.
+  **Corrections to the entry's own claims, found while mapping the code.**
+  Site 1's gate chain was incomplete: not just `totalScheduledOffset > 0`, but
+  Advanced mode AND the "Offset contributions breakdown" disclosure expanded
+  (default `false`) AND that condition. And `hasUsableData` could NOT simply be
+  reused for the grid as the entry suggested - it takes run objects with
+  `.simulation`, which grid rows do not have, and would have thrown.
+  Verified by revert, one site at a time, each failing with the exact figure
+  this entry named: `~$354,814` (Site 1), `$999,999` plus `🟢 50%` (Site 2, both
+  confirmed against the real render), and `🔴 1029` (Site 3).
+  New `src/App.sentinelNeverRenders.test.jsx` (6 tests - each site paired with
+  a funded-scenario test, so the guards can't pass by simply hiding the figure
+  always) and `src/calculations/usableProjection.test.js` (7 tests, including
+  the `maxMonths: 0` case against the real engine). `offsetSimulation.test.js`'s
+  strict whole-object `toEqual` updated (+1 field) - the one test the shape
+  change breaks, kept strict on purpose.
+  Suite 939 passing, lint and build clean.
+---
+
 ## 🔴 HIGH PRIORITY (Wrong dollar figures shown to the user)
 
 New section, added when the Phase-3-deep audit of `offsetSimulation.js` found
@@ -4920,67 +4978,6 @@ rate 6.13%, 360 months, `monthlyPayment` $3,301.0812, `cashRemaining`
 $28,453.25, `baseMonthlySurplus` -$3,301.0812, personal expenses $680/mo,
 property expenses $542.50/mo. A correct full-term run with no offset activity
 gives `totalInterest` **$645,389.22**.
-
-- [ ] **TODO-167: The engine's sentinel values escape to the screen through three unguarded paths**
-  Three separate render sites treat the sentinel numbers above as real figures.
-  **All three must be fixed in the same piece of work.** This is deliberately
-  ONE entry and not three, because it is the identical failure class as
-  TODO-156: there, a fix was applied to one display site and silently missed
-  two others, and it took a full audit to notice. Do not close this entry
-  having fixed only the site you find easiest.
-
-  **Site 1 - the worst, because the wrong number looks right.** `App.jsx:764`
-  computes `interestSaved = baselineSimulation.totalInterest - loanSimulation.totalInterest`
-  and `App.jsx:2531` renders it as `~${Math.round(interestSaved).toLocaleString()} saved in interest`,
-  gated only on `totalScheduledOffset > 0`. `baselineSimulation` (built around
-  `App.jsx:737-763`) ALWAYS passes `contributions: []`, so its contributions
-  clause is always satisfied - meaning the BASELINE can take the sentinel while
-  the real `loanSimulation`, which does have contributions, does not. The
-  subtraction then mixes a sentinel with a real figure.
-  *Reproduced:* delete the income source, then add one $10,000 one-time offset
-  contribution at month 1. `loanSimulation.totalInterest` = $645,184.79 (real),
-  `baselineSimulation.totalInterest` = 999999 (sentinel). The app renders
-  **"~$354,814 saved in interest"**. The TRUE saving from that $10,000
-  contribution is **$204.43** - off by a factor of about 1,736. A user has no
-  way to tell: $354,814 reads as a plausible number.
-
-  **Site 2.** The Strategy Comparison grid at `App.jsx:2072` is the only one of
-  the four extra engine consumers with no sentinel guard - the other three call
-  `hasUsableData` (`App.jsx:2245`, `:2309`, `:2321`, `:2380`); the grid's only
-  condition is `etfInvestingActive`. `strategyComparison.js:26` copies
-  `totalInterestPaid: Math.round(result.totalInterest)` into every one of the
-  441 grid cells.
-  *Reproduced:* delete the income source and turn on ETF investing. All 441
-  cells carry `totalInterestPaid: 999999`; the table renders
-  **"Interest Paid $999,999"**. It ALSO renders **"🟢 50% (Very resilient)"**
-  in the Crash Test column, because `calculateEtfCrashSurvivedPct` is handed
-  `999999 - 999999 = 0`, and `0 >= 0` scores as maximum resilience. Two wrong
-  figures on one row, one of them reassuring.
-
-  **Site 3.** `App.jsx:914` computes
-  `calculateMortgageFreeAge(currentAge, loanSimulation.years)` and `App.jsx:3613`
-  renders it as `${Math.round(mortgageFreeAge)}` with no guard. Its sibling at
-  `App.jsx:3730` guards the very same field (`loanSimulation.years < 100 ? … : '30+'`).
-  *Reproduced:* delete the income source, tick "Show my Mortgage-Free Age", open
-  the Purchase Health Check. `years: 999` + `currentAge: 30` renders
-  **"Mortgage-Free Age: 1029"**, classified 🔴 **"Late - Consider a shorter term
-  or higher contributions."**
-
-  **Suggested fix - decide the approach before writing code.** The cheapest
-  patch is a guard at each of the three sites, but that leaves the trap armed
-  for the next consumer. The better fix is to stop returning magic numbers:
-  give the early-out an explicit flag (e.g. `paysOffEarly: false` or
-  `hasUsableProjection: false`) and have every consumer branch on that instead
-  of on a numeric value. If you take the flag route, `hasUsableData` in
-  `strategyScenarios.js` already exists and should be reused/extended rather
-  than duplicated. Either way, `interestSaved` must not be computed at all when
-  either simulation is sentinelled - returning 0 or hiding the line is correct,
-  showing a subtraction is not.
-
-  **Verification.** One test per site asserting the sentinel does not reach the
-  DOM, plus a unit test that the early-out's return shape is what consumers
-  branch on. Then verify by revert: undo the fix and confirm each test fails
-  with the specific wrong string ("$354,814", "$999,999", "1029").
 
 - [ ] **TODO-168: The payoff month's snapshot never shows the loan retired, which inverts the Strategy Comparison table**
   `offsetSimulation.js:475-478` is:
@@ -6004,6 +6001,31 @@ gives `totalInterest` **$645,389.22**.
   tests first**; the likely correct outcome is a tooltip explaining the
   difference rather than a calculation change (same resolution as TODO-60's
   52/12 weeks-per-month tooltip).
+
+- [ ] **TODO-176: `baselineSimulation` starts with a savings balance that the contributions already spent**
+  Found while mapping the two simulation bundles for TODO-167, and deliberately
+  left out of that fix as a separate defect.
+  `App.jsx` builds `baselineSimulation` as an exact copy of `loanSimulation`
+  except for `contributions: []` - all 25 other fields identical, name for name.
+  But one of those identical fields is `initialSavingsBalance: cashRemaining`,
+  and `cashRemaining` (`App.jsx:544`) has **already had `totalScheduledOffset`
+  subtracted from it**.
+  So the baseline arm is handed a starting balance reduced by contributions it
+  is explicitly not making. It is supposed to answer "what if I made no
+  contributions?" and instead answers "what if I paid the contributions and
+  then didn't use them?" - which understates the baseline's own interest and
+  therefore **understates** the "~$X saved in interest" figure that
+  `interestSaved` (`App.jsx:764`) reports. Opposite direction to TODO-167's
+  overstatement, and it survives that fix untouched.
+  **Not yet quantified** - unlike TODO-167's defects, no repro figure has been
+  measured. Do that first: the fix is plausibly a one-line change
+  (`initialSavingsBalance: cashRemaining + totalScheduledOffset` on the baseline
+  bundle only), but confirm the direction and size against a real render before
+  writing it, and check whether `cashRemaining`'s other consumers expect the
+  reduced value.
+  **Verification.** A test pinning that the baseline arm's starting balance is
+  independent of the contribution schedule, plus the measured `interestSaved`
+  figure before and after. Verify by revert.
 ---
 
 ## ⚪ LOW PRIORITY (Deprioritized - excluded from default TODO listings)

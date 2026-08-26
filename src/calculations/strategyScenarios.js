@@ -1,5 +1,6 @@
 import { calculateLoanWithOffset } from './offsetSimulation';
 import { getTimelineSnapshot } from './timelineSnapshot';
+import { hasUsableProjection } from './usableProjection';
 
 // TODO-137: three named strategies compared side by side against IDENTICAL
 // inputs, so the only thing that differs is where the monthly surplus goes.
@@ -149,11 +150,12 @@ export function runCrashScenarios(baseParams, etfAllocationPct, etfCrashMonth, s
   ];
 }
 
-// A run that hit offsetSimulation.js's sentinel early-out has no monthlyData
-// at all. The Timeline Explorer short-circuits on the same condition; every
-// consumer here has to, or getTimelineSnapshot returns undefined.
+// The array-shaped form of hasUsableProjection, for the scenario runners above:
+// every arm has to be usable, or the panel comparing them is meaningless.
+// TODO-167 folded the condition itself into usableProjection.js so this and
+// the display sites in App.jsx cannot drift onto two different definitions.
 export function hasUsableData(runs) {
-  return runs.every((r) => r.simulation.monthlyData.length > 0);
+  return runs.every((r) => hasUsableProjection(r.simulation));
 }
 
 // End-state figures, one column per strategy. Reuses the same expressions the

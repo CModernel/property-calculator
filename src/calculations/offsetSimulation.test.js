@@ -15,7 +15,10 @@ describe('calculateLoanWithOffset', () => {
       monthlyRate: 0.005,
       monthlyPayment: 500,
     });
-    expect(result).toEqual({ years: 999, months: 360, totalInterest: 999999, totalSavingsInterest: 0, totalNegativeGearingBenefit: 0, totalCashShortfall: 0, monthsWithShortfall: 0, monthlyData: [] });
+    // TODO-167 added hasUsableProjection so consumers stop branching on the
+    // magic numbers themselves. Kept as a whole-object toEqual on purpose: any
+    // future field added to one return path and not the other fails here.
+    expect(result).toEqual({ years: 999, months: 360, totalInterest: 999999, totalSavingsInterest: 0, totalNegativeGearingBenefit: 0, totalCashShortfall: 0, monthsWithShortfall: 0, monthlyData: [], hasUsableProjection: false });
   });
 
   it('always reports a numeric months, on the sentinel path too', () => {
@@ -46,6 +49,9 @@ describe('calculateLoanWithOffset', () => {
     expect(result.months).toBe(1);
     expect(result.monthlyData).toHaveLength(1);
     expect(result.totalInterest).toBe(0);
+    // TODO-167: the normal path's own half of the flag - a shape change that
+    // set it on only one of the two returns would leave this false.
+    expect(result.hasUsableProjection).toBe(true);
   });
 
   it('amortizes normally with no offset activity (basic loop mechanics)', () => {
