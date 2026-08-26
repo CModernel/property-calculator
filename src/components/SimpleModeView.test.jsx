@@ -38,8 +38,11 @@ function makeProps(overrides = {}) {
     // measured against. $6,994 net grossed up at 20% - the shipped default.
     // Omitting it renders a literal "$NaN" in the indicator's tooltip.
     housingCostRatio: 44, housingCostRatioClass: GREEN, totalMonthlyIncomeBeforeTax: 8743,
-    stressTestSurvivedDelta: 3, stressTestClass: GREEN,
-    emergencyBufferMonths: 6.3, emergencyBufferClass: GREEN,
+    stressTestSurvivedDelta: 3, stressTestClass: GREEN, alreadyInDeficitAtCurrentRate: false,
+    // TODO-156: liquidSavings was missing entirely, so `undefined < 0` was
+    // false in every case here and TODO-149's whole branch was dead code under
+    // test. Consistent with the figures above: 28453 / (3844 + 680) = 6.29.
+    emergencyBufferMonths: 6.3, emergencyBufferClass: GREEN, liquidSavings: 28453,
     incomeSourceCount: 1,
     personalExpenseCount: 3,
     offsetContributionCount: 0,
@@ -82,6 +85,33 @@ describe('SimpleModeView', () => {
     const tooltip = within(row).getByRole('tooltip');
     expect(tooltip).toHaveTextContent('$8,743/month before tax vs $6,994/month net');
     expect(tooltip.textContent).not.toContain('NaN');
+  });
+
+  // TODO-156: this view re-implemented the stress-test ternary inline and was
+  // never passed alreadyInDeficitAtCurrentRate, so it kept saying "Fails at
+  // +1%" long after TODO-148 taught the Advanced panel to distinguish the two -
+  // the same scenario answering differently depending on the mode.
+  it('says "Already in deficit" rather than "Fails at +1%" when underwater today', () => {
+    render(<SimpleModeView {...makeProps({ stressTestSurvivedDelta: 0, alreadyInDeficitAtCurrentRate: true })} />);
+    expect(screen.getByText(/Already in deficit/)).toBeInTheDocument();
+    expect(screen.queryByText(/Fails at \+1%/)).not.toBeInTheDocument();
+  });
+
+  it('still says "Fails at +1%" when today is positive but a 1-point rise is not', () => {
+    render(<SimpleModeView {...makeProps({ stressTestSurvivedDelta: 0, alreadyInDeficitAtCurrentRate: false })} />);
+    expect(screen.getByText(/Fails at \+1%/)).toBeInTheDocument();
+  });
+
+  // The branch that was dead under test until liquidSavings joined makeProps.
+  it('renders the settlement shortfall wording instead of a negative month count', () => {
+    render(<SimpleModeView {...makeProps({ emergencyBufferMonths: -0.3, liquidSavings: -9937 })} />);
+    expect(screen.getByText(/Can't cover settlement/)).toBeInTheDocument();
+    expect(screen.getByText(/Short by \$9,937 at settlement/)).toBeInTheDocument();
+  });
+
+  it('renders the normal month count when settlement is funded', () => {
+    render(<SimpleModeView {...makeProps()} />);
+    expect(screen.getByText(/6\.3 months/)).toBeInTheDocument();
   });
 
   it('gives the other two indicators no tooltip - only this one needs reconciling', () => {

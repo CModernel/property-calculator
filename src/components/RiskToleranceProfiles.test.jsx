@@ -26,13 +26,24 @@ describe('RiskToleranceProfiles', () => {
   });
 
   it('reflects the passed-in Emergency Buffer reading rather than a hardcoded figure', () => {
-    render(<RiskToleranceProfiles emergencyBufferMonths={4.2} emergencyBufferClassification={{ label: 'Moderate', symbol: '🟠', textClass: 'text-orange-600 dark:text-orange-400', critical: false, action: '' }} />);
+    render(<RiskToleranceProfiles emergencyBufferMonths={4.2} liquidSavings={19000} emergencyBufferClassification={{ label: 'Moderate', symbol: '🟠', textClass: 'text-orange-600 dark:text-orange-400', critical: false, action: '' }} />);
     expect(screen.getByText(/4\.2 months \(Moderate\)/)).toBeInTheDocument();
   });
 
   it('shows the infinity symbol rather than a number when there are no monthly outgoings', () => {
-    render(<RiskToleranceProfiles emergencyBufferMonths={Infinity} emergencyBufferClassification={GOOD_CLASSIFICATION} />);
+    render(<RiskToleranceProfiles emergencyBufferMonths={Infinity} liquidSavings={28000} emergencyBufferClassification={GOOD_CLASSIFICATION} />);
     expect(screen.getByText(/∞ \(Good\)/)).toBeInTheDocument();
+  });
+
+  // TODO-156: this panel kept a third inline copy of the buffer wording that
+  // guarded only Number.isFinite, and its call site never passed liquidSavings
+  // - so it still printed "-0.3 months (High risk)" next to advice to fund the
+  // buffer first, long after TODO-149 fixed the Advanced panel and Simple mode.
+  it('says the settlement cannot be covered rather than printing a negative month count', () => {
+    const critical = { label: 'High risk', symbol: '🔴', textClass: 'text-red-600 dark:text-red-400', critical: true, action: '' };
+    render(<RiskToleranceProfiles emergencyBufferMonths={-0.33} liquidSavings={-2000} emergencyBufferClassification={critical} />);
+    expect(screen.getByText(/Can't cover settlement \(High risk\)/)).toBeInTheDocument();
+    expect(screen.queryByText(/-0\.3 months/)).not.toBeInTheDocument();
   });
 
   it('contains no interactive controls - purely a reference panel', () => {

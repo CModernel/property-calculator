@@ -51,6 +51,10 @@ import { getGrossActiveAmount } from './calculations/grossIncome';
 import { estimateLmi } from './calculations/lmi';
 import { sumClosingCosts } from './calculations/closingCosts';
 import { getStateModule } from './calculations/states';
+// TODO-156: shared with SimpleModeView and RiskToleranceProfiles - three
+// inline copies of these is how TODO-148's and TODO-149's fixes reached some
+// display sites and not others.
+import { stressTestDisplay, bufferDisplay, bufferShortfallAction, stabilizedArrow } from './calculations/healthCheckDisplay';
 import {
   calculateEmergencyBufferMonths, classifyEmergencyBuffer,
   calculateHousingCostRatio, classifyHousingCostRatio,
@@ -123,45 +127,6 @@ const PERSONAL_EXPENSE_CATEGORIES = ['Groceries', 'Transport', 'Bills', 'Health'
 const WEEKLY_TO_MONTHLY_TOOLTIP = (
   <p>Monthly figures convert weekly amounts using the actual number of weeks per year: <strong>52 ÷ 12 ≈ 4.33</strong>, not a flat ×4.</p>
 );
-
-// TODO-134: arrow prefix for a Health Check indicator's "stabilizes to..."
-// annotation - whether the Stabilized reading is better, worse, or the same
-// as Day 1, in that indicator's own direction (higherIsBetter/higherIsWorse).
-function stabilizedArrow(day1Value, stabilizedValue, direction) {
-  if (stabilizedValue === day1Value) return '→';
-  const improved = direction === 'higherIsBetter' ? stabilizedValue > day1Value : stabilizedValue < day1Value;
-  return improved ? '↗' : '↘';
-}
-
-// TODO-148: calculateStressTestSurvivedDelta returns 0 both when a scenario is
-// already in deficit at today's rate and when it only fails once rates rise a
-// point - it never separately probes +0. Distinguishing the two is presentation
-// only (the function's own signature/return value is untouched); `alreadyInDeficit`
-// is the caller's own already-computed net balance at the rate actually being
-// tested (today's for Day-1, the Stabilized month's projected rate for that
-// reading), not a new calculation.
-function stressTestDisplay(survivedDelta, alreadyInDeficit) {
-  if (survivedDelta > 0) return `Survives +${survivedDelta}%`;
-  return alreadyInDeficit ? 'Already in deficit' : 'Fails at +1%';
-}
-
-// TODO-149: calculateEmergencyBufferMonths/calculateVacancyBufferMonths keep
-// dividing liquidSavings by monthly outgoings unclamped, so a settlement that
-// can't be funded at all produces a negative "months" figure - not a
-// meaningful buffer size, and easy to misread as merely thin rather than
-// "you can't fund this at all". Presentation only: the calculation and
-// classification (still 🔴 High risk regardless) are untouched.
-function bufferDisplay(months, liquidSavings) {
-  if (liquidSavings < 0) return "Can't cover settlement";
-  return Number.isFinite(months) ? `${months.toFixed(1)} months` : '∞';
-}
-
-// Same shortfall liquidSavings already represents in the "You've committed
-// $X more than your savings cover" warning above (Available Savings summary)
-// - restated here rather than invented afresh, so the two agree.
-function bufferShortfallAction(liquidSavings) {
-  return `Short by $${Math.abs(Math.round(liquidSavings)).toLocaleString()} at settlement - reduce the price, add to savings, or scale back scheduled contributions.`;
-}
 
 const PropertyInvestmentCalculator = () => {
   // Not stateful (no useState) - there's no UI to switch states yet, so this
@@ -326,7 +291,19 @@ const PropertyInvestmentCalculator = () => {
   // of existing fields - so a scenario saved before this feature (which can
   // only carry a switchThresholdPct) lands on the right radio automatically,
   // with no SCHEMA_VERSION bump.
+  // TODO-157: the stored criterion wins. TODO-144 chose to re-derive this from
+  // the three raw values instead of saving it, and the derivation is a priority
+  // chain - which is only safe if at most one of them is ever non-default. It
+  // isn't: switching criteria does not clear the others (that is the whole
+  // reason `effective*` below exists), and the payload stores the RAW values.
+  // So "delay to month 36, then switch to loan ratio 20%" saved both, and on
+  // reload `36 > 1` won: the criterion the user did NOT select was applied and
+  // the one they did select was dropped, silently running a different
+  // simulation from the one that was saved.
+  // The chain stays as the fallback, so scenarios saved before this still load
+  // exactly as they did.
   const [etfStartTrigger, setEtfStartTrigger] = useState(() => {
+    if (config.etfStartTrigger) return config.etfStartTrigger;
     if ((config.etfStartMonth ?? 1) > 1) return 'month';
     if ((config.etfReserveMonths ?? 0) > 0) return 'reserve';
     if ((config.switchThresholdPct ?? 0) > 0) return 'loanRatio';
@@ -334,7 +311,8 @@ const PropertyInvestmentCalculator = () => {
   });
 
   // Only the selected criterion reaches the engine; the other two stay at their
-  // no-op defaults, so switching criteria can never leave a stale gate applied.
+  // no-op defaults, so switching criteria can never leave a stale gate applied
+  // WITHIN a session - and, since TODO-157, across a save/reload too.
   const effectiveEtfStartMonth = etfStartTrigger === 'month' ? etfStartMonth : 1;
   const effectiveEtfReserveMonths = etfStartTrigger === 'reserve' ? etfReserveMonths : 0;
   const effectiveSwitchThresholdPct = etfStartTrigger === 'loanRatio' ? switchThresholdPct : 0;
@@ -914,7 +892,16 @@ const PropertyInvestmentCalculator = () => {
   // The data-presence gate deliberately keeps reading the pre-vacancy figure:
   // `> 0` is unaffected by these positive multipliers, so the 52-week edge case
   // TODO-150 fixed (a 0 factor reading as "no rent entered") stays covered.
-  const rentalYieldHasData = hasEnoughDataForRentalYield(weeklyRentalIncomeBeforeVacancy);
+  //
+  // TODO-158: it also has to look past month 1. `weeklyRentalIncomeBeforeVacancy`
+  // is resolved AT month 1, so rent scheduled to start later (a settlement with
+  // a tenant moving in next year, say) read as "no rental income entered" - and
+  // the fallback copy then told the user to add an income source they had
+  // already added, while suppressing a Stabilized reading that had a real
+  // figure. The question this gate is meant to ask is "did you enter rent?",
+  // not "is rent arriving this month", so the Stabilized reading counts too.
+  const rentalYieldHasData = hasEnoughDataForRentalYield(weeklyRentalIncomeBeforeVacancy)
+    || hasEnoughDataForRentalYield(projected.monthlyRentalIncomeBeforeTaxAndVacancy);
   const rentalYield = calculateRentalYield(weeklyRentalIncomeBeforeTaxAndVacancy, propertyPrice);
   // Inverse of calculateMonthlyFromWeekly (weekly * 52 / 12) - no dedicated
   // helper exists, and adding one for this single call site isn't warranted.
@@ -1036,9 +1023,14 @@ const PropertyInvestmentCalculator = () => {
       useCreditCard, monthlyCardSpend, avgExtraDaysHeld, cashbackPct, annualCardFee, inflationRate,
       showEtfInvestingOptions, showOpportunityCost, expectedEtfReturn, useEtfInvesting, etfAllocationPct, switchThresholdPct,
       // TODO-144: purely additive, so no SCHEMA_VERSION bump - an older
-      // scenario without these falls through to the same no-op defaults, and
-      // etfStartTrigger is re-derived from them on load rather than stored.
-      etfStartMonth, etfReserveMonths, etfCrashMonth,
+      // scenario without these falls through to the same no-op defaults.
+      // TODO-157: etfStartTrigger is now STORED rather than re-derived. These
+      // three raw values are all saved, and more than one can be non-default at
+      // once (switching criteria doesn't clear the others), so the load-time
+      // priority chain could pick a criterion the user had moved away from.
+      // Also additive: a scenario saved without it still falls back to that
+      // chain, so nothing that already exists on disk changes meaning.
+      etfStartMonth, etfReserveMonths, etfCrashMonth, etfStartTrigger,
       conveyancing, buildingInspection, pestInspection, registrationFees, searches,
       loanEstablishmentFee, propertyValuation, homeInsurance, rateAdjustments, miscUpfrontCost,
       incomeSources,
@@ -1301,7 +1293,7 @@ const PropertyInvestmentCalculator = () => {
           totalPropertyCost={totalPropertyCost}
           monthlyPersonalExpenses={monthlyPersonalExpenses}
           housingCostRatio={housingCostRatio} housingCostRatioClass={housingCostRatioClass} totalMonthlyIncomeBeforeTax={totalMonthlyIncomeBeforeTax}
-          stressTestSurvivedDelta={stressTestSurvivedDelta} stressTestClass={stressTestClass}
+          stressTestSurvivedDelta={stressTestSurvivedDelta} stressTestClass={stressTestClass} alreadyInDeficitAtCurrentRate={alreadyInDeficitAtCurrentRate}
           emergencyBufferMonths={emergencyBufferMonths} emergencyBufferClass={emergencyBufferClass} liquidSavings={liquidSavings}
           incomeSourceCount={incomeSources.length}
           personalExpenseCount={personalExpenseItems.length}
@@ -2412,6 +2404,7 @@ const PropertyInvestmentCalculator = () => {
                 <RiskToleranceProfiles
                   emergencyBufferMonths={emergencyBufferMonths}
                   emergencyBufferClassification={emergencyBufferClass}
+                  liquidSavings={liquidSavings}
                 />
               )}
               </div>

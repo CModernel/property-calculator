@@ -4677,6 +4677,89 @@ optionally reuse in the commit message when you implement it.
   `stressTestClass` is pinned only by the unit fixture, not by a render test.
   Covered as TODO-162.
 
+
+- [x] **TODO-156: TODO-148's and TODO-149's fixes never reached every display site**
+  Each Health Check indicator can render in up to three places - the Advanced
+  panel (`App.jsx`), Simple mode (`SimpleModeView.jsx`) and the risk-tolerance
+  reference panel (`RiskToleranceProfiles.jsx`) - and each kept its own inline
+  copy of the display one-liners. That is not a style problem: it is exactly how
+  two shipped fixes ended up applying to some sites and not others. TODO-148
+  taught the Advanced panel to say "Already in deficit" while Simple mode kept
+  its pre-fix ternary, so the same scenario answered differently depending on
+  the mode - on a screen whose own roll-up already said "Monthly shortfall".
+  TODO-149 fixed two of three sites, leaving `RiskToleranceProfiles` printing
+  "-1.5 months (High risk)" next to advice to fund the buffer first.
+  Fixed at the root rather than patching the two symptoms: new
+  `src/calculations/healthCheckDisplay.js` holds `stressTestDisplay`,
+  `bufferDisplay`, `bufferShortfallAction` and `stabilizedArrow`, and all three
+  render sites import them. The two call sites that were missing data now pass
+  it (`alreadyInDeficitAtCurrentRate` to Simple mode, `liquidSavings` to
+  `RiskToleranceProfiles`). Presentation only - no classification, threshold or
+  calculation moved.
+  Tests: new `healthCheckDisplay.test.js` (17) covering every branch, including
+  `stabilizedArrow`'s three - which were previously exercised NOWHERE in the
+  tree, the only `↗` in the repo being a hard-coded prop in
+  `HealthCheckIndicator.test.jsx`. Plus 4 in `SimpleModeView.test.jsx`, 1 in
+  `RiskToleranceProfiles.test.jsx`, and - the ones that actually matter - two
+  **cross-site agreement** tests at the App level (`App.stressTestDeficit.test.jsx`,
+  `App.bufferShortfall.test.jsx`) that assert two display sites give the same
+  answer for the same scenario. Before this the suite had exactly one such test,
+  and its regex could not match "Can't cover settlement", which is why this
+  defect survived it.
+  Also closed the fixture-drift that let it hide: `SimpleModeView.test.jsx`'s
+  `makeProps()` never supplied `liquidSavings`, so `undefined < 0` was false and
+  TODO-149's whole branch was dead code under test in all 12 of that file's
+  cases. Verified by revert - removing either prop fails with
+  `expected '🔴 Fails at +1%' to be '🔴 Already in deficit'`.
+  Suite 903 passing, lint and build clean.
+
+- [x] **TODO-157: A saved scenario reloaded running a different ETF trigger than the one saved**
+  Found by the Phase 3 audit, adjacent to the parameter matrix (which came back
+  clean, 126/126). The ETF start criterion is a mutually-exclusive radio choice,
+  but each option's value lives in its own state and switching options does not
+  clear the others - which is the entire reason the `effective*` indirection
+  exists. TODO-144 chose to store the three RAW values and re-derive the
+  criterion on load through a priority chain (`etfStartMonth > 1` beats
+  `etfReserveMonths > 0` beats `switchThresholdPct > 0`). That is only safe if
+  at most one is ever non-default, and it isn't.
+  Repro: set "delay to month = 36", switch to "loan ratio = 20%" (correct
+  in-session), save, reload. The chain sees `36 > 1`, returns `'month'`, and the
+  criterion the user did NOT select is applied while the one they did select is
+  dropped - silently running a different simulation from the one saved, moving
+  "Loan paid off in", "Total interest paid" and the Timeline Explorer's ETF
+  balance.
+  The comment at the `effective*` definitions claimed *"switching criteria can
+  never leave a stale gate applied"* - true in-session, false across a
+  save/reload; amended rather than deleted. Fix: store `etfStartTrigger` in the
+  payload and prefer it on load, keeping the chain as the fallback so scenarios
+  saved before this load exactly as they did. Additive, so no `SCHEMA_VERSION`
+  bump - the same reasoning TODO-144 used.
+  New `App.etfTriggerPersistence.test.jsx` (4 tests): the trap scenario, a
+  genuine "month" choice, the pre-TODO-157 fallback, and a save round trip that
+  also asserts the raw leftovers are still stored - which is precisely why the
+  criterion has to be saved rather than inferred back out of them. Verified by
+  revert (`expected 'month' to be 'loanRatio'`).
+
+- [x] **TODO-158: Rental Yield's "not enough data" gate was a month-1 gate**
+  `rentalYieldHasData` derived from `weeklyRentalIncomeBeforeVacancy`, which is
+  resolved AT month 1. A House Rent source with `startMonth: 13` - a settlement
+  with a tenant moving in next year - therefore read as "no rental income
+  entered", so the panel told the user to *"add a House Rent/Room Rent income
+  source"* they had already added, and suppressed a Stabilized reading that had
+  a real figure.
+  TODO-150 had given this gate its pre-vacancy basis so the 52-week
+  (factor exactly 0) case still counts as "rent entered"; this is the other axis
+  of the same question - the schedule rather than the haircut. The gate now also
+  accepts the Stabilized figure, so it asks "did you enter rent?" rather than
+  "is rent arriving this month". Day 1 still reads 0% and the row shows both
+  values, which is the honest answer for a property carried unrented for a year.
+  New `App.rentalYieldScheduledStart.test.jsx` (2 tests), including the negative
+  direction - the fallback must still appear when there really is no rental
+  income, which was only ever pinned the other way round. Verified by revert.
+  Left alone deliberately: the same month-1 `hasRentalIncome` also gates the
+  Property Summary card. Hiding it is defensible (there genuinely is no rent at
+  Day 1) and it shows no misleading copy, so it is a judgement call rather than
+  a defect.
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -5419,63 +5502,6 @@ optionally reuse in the commit message when you implement it.
   moved to roughly **$2,365/week**.
   Suite 874 passing, lint and build clean.
 
-- [ ] **TODO-156: TODO-148's and TODO-149's fixes never reached every display site**
-  Each Health Check indicator can render in up to three places - the Advanced
-  panel, `SimpleModeView.jsx`, and `RiskToleranceProfiles.jsx` - and each place
-  re-implements the display logic inline. Two shipped fixes reached only some:
-  - TODO-148 (Advanced only): `SimpleModeView.jsx:172` re-implements the pre-fix
-    ternary and is never passed `alreadyInDeficitAtCurrentRate`, so the same
-    scenario reads "Already in deficit" in Advanced and "Fails at +1%" in
-    Simple - on a screen whose own roll-up already says "Monthly shortfall".
-  - TODO-149 (2 of 3 sites): `RiskToleranceProfiles.jsx:37` has its own inline
-    `bufferDisplay` guarding only `Number.isFinite`, and its call site
-    (`App.jsx:2402-2404`) never passes `liquidSavings`, so with ETF investing
-    active it still renders "-0.3 months".
-  Worth treating as one item because the root cause is shared, and because the
-  highest-leverage fix is not either bug: it is collapsing the three display
-  paths into one, or adding cross-site agreement tests. Exactly ONE such test
-  exists today (`App.projectionAssumptions.test.jsx:408-421`, Emergency Buffer,
-  Advanced vs. RiskToleranceProfiles) and its regex cannot match "Can't cover
-  settlement", which is why this defect survived it. There is no Advanced-vs-
-  Simple agreement test for any indicator.
-
-- [ ] **TODO-157: A saved scenario reloads running a different ETF trigger than the one saved**
-  Found by the Phase 3 audit, adjacent to the parameter matrix (which came back
-  clean, 126/126). The `effective*` trio (`App.jsx:338-340`) is applied correctly
-  on the way INTO the engine, but the save payload stores the RAW state
-  (`App.jsx:1027, 1031`) and `etfStartTrigger` is not stored at all - it is
-  re-derived on load by a priority chain (`App.jsx:330-332`): `etfStartMonth > 1`
-  wins, then `etfReserveMonths > 0`, then `switchThresholdPct > 0`. No
-  `setEtfStartTrigger` call site clears its siblings (verified at `1976, 1987,
-  2015, 2044, 2185`) - which is the very reason `effective*` exists.
-  Repro: set "delay to month = 36", then switch to "loan ratio = 20%". Correct
-  in-session. Save - the payload carries both. Reload: the chain sees `36 > 1`,
-  returns `'month'`, and **the criterion the user did not select is applied while
-  the one they did select is dropped**. The reloaded scenario runs a different
-  simulation from the one saved, moving "Loan paid off in", "Total interest paid"
-  and the Timeline Explorer's ETF balance. The grid's Apply button (`:2185`)
-  makes it easier to hit, since it sets `loanRatio` while leaving any earlier
-  `etfStartMonth` intact.
-  Sharpest detail: the comment at `App.jsx:336-337` claims *"switching criteria
-  can never leave a stale gate applied"* - true in-session, false across a
-  save/reload. And the decision to re-derive rather than store is documented at
-  `App.jsx:1028-1030` citing **TODO-144**, so TODO-144's fix has a hole in the
-  mechanism it introduced. Fix is cheap: store `etfStartTrigger` in the payload,
-  keeping the priority chain as the fallback for older scenarios.
-
-- [ ] **TODO-158: Rental Yield's "not enough data" gate is a month-1 gate, not a data-presence gate**
-  `rentalYieldHasData` derives from `weeklyRentalIncomeBeforeVacancy`
-  (`App.jsx:645`), evaluated at **month 1 only**. A House Rent source with
-  `startMonth: 13` therefore shows *"Rental Yield: not enough data yet - add a
-  House Rent/Room Rent income source"* to someone who has already added one, and
-  suppresses a Stabilized reading that has a real figure (`App.jsx:911-913`).
-  The same month-1 gate (`hasRentalIncome`) also hides the Property Summary card
-  (`App.jsx:3391`), which is more defensible - there genuinely is no rent yet at
-  Day 1. The copy is the part that is plainly wrong.
-  TODO-150 fixed the 52-week factor-0 case and described both gates as now
-  asking "a data-presence question, not a how-much-arrives one" - accurate for
-  vacancy, not for scheduling. It also undercuts TODO-133's promise that Rental
-  Yield reflects scheduled income changes.
 
 - [ ] **TODO-159: Housing Cost Ratio renders the literal string "Infinity%"**
   `calculateHousingCostRatio` returns `Infinity` when income is 0

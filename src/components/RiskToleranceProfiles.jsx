@@ -6,6 +6,14 @@
 // Ranges are illustrative on purpose, never a single precise percentage -
 // "investors who describe themselves as X typically consider a range around
 // Y", never "you should do Y".
+//
+// TODO-156: the buffer wording is the Health Check panel's own, not a local
+// re-implementation. This file used to carry a third inline copy that guarded
+// only Number.isFinite, so it kept rendering "-0.3 months" after TODO-149 had
+// fixed the other two sites. Still no calculation here - bufferDisplay is
+// presentation only.
+import { bufferDisplay } from '../calculations/healthCheckDisplay';
+
 const PROFILES = [
   {
     label: 'Conservative',
@@ -33,8 +41,8 @@ const PROFILES = [
   },
 ];
 
-const RiskToleranceProfiles = ({ emergencyBufferMonths, emergencyBufferClassification }) => {
-  const bufferDisplay = Number.isFinite(emergencyBufferMonths) ? `${emergencyBufferMonths.toFixed(1)} months` : '∞';
+const RiskToleranceProfiles = ({ emergencyBufferMonths, emergencyBufferClassification, liquidSavings }) => {
+  const bufferText = bufferDisplay(emergencyBufferMonths, liquidSavings);
 
   return (
     <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-sm space-y-3">
@@ -53,7 +61,7 @@ const RiskToleranceProfiles = ({ emergencyBufferMonths, emergencyBufferClassific
       <p className="text-xs text-gray-600 dark:text-gray-300">
         Regardless of profile, many planners suggest keeping your Emergency Buffer - money in the Offset covering essential expenses - funded before directing any surplus to ETFs. Your Emergency Buffer right now:{' '}
         <span className={`font-semibold ${emergencyBufferClassification.textClass}`}>
-          {emergencyBufferClassification.symbol} {bufferDisplay} ({emergencyBufferClassification.label})
+          {emergencyBufferClassification.symbol} {bufferText} ({emergencyBufferClassification.label})
         </span>.
       </p>
 

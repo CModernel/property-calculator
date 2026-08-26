@@ -6,6 +6,10 @@ import {
   PROPERTY_PRICE_FIELD, depositContributionField, loanAmountField,
   AVAILABLE_SAVINGS_FIELD, INTEREST_RATE_FIELD, LOAN_TERM_FIELD,
 } from './coreFieldConfigs';
+// TODO-156: the same wording the Advanced panel uses. These used to be
+// re-implemented inline here, which is how this view kept saying "Fails at
+// +1%" long after TODO-148 taught Advanced to say "Already in deficit".
+import { stressTestDisplay, bufferDisplay, bufferShortfallAction } from '../calculations/healthCheckDisplay';
 
 // TODO-135: the "can I afford this?" view. Presentation ONLY - every figure
 // here is passed in already computed by App.jsx, and this file performs no
@@ -43,7 +47,7 @@ const SimpleModeView = ({
   // Health Check subset (classifications already computed, incl. TODO-134
   // Day-1/Stabilized annotations)
   housingCostRatio, housingCostRatioClass, totalMonthlyIncomeBeforeTax,
-  stressTestSurvivedDelta, stressTestClass,
+  stressTestSurvivedDelta, stressTestClass, alreadyInDeficitAtCurrentRate,
   emergencyBufferMonths, emergencyBufferClass, liquidSavings,
   // Disclosure of what's included but not editable here
   incomeSourceCount,
@@ -169,17 +173,14 @@ const SimpleModeView = ({
         </HealthCheckIndicator>
         <HealthCheckIndicator
           label="Interest Rate Stress Test"
-          valueDisplay={stressTestSurvivedDelta > 0 ? `Survives +${stressTestSurvivedDelta}%` : 'Fails at +1%'}
+          valueDisplay={stressTestDisplay(stressTestSurvivedDelta, alreadyInDeficitAtCurrentRate)}
           classification={stressTestClass}
         />
         <HealthCheckIndicator
           label="Emergency Buffer"
-          // TODO-149: liquidSavings < 0 means settlement itself can't be
-          // funded - a negative "months" figure isn't a meaningful buffer
-          // size, so it gets its own wording rather than e.g. "-1.5 months".
-          valueDisplay={liquidSavings < 0 ? "Can't cover settlement" : (Number.isFinite(emergencyBufferMonths) ? `${emergencyBufferMonths.toFixed(1)} months` : '∞')}
+          valueDisplay={bufferDisplay(emergencyBufferMonths, liquidSavings)}
           classification={liquidSavings < 0
-            ? { ...emergencyBufferClass, action: `Short by $${Math.abs(Math.round(liquidSavings)).toLocaleString()} at settlement - reduce the price, add to savings, or scale back scheduled contributions.` }
+            ? { ...emergencyBufferClass, action: bufferShortfallAction(liquidSavings) }
             : emergencyBufferClass}
         />
       </div>

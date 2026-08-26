@@ -78,6 +78,30 @@ describe('Emergency/Vacancy Buffer settlement-shortfall display (TODO-149)', () 
     expect(within(row).queryByText(/Can't cover settlement/)).not.toBeInTheDocument();
   });
 
+  // TODO-156: the third display site. It kept its own inline copy of the
+  // wording and its call site never passed liquidSavings, so it still printed
+  // "-1.5 months (High risk)" next to advice to fund the buffer before buying
+  // ETFs. Nothing pinned it because the only cross-site test in the suite
+  // (App.projectionAssumptions) runs the default, funded scenario.
+  it('the risk-tolerance panel agrees with the Health Check panel on a settlement shortfall', async () => {
+    const user = userEvent.setup();
+    await renderWithScenario({
+      propertyPrice: 1200000, showEtfInvestingOptions: true, useEtfInvesting: true, etfAllocationPct: 20,
+    });
+
+    // The scenario turns the ETF feature on; the expander is plain UI state,
+    // so it still has to be opened before the panel is reachable.
+    await user.click(screen.getByRole('button', { name: /ETF settings and strategy comparison/ }));
+
+    const riskPanel = screen.getByText('🧭 Risk-tolerance reference points').closest('div');
+    expect(within(riskPanel).getByText(/Can't cover settlement \(High risk\)/)).toBeInTheDocument();
+    expect(within(riskPanel).queryByText(/-1\.5 months/)).not.toBeInTheDocument();
+
+    // ...and the Health Check panel says the same thing for the same scenario.
+    await openHealthCheck(user);
+    expect(primaryValue(indicatorRow('Emergency Buffer'))).toBe("🔴 Can't cover settlement");
+  });
+
   it('Simple mode shows the same "Can\'t cover settlement" wording for Emergency Buffer', async () => {
     const user = userEvent.setup();
     await renderWithScenario({ propertyPrice: 1200000 });

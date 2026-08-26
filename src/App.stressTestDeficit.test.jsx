@@ -83,4 +83,22 @@ describe('Interest Rate Stress Test deficit display (TODO-148)', () => {
     expect(stressTestPrimaryValue(row)).toContain('🔴');
     expect(within(row).getByText(/Already in deficit today, or a 1-point rate rise would put you there/)).toBeInTheDocument();
   });
+
+  // TODO-156: every assertion above scopes to the Advanced panel, which is why
+  // nobody noticed Simple mode had re-implemented the pre-fix ternary and was
+  // never passed alreadyInDeficitAtCurrentRate - the same scenario answered
+  // "Already in deficit" in one mode and "Fails at +1%" in the other, with
+  // Simple mode's own roll-up already saying "Monthly shortfall" right above it.
+  it('Simple mode gives the same answer as the Advanced panel for the same scenario', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await setSalary(user, 800);
+
+    await openHealthCheck(user);
+    const advanced = stressTestPrimaryValue(stressTestRow());
+    expect(advanced).toBe('🔴 Already in deficit');
+
+    await user.click(screen.getByRole('button', { name: /Simple mode/ }));
+    expect(stressTestPrimaryValue(stressTestRow())).toBe(advanced);
+  });
 });
