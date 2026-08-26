@@ -25,6 +25,37 @@ describe('useSteppedValue', () => {
     expect(window.alert).toHaveBeenCalledTimes(1);
   });
 
+  // TODO-169: min/max are the owning field's own bounds (e.g. an interest
+  // rate field's 0.1-20), passed in by the caller. Before this fix, addChange
+  // never validated the amount at all.
+  it('alerts and does not add a change when the amount is below min', () => {
+    const { result } = renderHook(() => useSteppedValue(5, []));
+    act(() => result.current.addChange(0, 25, 0.1, 20));
+    expect(result.current.changes).toHaveLength(0);
+    expect(window.alert).toHaveBeenCalledTimes(1);
+  });
+
+  it('alerts and does not add a change when the amount is above max', () => {
+    const { result } = renderHook(() => useSteppedValue(5, []));
+    act(() => result.current.addChange(25, 25, 0.1, 20));
+    expect(result.current.changes).toHaveLength(0);
+    expect(window.alert).toHaveBeenCalledTimes(1);
+  });
+
+  it('alerts and does not add a change when the amount is not a finite number', () => {
+    const { result } = renderHook(() => useSteppedValue(5, []));
+    act(() => result.current.addChange(NaN, 25, 0.1, 20));
+    expect(result.current.changes).toHaveLength(0);
+    expect(window.alert).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts an amount within min/max', () => {
+    const { result } = renderHook(() => useSteppedValue(5, []));
+    act(() => result.current.addChange(10, 25, 0.1, 20));
+    expect(result.current.changes).toHaveLength(1);
+    expect(window.alert).not.toHaveBeenCalled();
+  });
+
   it('removeChange removes only the matching id', () => {
     const initialChanges = [
       { id: 1, amount: 250, startMonth: 6 },

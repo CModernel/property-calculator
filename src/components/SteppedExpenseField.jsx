@@ -13,7 +13,7 @@ const SteppedExpenseField = ({ field, ...numberSliderProps }) => {
   const [newStartMonth, setNewStartMonth] = useState(1);
 
   const handleAdd = () => {
-    addChange(newAmount, newStartMonth);
+    addChange(newAmount, newStartMonth, numberSliderProps.min, numberSliderProps.max);
     setShowAddChange(false);
     setNewAmount(base);
     setNewStartMonth(1);
@@ -38,6 +38,8 @@ const SteppedExpenseField = ({ field, ...numberSliderProps }) => {
             <input
               type="number"
               value={newAmount}
+              min={numberSliderProps.min}
+              max={numberSliderProps.max}
               onChange={(e) => setNewAmount(Number(e.target.value))}
               className="w-full p-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             />

@@ -39,8 +39,23 @@ describe('SteppedExpenseField', () => {
     fireEvent.change(amountInput, { target: { value: '600' } });
     fireEvent.click(screen.getByText('Add scheduled change'));
 
-    expect(field.addChange).toHaveBeenCalledWith(600, 1);
+    // TODO-169: the field's own min/max now ride along so addChange can
+    // enforce them, not just the duplicate-startMonth check.
+    expect(field.addChange).toHaveBeenCalledWith(600, 1, 0, 1000);
     expect(screen.queryByText('New amount')).not.toBeInTheDocument();
+  });
+
+  // TODO-169: the "New amount" input had no min/max attribute at all - it
+  // accepted any value including 0 or negative on a field (e.g. interest
+  // rate) where that NaNs the whole simulation.
+  it('the "New amount" input carries the field\'s own min/max', () => {
+    const field = makeField();
+    render(<SteppedExpenseField field={field} label="Interest Rate" min={0.1} max={20} />);
+
+    fireEvent.click(screen.getByText('+ Schedule a change'));
+    const amountInput = screen.getAllByRole('spinbutton')[1];
+    expect(amountInput).toHaveAttribute('min', '0.1');
+    expect(amountInput).toHaveAttribute('max', '20');
   });
 
   it('renders the changes list sorted by startMonth regardless of insertion order', () => {

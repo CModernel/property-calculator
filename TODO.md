@@ -4859,6 +4859,31 @@ optionally reuse in the commit message when you implement it.
   Suite 918 passing, lint and build clean.
 ---
 
+- [x] **TODO-169: A scheduled interest-rate change accepted 0% and negative values, producing $NaN and fabricated payoff dates**
+  The base slider's own `min: 0.1` guard (`coreFieldConfigs.js`) never covered
+  scheduled changes: `SteppedExpenseField`'s "New amount" input had no
+  `min`/`max` attribute, and `useSteppedValue.addChange` validated only that
+  no change already existed for the same `startMonth` - the amount itself was
+  never checked.
+  **Fixed by threading the owning field's own bounds through, not a hardcoded
+  number.** `SteppedExpenseField` now passes its own `min`/`max` (already part
+  of its `numberSliderProps`, since every call site sets them) both as the
+  input's `min`/`max` attributes and as extra arguments to `addChange`, which
+  rejects (with an alert, no state change) any amount that is non-finite,
+  below `min`, or above `max`. Because the bound comes from each field's own
+  config, the other seven `SteppedExpenseField` users (dollar amounts, where 0
+  is legitimate) keep their own `min: 0`, unaffected.
+  Verified by revert: with the fix removed, `useSteppedValue.test.js`'s new
+  out-of-range/NaN cases fail with `expected [ {...} ] to have a length of +0
+  but got 1`, `SteppedExpenseField.test.jsx`'s new min/max-attribute case fails
+  with `element.getAttribute("min") === "0.1"` (received `null`), and
+  `App.scheduledRateValidation.test.jsx` fails because `window.alert` was
+  never called for a 0% scheduled rate.
+  New `src/App.scheduledRateValidation.test.jsx` (3 tests); extended
+  `useSteppedValue.test.js` (+4) and `SteppedExpenseField.test.jsx` (+1).
+  Suite 926 passing, lint and build clean.
+---
+
 ## 🔴 HIGH PRIORITY (Wrong dollar figures shown to the user)
 
 New section, added when the Phase-3-deep audit of `offsetSimulation.js` found
@@ -5015,46 +5040,6 @@ gives `totalInterest` **$645,389.22**.
   month, plus a Strategy Comparison test that the fastest-paying strategy shows
   the LOWEST loan balance and the HIGHEST property equity at the final month.
   Verify by revert.
-
-- [ ] **TODO-169: A scheduled interest-rate change accepts 0% and negative values, producing $NaN and fabricated payoff dates**
-  The hazard is already known and documented. `coreFieldConfigs.js:70` says, in
-  a comment above `INTEREST_RATE_FIELD`: *"min must stay above 0: a 0% rate
-  makes calculateMonthlyPayment divide 0 by 0, turning every figure on the page
-  into NaN"* - and sets `min: 0.1`.
-  **That guard protects only the base slider.** The same field also accepts
-  SCHEDULED changes, and that path is completely unvalidated:
-  - `App.jsx` renders the rate as `<SteppedExpenseField {...INTEREST_RATE_FIELD} field={interestRateField} />`,
-    but `SteppedExpenseField.jsx:39` is a bare `<input type="number">` for the
-    "New amount" with **no `min` and no `max`** attribute.
-  - `useSteppedValue.js:11` (`addChange`) validates ONLY that no change already
-    exists for the same `startMonth`. The amount is never checked.
-
-  *Reproduced:* shipped default plus one scheduled rate change with amount `0`
-  starting month 25. The engine returns `totalInterest: NaN`, `months: 25`,
-  `years: 2.0833`, and every field of the final `monthlyData` entry is `NaN`.
-  The app would render **"Time to pay off: 2.1 years"** - a completely
-  fabricated date, and one that is NOT caught by the `'30+'` fallback at
-  `App.jsx:3730` because `2.08 < 100` - alongside **"$NaN"** for total interest.
-  The same root cause also NaNs `projectedHealthCheck.js`'s "Stabilized"
-  readings, since it calls `calculateMonthlyPayment` with the scheduled rate too.
-
-  A NEGATIVE scheduled rate (e.g. `-1`) is also accepted and does not NaN - it
-  produces `totalInterest` $50,160 instead of the correct $196,743, which looks
-  plausible and is therefore arguably worse than the NaN.
-
-  **Suggested fix.** Validate in `useSteppedValue.addChange` and/or pass
-  `min`/`max` through `SteppedExpenseField` to its "New amount" input. Prefer
-  validating in `addChange` as well as the input, since the input's `min`
-  attribute does not stop a programmatic or pasted value. The bound to enforce
-  is the owning field's own `min`/`max` (0.1 and whatever
-  `INTEREST_RATE_FIELD.max` is) rather than a hardcoded number, so the other
-  seven `SteppedExpenseField` users get the same protection for free.
-  **Note:** the other seven fields are dollar amounts where 0 is legitimate, so
-  do NOT blanket-reject 0 - the bound must come from each field's config.
-
-  **Verification.** A unit test on `addChange` rejecting an out-of-range amount,
-  plus an engine test that no reachable input produces a non-finite
-  `totalInterest`. Verify by revert.
 
 - [ ] **TODO-170: The reported cash shortfall ignores the savings balance, and contradicts the Emergency Buffer indicator on the same screen**
   `offsetSimulation.js:405` draws a deficit month from `offsetBalance` only:
