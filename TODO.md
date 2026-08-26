@@ -4604,6 +4604,79 @@ optionally reuse in the commit message when you implement it.
   page's other "Use this rate" button still does). Suite 661 passing, lint and
   build clean.
 
+- [x] **TODO-153: Stress Test's Stabilized reading amortized over the full term, not the term its own baseline used**
+  Found by the Phase 2A audit of the Health Check cluster. `App.jsx` handed
+  `calculateStressTestSurvivedDelta` the full `totalMonths` for the Stabilized
+  reading, while the baseline it is compared against - `projectedTotalPropertyCost`,
+  built from `projected.monthlyPayment` - had been re-amortized over
+  `totalMonths - month + 1` (`projectedHealthCheck.js`). A longer term makes an
+  installment cheaper, so the stressed payment could come out BELOW the
+  unstressed baseline and the panel reported "Survives +3%" for a month the app
+  had already computed as being in deficit at the unstressed rate. It also broke
+  the invariant `stressTestDisplay` relies on: `survivedDelta > 0` no longer
+  implied "not in deficit", which is why the honest wording could never fire.
+  The fix is not "always use the remaining term" - `resolveProjectedFinancials`
+  only re-amortizes when a scheduled rate change applies, and forcing the
+  remaining term otherwise would have made the reading unfairly pessimistic (a
+  fixed-rate installment does not change with time elapsed). Instead the module
+  that decides the term now exports it: `resolveProjectedFinancials` returns
+  `remainingMonths` (`totalMonths` when it did not re-amortize,
+  `totalMonths - month + 1` when it did) and `App.jsx` passes that through.
+  Purely additive to the return value; no existing consumer changes.
+  Reachability, computed rather than assumed: with an $800k loan and a 6%->8%
+  change, the contradiction becomes possible from **month 96** (year 8) and can
+  read the full green "Survives +3%" from month 180. New
+  `App.stressTestStabilizedTerm.test.jsx` (1 test) drives the real UI - zeroes
+  the growth rates, sets an $800k loan at 6%, schedules 8% at month 300, and
+  asserts the Stabilized annotation reads "Already in deficit". Verified it
+  catches the bug: reverting the fix produces exactly
+  `'→ stabilizes to Survives +3%'`. Suite 879 passing, lint and build clean.
+
+- [x] **TODO-154: The Health Check critical banner was hidden by TODO-140's collapsed default**
+  Found by the Phase 2C audit (claims vs. code), as a cross-entry consequence
+  neither entry recorded. TODO-68 moved this banner out of the page-top hero and
+  into the Health Check card, justifying it as *"less invasive, same effect
+  (impossible to miss without expanding the card, which is open by default
+  anyway)"*. TODO-140 then flipped the default to collapsed and silently voided
+  that premise: the banner sits INSIDE the `showHealthCheck` gate, so a critical
+  Tier-1 indicator produced no visible signal anywhere on the page.
+  Worst on the shipped default, which is a first home buyer at $850k - that
+  loses the NSW stamp-duty concession (~$9,797), and `fhbConcessionLost` drives
+  `healthCheckHasCritical` independently of any indicator. So the default
+  scenario had a four-figure warning that nobody saw without expanding a
+  collapsed panel.
+  Moved the banner outside the collapse gate. The wording follows the panel's
+  state, because "one or more indicators **below**" is a lie while the card is
+  shut: collapsed reads "in this panel", expanded keeps "below". Presentation
+  only - `healthCheckHasCritical` and every classification are untouched.
+  1 new test in `App.collapsiblePanels.test.jsx`, which is where the collapse
+  behaviour already lives. Verified by revert (the collapsed assertion fails).
+  Suite 879 passing, lint and build clean.
+
+- [x] **TODO-155: Simple mode's affordability roll-up ignored the Interest Rate Stress Test**
+  Found by the Phase 2C audit. `summariseAffordability` considered only
+  `[emergencyBufferClass, housingCostRatioClass]` while Simple mode renders
+  **three** indicators. So a scenario that is positive today but fails at +1% -
+  a 🔴 critical reading - rolled up to "🟢 Funded ... with room in the indicators
+  below", printed directly above its own red row. That contradicts the module's
+  own stated premise: *"Every branch below is something the user can
+  independently verify on the same screen."*
+  Added `stressTestClass`, ordered as Simple renders the three. With three
+  candidates the `bindingConstraint` could no longer be recovered from a two-way
+  identity check on the winner (`worst === emergencyBufferClass`), so the reduce
+  now carries `[classification, name]` pairs. No threshold invented, no band
+  table duplicated - still just `critical` then `symbol`, as before.
+  Also added `stressTestClass` to the test file's `healthy` fixture. That
+  matters beyond this fix: an omitted classification is silently filtered rather
+  than failing, which is precisely how the Stress Test went unconsidered, so the
+  fixture is the thing that has to stay in step with the component - the same
+  prop-drift class that shipped a literal `$NaN` in TODO-151's review.
+  3 new tests (10 -> 13). Verified by revert (`expected 'Funded' to be 'Tight
+  but funded'`). Suite 879 passing, lint and build clean.
+  **Known gap, deliberately not papered over:** the `App.jsx` wiring that passes
+  `stressTestClass` is pinned only by the unit fixture, not by a render test.
+  Covered as TODO-162.
+
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
@@ -5345,6 +5418,185 @@ optionally reuse in the commit message when you implement it.
   now stale - since every salary-only ratio scales by `(1 - rate)`, the boundary
   moved to roughly **$2,365/week**.
   Suite 874 passing, lint and build clean.
+
+- [ ] **TODO-156: TODO-148's and TODO-149's fixes never reached every display site**
+  Each Health Check indicator can render in up to three places - the Advanced
+  panel, `SimpleModeView.jsx`, and `RiskToleranceProfiles.jsx` - and each place
+  re-implements the display logic inline. Two shipped fixes reached only some:
+  - TODO-148 (Advanced only): `SimpleModeView.jsx:172` re-implements the pre-fix
+    ternary and is never passed `alreadyInDeficitAtCurrentRate`, so the same
+    scenario reads "Already in deficit" in Advanced and "Fails at +1%" in
+    Simple - on a screen whose own roll-up already says "Monthly shortfall".
+  - TODO-149 (2 of 3 sites): `RiskToleranceProfiles.jsx:37` has its own inline
+    `bufferDisplay` guarding only `Number.isFinite`, and its call site
+    (`App.jsx:2402-2404`) never passes `liquidSavings`, so with ETF investing
+    active it still renders "-0.3 months".
+  Worth treating as one item because the root cause is shared, and because the
+  highest-leverage fix is not either bug: it is collapsing the three display
+  paths into one, or adding cross-site agreement tests. Exactly ONE such test
+  exists today (`App.projectionAssumptions.test.jsx:408-421`, Emergency Buffer,
+  Advanced vs. RiskToleranceProfiles) and its regex cannot match "Can't cover
+  settlement", which is why this defect survived it. There is no Advanced-vs-
+  Simple agreement test for any indicator.
+
+- [ ] **TODO-157: A saved scenario reloads running a different ETF trigger than the one saved**
+  Found by the Phase 3 audit, adjacent to the parameter matrix (which came back
+  clean, 126/126). The `effective*` trio (`App.jsx:338-340`) is applied correctly
+  on the way INTO the engine, but the save payload stores the RAW state
+  (`App.jsx:1027, 1031`) and `etfStartTrigger` is not stored at all - it is
+  re-derived on load by a priority chain (`App.jsx:330-332`): `etfStartMonth > 1`
+  wins, then `etfReserveMonths > 0`, then `switchThresholdPct > 0`. No
+  `setEtfStartTrigger` call site clears its siblings (verified at `1976, 1987,
+  2015, 2044, 2185`) - which is the very reason `effective*` exists.
+  Repro: set "delay to month = 36", then switch to "loan ratio = 20%". Correct
+  in-session. Save - the payload carries both. Reload: the chain sees `36 > 1`,
+  returns `'month'`, and **the criterion the user did not select is applied while
+  the one they did select is dropped**. The reloaded scenario runs a different
+  simulation from the one saved, moving "Loan paid off in", "Total interest paid"
+  and the Timeline Explorer's ETF balance. The grid's Apply button (`:2185`)
+  makes it easier to hit, since it sets `loanRatio` while leaving any earlier
+  `etfStartMonth` intact.
+  Sharpest detail: the comment at `App.jsx:336-337` claims *"switching criteria
+  can never leave a stale gate applied"* - true in-session, false across a
+  save/reload. And the decision to re-derive rather than store is documented at
+  `App.jsx:1028-1030` citing **TODO-144**, so TODO-144's fix has a hole in the
+  mechanism it introduced. Fix is cheap: store `etfStartTrigger` in the payload,
+  keeping the priority chain as the fallback for older scenarios.
+
+- [ ] **TODO-158: Rental Yield's "not enough data" gate is a month-1 gate, not a data-presence gate**
+  `rentalYieldHasData` derives from `weeklyRentalIncomeBeforeVacancy`
+  (`App.jsx:645`), evaluated at **month 1 only**. A House Rent source with
+  `startMonth: 13` therefore shows *"Rental Yield: not enough data yet - add a
+  House Rent/Room Rent income source"* to someone who has already added one, and
+  suppresses a Stabilized reading that has a real figure (`App.jsx:911-913`).
+  The same month-1 gate (`hasRentalIncome`) also hides the Property Summary card
+  (`App.jsx:3391`), which is more defensible - there genuinely is no rent yet at
+  Day 1. The copy is the part that is plainly wrong.
+  TODO-150 fixed the 52-week factor-0 case and described both gates as now
+  asking "a data-presence question, not a how-much-arrives one" - accurate for
+  vacancy, not for scheduling. It also undercuts TODO-133's promise that Rental
+  Yield reflects scheduled income changes.
+
+- [ ] **TODO-159: Housing Cost Ratio renders the literal string "Infinity%"**
+  `calculateHousingCostRatio` returns `Infinity` when income is 0
+  (`purchaseHealthCheck.js:44`, pinned by its own unit test), and
+  `Infinity.toFixed(0)` is `"Infinity"`. `App.jsx:3506-3507` and
+  `SimpleModeView.jsx:164` have no `Number.isFinite` guard - the only
+  Infinity-capable figure in the app that lacks one (compare `App.jsx:157`,
+  `SimpleModeView.jsx:180`, `RiskToleranceProfiles.jsx:37`, which all render
+  `∞`). Reachable by deleting every income source.
+  Display only: the 🔴 High risk classification is correct (`Infinity >= 50`),
+  so this is about not showing a debug-looking string, not about the reading.
+
+- [ ] **TODO-160: Simple mode pairs a Day-1 value with a Stabilized-derived classification and explains neither**
+  Simple receives Day-1 VALUES (`housingCostRatio`, `stressTestSurvivedDelta`,
+  `emergencyBufferMonths`) but `worseOf(Day-1, Stabilized)` CLASSIFICATIONS
+  (`App.jsx:836, 855, 869`), and passes no `secondaryValueDisplay` - grepped,
+  zero occurrences in `SimpleModeView.jsx`. So the number and its own action
+  text can assert opposite things: 🔴 "Survives +3%" above *"Already in deficit
+  today..."*, or 🔴 "32%" where the app's own band table calls 30-40% "Good".
+  Advanced avoids this by always rendering the "stabilizes to" annotation.
+  Note TODO-135's entry claims the opposite - *"TODO-134 annotations intact"* -
+  which is one of the corrections listed in TODO-166.
+  Needs a decision before a fix: show the annotation in Simple (against its
+  simplify-the-view premise), show the Stabilized value instead, or classify
+  Simple on Day-1 alone (which would under-report risk). Analysis first.
+
+- [ ] **TODO-161: Two tooltips state exclusive bounds where the bands are inclusive**
+  `classifyByBands` uses `value >= band.min`, so the boundary value belongs to
+  the HIGHER band. Two tooltips say otherwise:
+  - `App.jsx:3605` reads *"67-70 cutting it close, >70 late"*, but
+    `MORTGAGE_FREE_AGE_BANDS` has `min: 70 -> 'Late'`. Age exactly 70 renders
+    🔴 "Late" while the tooltip on that same row calls it 🟠.
+  - `App.jsx:3913` reads *">20% strong, 10-20% moderate"*, but
+    `OFFSET_UTILISATION_BANDS` has `min: 20 -> 'Strong'`. Exactly 20.0% renders
+    🟢 "Strong" while the tooltip calls it moderate.
+  Drift, not house style: the other five tooltips in the panel use `≥`
+  (`App.jsx:3499, 3516, 3539, 3572, 3586`). Copy-only fix.
+
+- [ ] **TODO-162: Render coverage for the Stress Test value and the Stabilized annotations**
+  From the Phase 2B coverage audit. Two gaps that let real defects ship green:
+  - **`Survives +N%` is asserted nowhere in the tree** (grepped `Survives` across
+    every test file - zero hits). Only the two `survivedDelta === 0` strings are
+    pinned, so the reading the DEFAULT scenario renders is untested. Swapping
+    `stressTestSurvivedDelta` for `stabilizedStressTestSurvivedDelta` at
+    `App.jsx:3523` - they differ by a prefix and sit two lines apart - shows a
+    different scenario's figure with a green suite.
+  - **Five of the six "stabilizes to" annotations have no value assertion.** Only
+    Housing Cost Ratio is pinned with a value. The sharp one is Rental Yield:
+    `App.jsx:911` is a hand-inlined `* 12 / 52` (its comment admits it inverts
+    `calculateMonthlyFromWeekly` with no helper). Writing `* 52 / 12` inflates
+    the stabilized yield ~18.8x, and because `worseOf(..., 'higherIsBetter')`
+    then keeps the Day-1 value, **the classification does not move and nothing
+    fails**.
+  Also covers TODO-155's known gap: a render test that the roll-up actually
+  receives `stressTestClass`, and `liquidSavings` added to `SimpleModeView.test.jsx`'s
+  `makeProps()`, which never supplies it today - leaving TODO-149's branch dead
+  code under test in all 12 of that file's cases.
+
+- [ ] **TODO-163: Pin worseOf's direction, and the Stabilized-worse case, at render level**
+  `worseOf` is unit-tested, but at the render level its `direction` argument is
+  unpinned for Emergency Buffer, Vacancy Buffer, Gearing and Rental Yield
+  (`App.jsx:836, 889, 893, 913`). Flipping any of those makes the indicator
+  report the **optimistic** of the two readings - the one failure direction a
+  risk indicator must never have - with no test failing.
+  Related and worse: **no test anywhere exercises Stabilized being WORSE than
+  Day-1.** That is the only direction in which `worseOf` does work that
+  classifying Day-1 alone would not, so deleting `worseOf` from `App.jsx:855`
+  passes the entire suite. The three arrow branches (`→ ↗ ↘`) are equally
+  unexercised: the arrows appear in exactly one place in the tree
+  (`HealthCheckIndicator.test.jsx:58`) and are hard-coded there as a prop.
+
+- [ ] **TODO-164: Mortgage-Free Age and Offset Utilisation are never rendered in any test**
+  Both exist only in `purchaseHealthCheck.test.js` unit tests; grepped, neither
+  appears in any `.test.jsx`.
+  - Mortgage-Free Age is fed `loanSimulation.years` (`App.jsx:922`) - a
+    SIMULATION OUTPUT, not `loanTermYears`. Nothing pins that the rendered age
+    equals `currentAge` plus the simulated payoff; a months/years slip renders
+    an age like 390 in silence. It defaults off, so its whole opt-in path is
+    unrendered.
+  - Offset Utilisation calls `calculateOffsetUtilisation` **twice with identical
+    arguments** (`App.jsx:3908-3910`), once for the value and once for the
+    classification. Editing one - argument order is a plausible slip, since both
+    are `snapshot` fields - yields a number and a colour derived from different
+    quantities, disagreeing forever.
+
+- [ ] **TODO-165: The scenario matrix pins Day-1 classifications the panel never renders**
+  `purchaseHealthCheck.scenarios.test.js` (TODO-147) is the broadest regression
+  net in the Health Check cluster, but it **imports nothing from
+  `projectedHealthCheck.js`** (verified in its import list) and classifies the
+  raw Day-1 numbers directly (`:129-132`). `App.jsx:836, 855, 869` classify
+  `worseOf(Day-1, Stabilized)` instead, so three of the four pinned labels are
+  ones the panel never shows. A regression in the Stabilized half moves every
+  badge in the panel without failing a single matrix row.
+  The entry does say "Day-1 wiring", which is adequate disclosure for the
+  VALUES; the labels are the part that misleads. Either extend the matrix to the
+  Stabilized path or state the limit in the file - but do not leave it reading
+  as the regression net for "the four Tier-1 Health Check indicators".
+  Band gaps in the rows themselves, worth knowing but pinned at unit level: no
+  row produces Stress Test `=== 1` ('Moderate'), and none produces Upfront Cost
+  Ratio in `[2, 4)` ('Normal').
+
+- [ ] **TODO-166: Apply the twelve documented corrections to existing TODO.md entries**
+  The Phase 2C audit compared what fifteen Health Check entries CLAIM against
+  what shipped, and confirmed twelve false or incomplete claims - each with
+  proposed correction text already written, recorded in `TODO-Review-Plan.md`.
+  The ones that would actively mislead a reader: TODO-135 claims Simple mode
+  keeps TODO-134's annotations (it renders none); TODO-148 describes its fix
+  without saying it reached only Advanced, while its sibling TODO-149 DOES record
+  its Simple-mode half, so the asymmetry reads as "Simple wasn't affected";
+  TODO-95 states "default 0 (no vacancy modeled)" when the shipped default is 2
+  (`App.jsx:397` falls through to `?? 2`, and `config.default.json` has no such
+  key - the same missing key that produced the `NaN` trap during TODO-150), and
+  separately claims "only the future simulation is affected", false since
+  TODO-150; TODO-134 bundles Stress Test and Gearing into one sentence about
+  re-amortization when they used different terms (the defect fixed as TODO-153);
+  TODO-68/69/70 says `HealthCheckIndicator` is used by "all 10 indicators" (nine
+  - the FHB warning is bespoke markup) and describes a `currentAge` sentinel
+  design that TODO-88 replaced.
+  Documentation only, no code. Worth doing because two of the Phase 2C findings
+  turned out to be real CODE defects hiding as documentation drift (shipped here
+  as TODO-154 and TODO-155) - stale entries are how the next one hides.
 
 ---
 

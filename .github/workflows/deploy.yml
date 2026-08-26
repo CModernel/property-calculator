@@ -20,10 +20,21 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # Shared with ci.yml via .nvmrc so the two can't drift apart.
+          node-version-file: '.nvmrc'
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
+
+      # Before the build, not after: a red suite or a lint error must stop the
+      # deploy rather than ship. Until this existed, a push to main deployed
+      # regardless of whether anything passed.
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
 
       - name: Build
         run: npm run build
