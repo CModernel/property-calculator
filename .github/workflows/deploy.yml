@@ -20,7 +20,8 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          # Shared with ci.yml via .nvmrc so the two can't drift apart.
+          # Shared with ci.yml via .nvmrc so the two can't drift apart, and
+          # constrained by package.json's `engines` - see ci.yml's note.
           node-version-file: '.nvmrc'
           cache: 'npm'
 

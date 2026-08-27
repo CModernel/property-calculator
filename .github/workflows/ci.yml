@@ -28,7 +28,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           # Read from .nvmrc so this file and deploy.yml can never drift onto
-          # different Node versions.
+          # different Node versions. The version there is not arbitrary: it has
+          # to satisfy package.json's `engines`, which jsdom 30 constrains
+          # tightly. Pinning below that floor still installs (npm only warns)
+          # and then fails at runtime - .npmrc's engine-strict now turns that
+          # into an install-time error instead.
           node-version-file: '.nvmrc'
           cache: 'npm'
 
