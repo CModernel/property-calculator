@@ -186,7 +186,7 @@ export function calculateLoanWithOffset({
     // here, and three display sites never checked at all and rendered
     // "$999,999" / "1029" as if they were real. See hasUsableProjection in
     // usableProjection.js, which every consumer must go through.
-    return { years: 999, months: maxMonths, totalInterest: 999999, totalSavingsInterest: 0, totalNegativeGearingBenefit: 0, totalCashShortfall: 0, monthsWithShortfall: 0, monthlyData: [], hasUsableProjection: false };
+    return { years: 999, months: maxMonths, totalInterest: 999999, totalSavingsInterest: 0, totalNegativeGearingBenefit: 0, totalCashShortfall: 0, monthsWithShortfall: 0, totalDrawnFromSavings: 0, monthlyData: [], hasUsableProjection: false };
   }
 
   // TODO-90/91: split once outside the loop (incomeSources itself never
@@ -212,6 +212,10 @@ export function calculateLoanWithOffset({
   let totalInterest = 0;
   let totalSavingsInterest = 0;
   let totalNegativeGearingBenefit = 0;
+  // TODO-170: how much of the user's own bank savings the plan had to consume
+  // to stay afloat. Reported so a deficit absorbed by savings cannot pass
+  // silently as "no shortfall" - the money still got spent.
+  let totalDrawnFromSavings = 0;
   // TODO-136: months where the deficit outlived the offset balance - real
   // money the plan doesn't cover, which the old Math.max(0, ...) floor used
   // to swallow silently.
@@ -350,6 +354,14 @@ export function calculateLoanWithOffset({
     // month's deposit is added - matches how a real bank statement works
     // (existing balance earns interest, new deposits start earning next
     // month). Runs even when savingsInterestRate is 0 (a no-op multiply).
+    // TODO-170: the account receives no deposits (TODO-136 removed the ongoing
+    // savings destination) but it now has WITHDRAWALS, drawn further down to
+    // cover a deficit month. This line runs first, so money spent later in the
+    // month still earns that month's interest - the mirror of the deposit rule
+    // above, and what a real account paying on the daily balance would do.
+    // Deliberately left where it is: moving it after the draw would silently
+    // change totalSavingsInterest for every existing scenario (see TODO-173,
+    // which owns the pre/post-deposit convention question).
     const savingsInterestThisMonth = savingsBalance * savingsMonthlyRate;
     savingsBalance += savingsInterestThisMonth;
     totalSavingsInterest += savingsInterestThisMonth;
@@ -410,7 +422,24 @@ export function calculateLoanWithOffset({
       const deficit = -netMonthlyCashFlow;
       const drawnFromOffset = Math.min(deficit, offsetBalance);
       offsetBalance -= drawnFromOffset;
-      cashShortfallThisMonth = deficit - drawnFromOffset;
+      // TODO-170: then the bank savings, before anything is called a shortfall.
+      // Without this the engine reported money as "unfunded" while the cash it
+      // was seeded with sat untouched - on the shipped default plus a $60,000
+      // one-off, a $45,616 shortfall against a $28,453 savings balance still
+      // showing on the same screen.
+      //
+      // The Math.min floor is required, not defensive: a negative
+      // savingsBalance would flow into monthlyData's `savings`, into
+      // accessibleCash/netWorth in strategyScenarios.js, and into next month's
+      // savingsBalance * savingsMonthlyRate as NEGATIVE interest, compounding a
+      // debt this model has no way to represent. Unlike the offset's own zero
+      // floor this one is not load-bearing for interest, since savingsBalance
+      // never feeds effectiveBalance.
+      const stillShort = deficit - drawnFromOffset;
+      const drawnFromSavings = Math.min(stillShort, savingsBalance);
+      savingsBalance -= drawnFromSavings;
+      totalDrawnFromSavings += drawnFromSavings;
+      cashShortfallThisMonth = stillShort - drawnFromSavings;
       if (cashShortfallThisMonth > 0) {
         totalCashShortfall += cashShortfallThisMonth;
         monthsWithShortfall++;
@@ -492,6 +521,7 @@ export function calculateLoanWithOffset({
     totalNegativeGearingBenefit: totalNegativeGearingBenefit,
     totalCashShortfall: totalCashShortfall,
     monthsWithShortfall: monthsWithShortfall,
+    totalDrawnFromSavings: totalDrawnFromSavings,
     monthlyData: monthlyData,
     // TODO-167: these figures came out of the real loop, so they are real
     // money. Note this says nothing about monthlyData being non-empty -

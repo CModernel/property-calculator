@@ -3533,7 +3533,7 @@ const PropertyInvestmentCalculator = () => {
                   classification={liquidSavings < 0 ? { ...emergencyBufferClass, action: bufferShortfallAction(liquidSavings) } : emergencyBufferClass}
                 >
                   <p>Your savings left after settlement, divided by your total monthly outgoings (property + personal expenses) - how many months you could cover if income stopped entirely.</p>
-                  <p className="mt-2">Cash you've scheduled into the offset still counts here: it stays your money and stays available, and the simulation itself draws the offset down first to cover a shortfall. That's why this figure is higher than "Cash Remaining" above, which only counts uncommitted cash.</p>
+                  <p className="mt-2">Cash you've scheduled into the offset still counts here: it stays your money and stays available, and the simulation itself draws the offset down first to cover a shortfall, then your remaining savings. That's why this figure is higher than "Cash Remaining" above, which only counts uncommitted cash.</p>
                   <p className="mt-2">≥12 months excellent, 6-12 good, 3-6 moderate, &lt;3 high risk - the standard "3-6 months" rule of thumb.</p>
                   <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled - with growth rates applied.</p>
                 </HealthCheckIndicator>
@@ -3753,7 +3753,23 @@ const PropertyInvestmentCalculator = () => {
                     ⚠️ Cash shortfall: ${Math.round(loanSimulation.totalCashShortfall).toLocaleString()} across {loanSimulation.monthsWithShortfall} month{loanSimulation.monthsWithShortfall === 1 ? '' : 's'}
                   </p>
                   <p className="text-xs opacity-90 mt-1">
-                    In {loanSimulation.monthsWithShortfall === 1 ? 'that month' : 'those months'} your expenses exceed your income and your offset balance is already empty, so the figures below assume money you don't have. Cover it with more income, lower expenses, or a bigger starting balance.
+                    In {loanSimulation.monthsWithShortfall === 1 ? 'that month' : 'those months'} your expenses exceed your income and both your offset and your savings are already empty, so the figures below assume money you don't have. Cover it with more income, lower expenses, or a bigger starting balance.
+                  </p>
+                </div>
+              )}
+              {/* TODO-170: the deficit now draws on savings once the offset is
+                  dry, which makes the projection more optimistic than it used
+                  to be - so it must not happen silently. Deliberately NOT
+                  gated on a surviving shortfall: the case worth surfacing most
+                  is the one where savings absorbed the whole deficit and the
+                  warning above never appears at all. */}
+              {loanSimulation.totalDrawnFromSavings > 0 && (
+                <div className="bg-amber-900/40 border border-amber-300/50 rounded-lg p-3 mb-3">
+                  <p className="text-sm font-semibold">
+                    🐖 Savings used: ${Math.round(loanSimulation.totalDrawnFromSavings).toLocaleString()}
+                  </p>
+                  <p className="text-xs opacity-90 mt-1">
+                    The projection below only works because it spends this much of your savings on months where income didn't cover expenses. That's what savings are for - but it's no longer sitting there as your emergency buffer.
                   </p>
                 </div>
               )}

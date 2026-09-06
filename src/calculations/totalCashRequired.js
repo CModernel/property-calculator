@@ -21,8 +21,8 @@ export function calculateCashRemaining({ totalSavings, totalCashRequired, totalS
 // sits in the bank or in the offset account. Deliberately not cashRemaining: a
 // scheduled offset contribution leaves the bank but stays the buyer's money and
 // stays fully liquid - offsetSimulation.js itself draws the offset down first
-// to cover a deficit month, so the engine already treats it as the emergency
-// fund. The Emergency/Vacancy Buffer indicators ask "how long could you last
+// to cover a deficit month, and since TODO-170 the bank savings after it, so
+// the engine really does spend both halves of this figure. The Emergency/Vacancy Buffer indicators ask "how long could you last
 // with no income", and in that scenario you simply don't make the transfer (or
 // you pull it back out), so earmarking cash for the offset must not shrink
 // them. Only the "Cash Remaining" display, answering a different question,

@@ -18,7 +18,7 @@ describe('calculateLoanWithOffset', () => {
     // TODO-167 added hasUsableProjection so consumers stop branching on the
     // magic numbers themselves. Kept as a whole-object toEqual on purpose: any
     // future field added to one return path and not the other fails here.
-    expect(result).toEqual({ years: 999, months: 360, totalInterest: 999999, totalSavingsInterest: 0, totalNegativeGearingBenefit: 0, totalCashShortfall: 0, monthsWithShortfall: 0, monthlyData: [], hasUsableProjection: false });
+    expect(result).toEqual({ years: 999, months: 360, totalInterest: 999999, totalSavingsInterest: 0, totalNegativeGearingBenefit: 0, totalCashShortfall: 0, monthsWithShortfall: 0, totalDrawnFromSavings: 0, monthlyData: [], hasUsableProjection: false });
   });
 
   it('always reports a numeric months, on the sentinel path too', () => {
@@ -1826,6 +1826,94 @@ describe('cash shortfall on deficit months (TODO-136)', () => {
   });
 });
 
+// TODO-170: the offset used to be the ONLY thing a deficit could draw on, so
+// the engine reported money as unfunded while the cash it was seeded with sat
+// untouched - and every existing shortfall test above happened to run with
+// initialSavingsBalance at 0, so none of them noticed. These pin the second
+// pocket explicitly.
+describe('a deficit draws the bank savings after the offset (TODO-170)', () => {
+  // Same shape as deficitShared above: +1000/mo for two months builds a 2000
+  // offset, then a one-off expense in month 3 outruns it.
+  const savingsDeficitShared = {
+    contributions: [],
+    personalExpenseItems: [{ id: 1, name: 'Custom', amount: 5000, startMonth: 3, recurrence: 'none', endMonth: 3 }],
+    monthlyToOffset: 1000,
+    loanAmount: 10_000_000,
+    monthlyRate: 0,
+    monthlyPayment: 100,
+    maxMonths: 3,
+  };
+
+  it('reports no shortfall at all when savings covers what the offset could not', () => {
+    const result = calculateLoanWithOffset({ ...savingsDeficitShared, initialSavingsBalance: 3000 });
+    // Month 3 deficit is 4000: the offset's 2000, then 2000 of the 3000 saved.
+    expect(result.monthlyData.map(d => d.offset)).toEqual([1000, 2000, 0]);
+    expect(result.monthlyData.map(d => d.savings)).toEqual([3000, 3000, 1000]);
+    expect(result.totalCashShortfall).toBe(0);
+    expect(result.monthsWithShortfall).toBe(0);
+    expect(result.totalDrawnFromSavings).toBe(2000);
+  });
+
+  it('reports only the genuinely unfunded remainder once savings is empty too', () => {
+    const result = calculateLoanWithOffset({ ...savingsDeficitShared, initialSavingsBalance: 500 });
+    // 4000 deficit - 2000 offset - 500 savings = 1500 actually unfunded.
+    expect(result.monthlyData.map(d => d.savings)).toEqual([500, 500, 0]);
+    expect(result.monthlyData.map(d => d.cashShortfall)).toEqual([0, 0, 1500]);
+    expect(result.totalCashShortfall).toBe(1500);
+    expect(result.totalDrawnFromSavings).toBe(500);
+  });
+
+  it('never drives savings negative, however large the deficit', () => {
+    const result = calculateLoanWithOffset({
+      ...savingsDeficitShared,
+      personalExpenseItems: [{ id: 1, name: 'Custom', amount: 500_000, startMonth: 3, recurrence: 'none', endMonth: 3 }],
+      initialSavingsBalance: 1000,
+    });
+    // The floor matters beyond tidiness: a negative savings balance would
+    // reach monthlyData, accessibleCash/netWorth in strategyScenarios.js, and
+    // next month's interest accrual as negative interest on a debt this model
+    // cannot represent.
+    result.monthlyData.forEach((d) => expect(d.savings).toBeGreaterThanOrEqual(0));
+    expect(result.monthlyData[2].savings).toBe(0);
+    expect(result.totalDrawnFromSavings).toBe(1000);
+    expect(result.totalCashShortfall).toBe(496_000);
+  });
+
+  it('stays at zero when no month is in deficit, rather than firing spuriously', () => {
+    const result = calculateLoanWithOffset({
+      ...savingsDeficitShared,
+      personalExpenseItems: [],
+      initialSavingsBalance: 3000,
+    });
+    expect(result.totalDrawnFromSavings).toBe(0);
+    expect(result.monthlyData.map(d => d.savings)).toEqual([3000, 3000, 3000]);
+  });
+
+  it('across consecutive deficit months, drains savings once and then reports the rest', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [{ id: 1, name: 'Custom', amount: 1000, startMonth: 1, recurrence: 'monthly', endMonth: 3 }],
+      incomeSources: [],
+      monthlyToOffset: 0,
+      loanAmount: 10_000_000,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+      initialSavingsBalance: 1500,
+      savingsInterestRate: 12, // 1%/month, so the interest convention is visible
+      maxMonths: 3,
+    });
+    // Month 1: 1500 earns 15 -> 1515, then 1000 is drawn -> 515. The money
+    // spent still earned that month's interest, matching the deposit-side
+    // convention the accrual line documents (TODO-50/173).
+    // Month 2: 515 earns 5.15 -> 520.15, all of it drawn, 479.85 unfunded.
+    // Month 3: nothing left, the whole 1000 is unfunded.
+    expect(result.monthlyData.map(d => d.savings)).toEqual([515, 0, 0]);
+    expect(result.totalDrawnFromSavings).toBeCloseTo(1520.15, 2);
+    expect(result.monthsWithShortfall).toBe(2);
+    expect(result.totalCashShortfall).toBeCloseTo(1479.85, 2);
+  });
+});
+
 describe('every knob combined at once (regression safety net)', () => {
   it('composes effectiveTaxRate + etfAllocationPct + switchThresholdPct all together without crashing or producing garbage', () => {
     const result = calculateLoanWithOffset({
@@ -1851,8 +1939,12 @@ describe('every knob combined at once (regression safety net)', () => {
       expect(d.savings).toBeGreaterThanOrEqual(0);
       expect(d.etf).toBeGreaterThanOrEqual(0);
     });
-    // No withdrawals are modeled anywhere in this loop - savings and etf can
-    // only ever grow across months in this setup.
+    // TODO-170: savings CAN now fall - a deficit month draws it down once the
+    // offset is empty. This particular fixture never runs a deficit (see the
+    // surplus it sets up above), so the monotonic check still holds here and
+    // is worth keeping as a "nothing spurious eats these balances" guard. It
+    // is no longer a statement about the loop in general, which is what it
+    // used to claim. The ETF genuinely is never liquidated (TODO-145).
     for (let i = 1; i < result.monthlyData.length; i++) {
       expect(result.monthlyData[i].savings).toBeGreaterThanOrEqual(result.monthlyData[i - 1].savings);
       expect(result.monthlyData[i].etf).toBeGreaterThanOrEqual(result.monthlyData[i - 1].etf);

@@ -4942,6 +4942,76 @@ optionally reuse in the commit message when you implement it.
   Suite 939 passing, lint and build clean.
 ---
 
+- [x] **TODO-170: The reported cash shortfall ignored the savings balance, and contradicted the Emergency Buffer on the same screen**
+  **The decision this entry demanded, and the evidence behind it.** Branch (a):
+  the engine now draws a deficit from `savingsBalance` after the offset, before
+  anything is called a shortfall.
+  The entry suggested branch (b) "may match an intent recorded in TODO-136's own
+  entry". **It does not** - TODO-136 never mentions `savingsBalance` once. It
+  decided the savings pool receives no monthly surplus (**credits**); it said
+  nothing about spending it (**debits**). TODO-130's "a one-time starting
+  position, not an ongoing allocation choice" is likewise about inflows.
+  What the log actually establishes points the other way:
+  - **TODO-146 is the governing precedent.** It fixed this exact class of
+    contradiction, and the rule it set is that indicator and engine must agree
+    about the same pocket: *"the engine treats offset money as exactly the
+    emergency fund the indicator claimed it wasn't."*
+  - **TODO-137 already groups savings with the offset** - `accessibleCash =
+    last.offset + last.savings` (`strategyScenarios.js:179`). The ETF is the
+    thing deliberately walled off, not savings.
+  - **TODO-145 is the objection**, having declined ETF liquidation partly
+    because it *"makes the model MORE optimistic than today ... silently
+    changing every existing scenario"*. The ETF-specific half doesn't transfer
+    (bank cash needs no sale, at no loss), but the "silently" half does - and it
+    is answered directly by the disclosure below rather than waved away.
+  **The change.** In the deficit branch, after the offset draw:
+  `drawnFromSavings = Math.min(stillShort, savingsBalance)`, then
+  `cashShortfallThisMonth = stillShort - drawnFromSavings`. The `Math.min` floor
+  is required, not defensive: a negative savings balance would reach
+  `monthlyData`, `accessibleCash`/`netWorth`, and next month's accrual as
+  negative interest on a debt the model cannot represent. Unlike the offset's
+  own zero floor this one is not load-bearing for interest, since
+  `savingsBalance` never feeds `effectiveBalance`.
+  `totalDrawnFromSavings` was added to both return paths (same additive pattern
+  as TODO-167's flag), breaking exactly one line: the strict whole-object
+  `toEqual`.
+  **Interest convention left alone, but documented.** Accrual happens before the
+  draw, so money spent still earns that month's interest - defensible (a real
+  account pays on the daily balance) and moving it would silently change
+  `totalSavingsInterest` for every existing scenario. TODO-50's comment
+  justified the convention purely in terms of deposits and was actively
+  misleading once the account gained withdrawals; it now says so. TODO-173 still
+  owns the wider pre/post-deposit question, and this change turns its premise
+  ("receives no deposits at all") from vacuous into live.
+  **The disclosure is the answer to TODO-145.** A new "🐖 Savings used: $X"
+  panel renders whenever `totalDrawnFromSavings > 0`, deliberately NOT gated on
+  a surviving shortfall - the case most worth surfacing is the one where savings
+  absorbed the whole deficit and the old warning never appeared at all. The
+  shortfall banner's explanation now says both offset and savings are empty; its
+  headline was left untouched, being pinned by regex.
+  **Three Emergency Buffer explanation sites brought into line** (the TODO-156
+  pattern): the Advanced tooltip and `calculateLiquidSavings`'s comment both
+  justified the buffer by saying the engine drains the offset - true but half
+  the story. `RiskToleranceProfiles.jsx` was simply **wrong**, calling the
+  buffer "money in the Offset", when `liquidSavings` is `totalSavings -
+  totalCashRequired` with nothing offset-specific about it. The indicator's
+  VALUE is unchanged: it reads a static day-0 figure with no simulation input.
+  **The real risk here was silence, not breakage.** Every pre-existing shortfall
+  test runs with `initialSavingsBalance` at 0, so **not one of them goes red** -
+  the behaviour change was invisible to the whole suite. Hence six new tests
+  that pin values, and a rewrite of `offsetSimulation.test.js`'s written
+  invariant *"No withdrawals are modeled anywhere in this loop"*, which became
+  false while staying green; a comment that lies is worse than a test that
+  fails.
+  Verified by revert on the entry's own repro (shipped default + a $60,000
+  one-off at month 6): `expected 45616 to be 17163` - the shortfall falls to
+  exactly the genuinely-unfunded figure this entry named, and the Timeline
+  Explorer at month 6 now reads `🐖 Savings: $0` instead of $28,453 beside a
+  shortfall claiming that money didn't exist.
+  New `src/App.savingsCoversDeficit.test.jsx` (3 tests) and five engine tests.
+  Suite 947 passing, lint and build clean.
+---
+
 ## 🔴 HIGH PRIORITY (Wrong dollar figures shown to the user)
 
 New section, added when the Phase-3-deep audit of `offsetSimulation.js` found
@@ -5037,48 +5107,6 @@ gives `totalInterest` **$645,389.22**.
   month, plus a Strategy Comparison test that the fastest-paying strategy shows
   the LOWEST loan balance and the HIGHEST property equity at the final month.
   Verify by revert.
-
-- [ ] **TODO-170: The reported cash shortfall ignores the savings balance, and contradicts the Emergency Buffer indicator on the same screen**
-  `offsetSimulation.js:405` draws a deficit month from `offsetBalance` only:
-  ```js
-  const drawnFromOffset = Math.min(deficit, offsetBalance);
-  ```
-  `savingsBalance` is initialised at `offsetSimulation.js:202`, compounded, and
-  reported into `monthlyData` - and **never debited**. Grep `savingsBalance` in
-  that file: it appears at lines 202, 347, 348, 462 and nowhere else. So the
-  simulation reports money as "unfunded" while the cash it was seeded with
-  (`initialSavingsBalance`, which the real caller sets to `cashRemaining`) sits
-  untouched.
-  *Reproduced:* shipped default plus one $60,000 one-time personal expense at
-  month 6 (a car, a renovation). The engine reports
-  `totalCashShortfall: $45,616` across 1 month, and the month-6 snapshot
-  reports `savings: $28,453`. `App.jsx:3719` renders
-  **"⚠️ Cash shortfall: $45,616 across 1 month"** with the text *"your offset
-  balance is already empty, so the figures below assume money you don't have"* -
-  while `App.jsx:3882`, on the same screen, renders **"🐖 Savings: $28,453"**.
-  The genuinely unfunded amount is **$17,163**.
-
-  It also contradicts the Purchase Health Check: `App.jsx:3505`'s Emergency
-  Buffer reads **🟢 6.3 months, "Solid buffer for most emergencies"**, and its
-  tooltip promises *"how many months you could cover if income stopped
-  entirely"* and *"the simulation itself draws the offset down first to cover a
-  shortfall"*. The indicator is counting 6.3 months of runway the engine will
-  never spend.
-
-  **This needs a decision before code.** Either (a) the engine should draw a
-  deficit from `savingsBalance` after the offset is exhausted and before
-  reporting a shortfall - which changes simulation output and every pinned
-  expectation that involves a shortfall; or (b) the savings balance is
-  deliberately "not for this" and the UI must stop implying otherwise (reword
-  the shortfall banner and the Emergency Buffer tooltip, and reconsider whether
-  Emergency Buffer should count it at all). (a) is more intuitive; (b) is
-  cheaper and may match an intent recorded in TODO-136's own entry - read that
-  entry before deciding.
-
-  **Verification.** Whichever branch: a test on the $60,000-expense scenario
-  asserting the reported shortfall and the on-screen savings figure are
-  mutually consistent, and that the Emergency Buffer indicator agrees with
-  them. Verify by revert.
 
 ---
 

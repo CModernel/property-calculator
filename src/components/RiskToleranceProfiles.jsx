@@ -59,7 +59,7 @@ const RiskToleranceProfiles = ({ emergencyBufferMonths, emergencyBufferClassific
       </div>
 
       <p className="text-xs text-gray-600 dark:text-gray-300">
-        Regardless of profile, many planners suggest keeping your Emergency Buffer - money in the Offset covering essential expenses - funded before directing any surplus to ETFs. Your Emergency Buffer right now:{' '}
+        Regardless of profile, many planners suggest keeping your Emergency Buffer - savings and offset money covering essential expenses - funded before directing any surplus to ETFs. Your Emergency Buffer right now:{' '}
         <span className={`font-semibold ${emergencyBufferClassification.textClass}`}>
           {emergencyBufferClassification.symbol} {bufferText} ({emergencyBufferClassification.label})
         </span>.
