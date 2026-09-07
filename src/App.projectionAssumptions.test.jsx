@@ -272,12 +272,20 @@ describe('Offset vs ETF side-by-side comparison', () => {
 
     await user.selectOptions(screen.getByLabelText('Track over time:'), 'offset');
     const section = comparisonSection();
-    const bodyRows = within(section).getAllByRole('row');
-    const lastRow = bodyRows[bodyRows.length - 1];
-    // Columns are [month, Offset only, Your split, All to ETF].
-    const yourSplitFinal = within(lastRow).getAllByRole('cell')[2].textContent;
 
-    // Drive the Timeline Explorer to its own final month and compare.
+    // TODO-168: this used to read the year-by-year table's LAST row. That row
+    // sits at the slowest strategy's payoff month, by which point "Your split"
+    // has finished - so its cell now reads "✓ paid off mN" rather than a frozen
+    // dollar figure, and there is deliberately no number there to compare.
+    // The summary table above is the right counterpart: it reports each
+    // strategy at its OWN final month, which is exactly the month the Timeline
+    // Explorer's slider maxes out at.
+    // "Offset balance" is also one of the metric <option>s, so pick the cell.
+    const offsetLabelCell = within(section).getAllByText('Offset balance').find((n) => n.tagName === 'TD');
+    const offsetRow = offsetLabelCell.closest('tr');
+    // Columns are [label, Offset only, Your split, All to ETF].
+    const yourSplitFinal = within(offsetRow).getAllByRole('cell')[2].textContent;
+
     const monthSlider = screen.getByLabelText('Viewing month');
     fireEvent.change(monthSlider, { target: { value: monthSlider.max } });
     expect(screen.getByText(new RegExp(`💰 Offset: \\${yourSplitFinal}`))).toBeInTheDocument();

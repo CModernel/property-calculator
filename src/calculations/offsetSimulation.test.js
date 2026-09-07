@@ -69,7 +69,7 @@ describe('calculateLoanWithOffset', () => {
     expect(result.monthlyData[11].balance).toBe(0);
   });
 
-  it('pays off the loan early via a large contribution (break path), pushing the pre-override balance', () => {
+  it('pays off the loan early via a large contribution (break path), retiring the loan in that month\'s own snapshot', () => {
     const result = calculateLoanWithOffset({
       contributions: [{ startMonth: 1, recurrence: 'none', amount: 200000 }],
       personalExpenseItems: [],
@@ -80,10 +80,21 @@ describe('calculateLoanWithOffset', () => {
     });
     expect(result.months).toBe(1);
     expect(result.monthlyData).toHaveLength(1);
-    // The month-1 snapshot is pushed BEFORE the post-break balance=0 override,
-    // so it should reflect the balance after the regular payment, not 0.
-    expect(result.monthlyData[0].balance).toBe(99000);
-    expect(result.monthlyData[0].offset).toBe(100000);
+    // TODO-168: this used to assert balance 99000 / offset 100000, on the
+    // grounds that "the snapshot is pushed BEFORE the post-break balance=0
+    // override". That described the mechanism, not a contract - and the
+    // mechanism was the bug: the month the loan was retired reported it as
+    // still owing. The offset discharges the 99000 that survived the
+    // installment, leaving 200000 - 99000 of the contribution behind.
+    expect(result.monthlyData[0].balance).toBe(0);
+    expect(result.monthlyData[0].offset).toBe(101000);
+    expect(result.monthlyData[0].effectiveBalance).toBe(0);
+    // Net worth is the invariant that catches a fix which zeroes the balance
+    // without spending the offset: it was 0 - 99000 + 100000 = 1000 before and
+    // is 0 - 0 + 101000 = 101000 now. The change is a CORRECTION, not a
+    // regression - the contribution (200000) overshot the balance (100000), so
+    // the old reading clamped the offset to 100000 and lost the 100000 excess.
+    expect(-result.monthlyData[0].balance + result.monthlyData[0].offset).toBe(101000);
   });
 
   it('hits the maxMonths cap when the loan never pays off', () => {
@@ -1823,6 +1834,85 @@ describe('cash shortfall on deficit months (TODO-136)', () => {
     });
     // Months 1-2 split 1000 evenly; month 3's deficit adds nothing to ETF.
     expect(result.monthlyData.map(d => d.etf)).toEqual([500, 1000, 1000]);
+  });
+});
+
+// TODO-168: the month a loan is retired has to SAY so. Nothing in the suite
+// asserted the final row's balance on an offset-driven payoff, so the engine
+// reported months: 108 next to a row still owing 357095 - and the Strategy
+// Comparison table, which clamps a finished strategy to that row, told the
+// user the fastest-paying strategy owed the most at year 30.
+describe('the payoff month reports the loan retired (TODO-168)', () => {
+  // A big contribution in month 1 lets the offset cover what the installment
+  // leaves behind, so the loan retires in month 1 rather than at term.
+  const retiresEarly = {
+    contributions: [{ startMonth: 1, recurrence: 'none', amount: 200000 }],
+    personalExpenseItems: [],
+    monthlyToOffset: 0,
+    loanAmount: 100000,
+    monthlyRate: 0.005,
+    monthlyPayment: 1000,
+    propertyPrice: 500000,
+  };
+
+  it('zeroes the balance and the effective balance in that month\'s own row', () => {
+    const last = calculateLoanWithOffset(retiresEarly).monthlyData.at(-1);
+    expect(last.balance).toBe(0);
+    expect(last.effectiveBalance).toBe(0);
+    // The whole loan is paid at that point, by definition.
+    expect(last.totalPrincipalPaid).toBe(100000);
+  });
+
+  it('spends the offset money that discharged the loan', () => {
+    const last = calculateLoanWithOffset(retiresEarly).monthlyData.at(-1);
+    // 200000 contributed, 1000 of the installment went to principal, so 99000
+    // was outstanding and the offset covered exactly that.
+    expect(last.offset).toBe(101000);
+  });
+
+  // The three metrics the ticket names, asserted together on one run. Loan
+  // balance and Property equity are what the fix is FOR; net worth is the
+  // guard rail - a fix that zeroed the balance without spending the offset
+  // would pass the first two and inflate this one by the retired balance.
+  it('reports balance, property equity and net worth consistently', () => {
+    const last = calculateLoanWithOffset(retiresEarly).monthlyData.at(-1);
+    expect(last.balance).toBe(0);
+    expect(last.propertyValue - last.balance).toBe(500000);
+    expect(last.propertyValue - last.balance + last.offset + last.savings + last.etf).toBe(601000);
+  });
+
+  // An ordinary payoff never involved the offset, so `balance` and `offset`
+  // there are untouched and NO row is added - which is what keeps the six
+  // length-pinning tests above green. `effectiveBalance` does move, from the
+  // pre-payment interest basis to 0: that field is the progress bar's input
+  // (calculateEffectiveProgress), and at the month the loan is retired the bar
+  // has to read 100%, not 92.7%.
+  it('leaves a fully-amortized payoff\'s balance and offset untouched, and zeroes its effective balance', () => {
+    const amortized = {
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1, // 0 would trip the sentinel early-out instead
+      loanAmount: 1200,
+      monthlyRate: 0,
+      monthlyPayment: 100,
+    };
+    const result = calculateLoanWithOffset(amortized);
+    expect(result.months).toBe(12);
+    expect(result.monthlyData).toHaveLength(12);
+    expect(result.monthlyData.at(-1).balance).toBe(0);
+    // 1/mo into the offset for 12 months, capped at the pre-payment balance.
+    expect(result.monthlyData.at(-1).offset).toBe(12);
+    expect(result.monthlyData.at(-1).effectiveBalance).toBe(0);
+  });
+
+  it('still does not retire a loan the offset cannot cover', () => {
+    const result = calculateLoanWithOffset({
+      ...retiresEarly,
+      contributions: [{ startMonth: 1, recurrence: 'none', amount: 5000 }],
+      maxMonths: 3,
+    });
+    expect(result.monthlyData.at(-1).balance).toBeGreaterThan(0);
+    expect(result.months).toBe(3);
   });
 });
 

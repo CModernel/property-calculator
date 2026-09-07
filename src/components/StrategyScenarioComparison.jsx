@@ -145,7 +145,19 @@ const StrategyScenarioComparison = ({ summaries, rows, metricKey, onMetricChange
             {rows.map((row) => (
               <tr key={row.month}>
                 <td className={TD}>{monthlyStepping ? row.month : (row.month / 12).toFixed(row.month % 12 === 0 ? 0 : 1)}</td>
-                {row.values.map((v) => <td key={v.key} className={TD}>{money(v.value)}</td>)}
+                {row.values.map((v) => (
+                  <td
+                    key={v.key}
+                    className={v.settledAtMonth ? 'pr-2 py-1 whitespace-nowrap text-gray-400 dark:text-gray-500 italic' : TD}
+                  >
+                    {/* TODO-168: a finished strategy is not simulated past its
+                        payoff, so its figures are frozen at that month. Saying
+                        so beats printing a stale dollar amount that reads as a
+                        live one - which is how the fastest-paying strategy came
+                        to look like the worst at year 30. */}
+                    {v.settledAtMonth ? `✓ paid off m${v.settledAtMonth}` : money(v.value)}
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>

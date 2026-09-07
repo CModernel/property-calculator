@@ -5012,14 +5012,100 @@ optionally reuse in the commit message when you implement it.
   Suite 947 passing, lint and build clean.
 ---
 
+- [x] **TODO-168: The payoff month's snapshot never showed the loan retired, which inverted the Strategy Comparison table**
+  The `balance = 0` after the break was dead code - the row was already pushed
+  and the return object has no `balance` key (verified: zero occurrences of
+  `balance` between the loop's closing brace and the `return`). So the final
+  `monthlyData` row kept the balance the offset had just extinguished.
+  **Fixed in the engine, not the snapshot helper.** The loan is now retired
+  BEFORE the month is photographed, which is what the dead assignment always
+  meant to do:
+  ```js
+  const offsetRetiresLoan = balance > 0 && effectiveOffset >= balance;
+  if (offsetRetiresLoan) { offsetBalance -= balance; balance = 0; }
+  ```
+  Discharging costs the offset the money it discharged with. Leaving
+  `offsetBalance` alone while zeroing the balance would have **overstated** net
+  worth by the whole balance - you would own the house outright and still hold
+  the cash. Reducing it keeps `-balance + offset` summing to what it always did.
+  **Corrections to the entry's own analysis, found while mapping the code:**
+  - **`effectiveOffset >= balance` is the exit for EVERY successful payoff**, not
+    just offset-driven ones: on a fully-amortized payoff the post-payment balance
+    is 0 and `0 >= 0` fires. So `months === monthlyData.length` on every path
+    today, and the entry's suggested approach (a) - appending a row - would have
+    duplicated the zero row on normal payoffs and broken six `toHaveLength`
+    assertions. Mutating the row instead adds nothing and breaks none of them.
+  - **Approach (b) was not viable either.** `LoanBalanceChart` receives
+    `monthlyData` directly (`App.jsx:4182`) and plots `balance` without going
+    through `getTimelineSnapshot`, so the chart's loan line would still have
+    ended at $357,095. Separately, the slider's `max={loanSimulation.months}`
+    means the End position hits `.find()` exactly - the clamp the entry blamed
+    is unreachable from the UI.
+  - **The "Careful" note on Net Worth was imprecise.** With `B₀`/`B₁` the balance
+    before/after the payment and `O` the offset balance, today's reading is
+    `PV − B₁ + min(O, B₀)` against a truth of `PV + O − B₁`. When `O ≤ B₀` those
+    are **identical** - exactly right, not "nearly right by accident". When
+    `O > B₀` the old reading **understated** net worth by `O − B₀`. The fix gives
+    the truth in both: unchanged in the first case, corrected in the second
+    (+$100,000 on the pinned fixture).
+  - **`summariseStrategy` was wrong too**, not just the year-by-year rows: it
+    asks `getTimelineSnapshot(simulation.months, …)`, the same un-retired row.
+  - **`effectiveBalance` also moves on a normal payoff** (the pre-payment
+    interest basis → 0). Not a regression: that field feeds
+    `calculateEffectiveProgress`, so the progress bar now reads 100% at the
+    payoff month instead of 92.7%.
+  **The frozen-cell marking.** Zeroing the balance removes the inversion, but a
+  finished strategy's `offset`/`etf`/`netWorth`/`accessibleCash` **and
+  `propertyValue`** stay frozen at its payoff month, and a frozen figure reads as
+  a live one. `buildComparisonRows` now flags those cells with `settledAtMonth`
+  and the table prints `✓ paid off mN` instead. Applied to every metric on
+  purpose - `balance` and `totalInterestPaid` genuinely are still correct frozen,
+  but a per-metric truth table would drift, and "we stopped simulating this
+  strategy at month N" is honest about all of them.
+  **A limit this fix cannot reach, and the entry's verification was wrong about
+  it.** TODO-168 asked for a test that the fastest strategy shows the HIGHEST
+  property equity at the final month. **It cannot**, because `propertyEquity` is
+  `propertyValue − balance` and the clamp freezes BOTH terms: the fast
+  strategy's property value stops compounding at its payoff while the slow one's
+  runs to the horizon. Measured: 796,562 vs 1,588,483 even with the balance
+  correctly at 0. Cross-strategy comparison past a payoff is not meaningful at
+  all, which is what the flag now says. The lowest-balance half of the
+  verification IS achieved. Recorded as TODO-177.
+  **Two comments that had rationalised the bug** were rewritten:
+  `getComparisonMonths`'s *"stopped changing because the loan was gone"* and
+  `strategyScenarios.test.js`'s *"a loan is 'paid off' once the offset covers the
+  balance, so that final figure is the offset's size, not zero"*.
+  **The pinned test was updated, not respected.** Its name said "pushing the
+  pre-override balance" and its comment justified the value purely by mechanism
+  - *"the snapshot is pushed BEFORE the post-break balance=0 override"* - citing
+  no consumer and no product reason. It described the bug.
+  Verified by revert, surgically restoring only the reporting so the break
+  semantics stayed intact: `expected 99000 to be +0` (the payoff row),
+  `expected 100000 to be 101000` (the offset not spent), `Unable to find
+  🏦 Loan: $0` (the Timeline), and the headline defect - **`expected 167585 to be
+  +0`**, the fastest-paying strategy still reporting six figures of debt at the
+  horizon. The marking half was reverted separately and fails on `paid off mN`.
+  New `src/App.retiredLoanRenders.test.jsx` (4 tests - the Timeline surface had
+  no coverage at all; grepping the tree for `🏦 Loan`, `Net Effective Balance`
+  and "Time to pay off" found no assertion anywhere, which is why it shipped),
+  five engine tests and three in `strategyScenarios.test.js`.
+  Suite 959 passing, lint and build clean.
+---
+
 ## 🔴 HIGH PRIORITY (Wrong dollar figures shown to the user)
+
+**All clear as of PCALC-118** - TODO-167, 168, 169 and 170 are all in Completed
+above. New entries of this class go here, ahead of MEDIUM regardless of
+numbering.
+
+Kept because the shared context below is the reference for anything that
+touches the engine's early-out, and several MEDIUM entries cite it.
 
 New section, added when the Phase-3-deep audit of `offsetSimulation.js` found
 defects that put a wrong, plausible-looking dollar figure on screen - a class
-that did not previously exist in this file's backlog. Work these before
-MEDIUM regardless of numbering.
+that did not previously exist in this file's backlog.
 
-Shared context for every entry below (read once, applies to all of them):
+Shared context (read once, applies to every entry of this class):
 
 **The sentinel.** `src/calculations/offsetSimulation.js:183` has an early-out
 that returns `{ years: 999, months: maxMonths, totalInterest: 999999,
@@ -5048,65 +5134,6 @@ rate 6.13%, 360 months, `monthlyPayment` $3,301.0812, `cashRemaining`
 $28,453.25, `baseMonthlySurplus` -$3,301.0812, personal expenses $680/mo,
 property expenses $542.50/mo. A correct full-term run with no offset activity
 gives `totalInterest` **$645,389.22**.
-
-- [ ] **TODO-168: The payoff month's snapshot never shows the loan retired, which inverts the Strategy Comparison table**
-  `offsetSimulation.js:475-478` is:
-  ```js
-  if (effectiveOffset >= balance) {
-    balance = 0;
-    break;
-  }
-  ```
-  That `balance = 0` is **dead code**. The month's snapshot was already pushed
-  at `offsetSimulation.js:458`, the `break` follows immediately, and the return
-  object has no `balance` key - so nothing ever reads the assignment. The last
-  entry in `monthlyData` therefore keeps the loan balance that the offset just
-  extinguished.
-  *Reproduced on the shipped default:* the engine returns `months: 108` (loan
-  paid off in 9 years) while the final `monthlyData` entry reads
-  `balance: 357095, offset: 360396`. The Timeline Explorer at its "End" slider
-  position renders **"🏦 Loan: $357,095"** for a loan the headline on the same
-  page says is paid off.
-
-  **The serious consequence is the Strategy Comparison table, not the Timeline
-  Explorer.** `timelineSnapshot.js:34` clamps any month past a simulation's end
-  to `monthlyData[monthlyData.length - 1]`, and `getComparisonMonths`
-  (`strategyScenarios.js`) drives the shared month axis off the LONGEST-running
-  strategy. Two of the comparison metrics read `s.balance` directly:
-  `strategyScenarios.js:52` (`'balance'`, labelled "Loan balance") and `:54`
-  (`'propertyEquity'`, `s.propertyValue - s.balance`). So a strategy that
-  retired its loan at month 129 is reported, for every month from 130 to 360,
-  as still owing the un-retired balance.
-  *Net effect:* the table tells the user that the strategy which pays the loan
-  off FASTEST still owes hundreds of thousands at year 30, while the strategy
-  that never pays it down early owes $0 - and it understates the fast
-  strategy's property equity by the same amount. That is the exact opposite of
-  the truth, in the panel whose entire purpose is that comparison.
-
-  `strategyScenarios.js:189` documents the wrong assumption in plain words:
-  *"stopped changing because the loan was gone"*. The loan is not gone in that
-  snapshot. Fix that comment too.
-
-  **Suggested fix - two viable approaches, pick one deliberately.** (a) Have
-  the engine push a final, post-retirement snapshot (`balance: 0`, `offset`
-  reduced by whatever retired the loan) before breaking. (b) Leave the engine
-  alone and have `getTimelineSnapshot` synthesise the retired state when
-  `timelineMonth >= simulation.months`. Approach (a) is more honest but changes
-  `monthlyData`'s length and is pinned by existing tests - check
-  `offsetSimulation.test.js` around the "should reflect the balance after the
-  regular payment, not 0" assertion before choosing, because that test
-  deliberately pins the CURRENT engine field values and may need updating
-  rather than treating as a contract.
-  **Careful:** the Net Worth metric (`propertyValue - balance + offset + savings + etf`)
-  is currently NEARLY right by accident - the `-balance` and `+offset` errors
-  mostly cancel. Whichever fix you choose must not break Net Worth while fixing
-  Loan balance and Property equity. Assert all three in the tests.
-
-  **Verification.** A test that a scenario which pays off early reports
-  `balance: 0` (or an equivalent retired reading) at and after its payoff
-  month, plus a Strategy Comparison test that the fastest-paying strategy shows
-  the LOWEST loan balance and the HIGHEST property equity at the final month.
-  Verify by revert.
 
 ---
 
@@ -6054,6 +6081,50 @@ gives `totalInterest` **$645,389.22**.
   **Verification.** A test pinning that the baseline arm's starting balance is
   independent of the contribution schedule, plus the measured `interestSaved`
   figure before and after. Verify by revert.
+
+- [ ] **TODO-177: A strategy that pays off early stops being simulated, so every later figure is frozen**
+  Found while fixing TODO-168, and the reason that entry's "highest property
+  equity" verification could not be met.
+  `offsetSimulation.js` breaks out of the loop the month the loan is retired.
+  `getTimelineSnapshot` then clamps any later month to that final row, so a
+  finished strategy's `offset`, `etf`, `savings`, `netWorth`, `accessibleCash`
+  **and `propertyValue`** are all stuck at its payoff month while every still-
+  running strategy keeps compounding to the horizon.
+  *Measured on `strategyScenarios.test.js`'s `BASE_PARAMS` (5%/yr property
+  growth):* with the balance now correctly at 0, the fast strategy's property
+  equity at the final month is **$796,562** against the slow one's
+  **$1,588,483** - and the gap is almost entirely frozen property growth, not a
+  real difference. In reality the fast strategy is strictly better off: no
+  installment to pay, so its surplus compounds faster than any other arm's.
+  **Mitigated, not fixed.** TODO-168 made `buildComparisonRows` flag those cells
+  (`settledAtMonth`) so the table prints `✓ paid off mN` rather than a stale
+  figure. That stops the table lying, but the underlying figures still do not
+  exist.
+  **The real fix is a core-loop change, which is why it was deferred.** The loop
+  would go from "while there is a balance" to "while there are months", with the
+  payoff month tracked separately:
+  - `months` must keep meaning "time to pay off" - it feeds "Time to pay off",
+    the Timeline slider's `max`, `calculateTimeRemaining`, `payoffMonths`,
+    `etfBreakEven`'s horizon and `getComparisonMonths`. It must NOT become a row
+    count.
+  - that breaks the `months === monthlyData.length` invariant, which
+    `LoanBalanceChart.jsx` and `PrincipalInterestChart.jsx` both rely on via
+    `getYearTickMonths(monthlyData.length)` while the slider beside them uses
+    `loanSimulation.months`.
+  - the ETF gate `(offsetBalance / balance) * 100 >= switchThresholdPct` would
+    divide by a zero balance.
+  - six `toHaveLength` assertions in `offsetSimulation.test.js` pin
+    `monthlyData.length` for runs that pay off early.
+  - and the Timeline slider's semantics would need deciding: does "End" stay at
+    the payoff month, or extend to the full term?
+  The freed-up surplus needs no new decision - it goes where every other month's
+  does, the offset/ETF split, and the existing
+  `(initialMonthlyPayment - currentMonthlyPayment)` rate-change term already
+  adds a retired installment back.
+  **Verification.** That a strategy which pays off at month N still reports
+  growing `offset`/`propertyValue` at month N+12, and that the Strategy
+  Comparison table then needs no `settledAtMonth` flag at all for it. Verify by
+  revert.
 ---
 
 ## ⚪ LOW PRIORITY (Deprioritized - excluded from default TODO listings)

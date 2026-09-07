@@ -161,15 +161,83 @@ describe('buildComparisonRows', () => {
     expect(offsetOnlyPayoff).toBeLessThan(longest);
 
     // Every row at or past the offset-only run's payoff month reports the same
-    // frozen figure - it stopped changing because its loan was covered, and
-    // getTimelineSnapshot clamps rather than returning undefined. Note the
-    // simulation's own convention: a loan is "paid off" once the offset covers
-    // the balance, so that final figure is the offset's size, not zero.
+    // frozen figure, because getTimelineSnapshot clamps to its final row rather
+    // than returning undefined.
+    //
+    // TODO-168 rewrote what this comment used to claim. It said the figure
+    // "stopped changing because its loan was covered" and that "a loan is 'paid
+    // off' once the offset covers the balance, so that final figure is the
+    // offset's size, not zero" - a rationalisation of two separate defects. The
+    // engine now retires the loan inside that month's own row, and being frozen
+    // is a limit of the simulation (the loop broke), not a fact about the
+    // strategy: with no installment left its surplus would really keep growing.
+    // buildComparisonRows therefore flags these cells so the table can say so
+    // instead of printing a stale figure.
     const settled = rows.filter(r => r.month >= offsetOnlyPayoff)
       .map(r => r.values.find(v => v.key === OFFSET_ONLY).value);
     expect(settled.length).toBeGreaterThan(1);
     expect(new Set(settled).size).toBe(1);
     expect(settled[0]).toBe(runs[0].simulation.monthlyData.at(-1).offset);
+  });
+
+  // TODO-168: the defect this entry is named for. The offset-only strategy pays
+  // the loan off fastest, and the table reported it as still owing the balance
+  // the offset had extinguished for every month after its payoff - so the
+  // FASTEST strategy showed the highest loan balance and the lowest property
+  // equity at the horizon, the exact inverse of the truth, in the panel whose
+  // whole purpose is that comparison.
+  describe('the fastest-paying strategy is not reported as the most indebted (TODO-168)', () => {
+    it('shows it with the lowest loan balance at the final month', () => {
+      const runs = runStrategyScenarios(BASE_PARAMS, 100);
+      const rows = buildComparisonRows(runs, 'balance', SNAPSHOT_CONTEXT);
+      expect(runs[0].simulation.months).toBeLessThan(Math.max(...runs.map(r => r.simulation.months)));
+
+      const final = rows.at(-1).values;
+      const fastest = final.find(v => v.key === OFFSET_ONLY).value;
+      const slowest = final.find(v => v.key === ALL_ETF).value;
+      expect(fastest).toBe(0);
+      expect(fastest).toBeLessThanOrEqual(slowest);
+    });
+
+    // TODO-168's verification asked for the fastest strategy to also show the
+    // HIGHEST property equity here. It cannot, and the reason is worth writing
+    // down: propertyEquity is `propertyValue - balance`, and the clamp freezes
+    // BOTH terms. Zeroing the balance removes the phantom debt, but the fast
+    // strategy's propertyValue is still stuck at its payoff month while the
+    // slow one's keeps compounding at 5%/yr to the horizon - which dominates.
+    // Measured on this fixture: 796,562 vs 1,588,483. Cross-strategy
+    // comparison past a payoff is not meaningful at all, which is exactly what
+    // the settledAtMonth flag exists to say.
+    it('credits it with its full property value, no phantom debt subtracted', () => {
+      const runs = runStrategyScenarios(BASE_PARAMS, 100);
+      const rows = buildComparisonRows(runs, 'propertyEquity', SNAPSHOT_CONTEXT);
+      const fastestFinalRow = runs[0].simulation.monthlyData.at(-1);
+      const fastest = rows.at(-1).values.find(v => v.key === OFFSET_ONLY).value;
+
+      // Equity is the whole property value now: nothing is still owed against
+      // it. Before the fix this was short by the balance the offset had
+      // already extinguished.
+      expect(fastestFinalRow.balance).toBe(0);
+      expect(fastest).toBe(fastestFinalRow.propertyValue);
+    });
+
+    it('flags a finished strategy\'s cells with the month it settled, and leaves a live one unflagged', () => {
+      const runs = runStrategyScenarios(BASE_PARAMS, 100);
+      const rows = buildComparisonRows(runs, 'offset', SNAPSHOT_CONTEXT);
+      const offsetOnlyPayoff = runs[0].simulation.months;
+
+      const past = rows.filter(r => r.month > offsetOnlyPayoff);
+      expect(past.length).toBeGreaterThan(0);
+      past.forEach((r) => {
+        expect(r.values.find(v => v.key === OFFSET_ONLY).settledAtMonth).toBe(offsetOnlyPayoff);
+        // The slowest strategy defines the axis, so it is never past its own end.
+        expect(r.values.find(v => v.key === ALL_ETF).settledAtMonth).toBeNull();
+      });
+      // At or before its payoff the figures are live, so nothing is flagged.
+      rows.filter(r => r.month <= offsetOnlyPayoff).forEach((r) => {
+        expect(r.values.find(v => v.key === OFFSET_ONLY).settledAtMonth).toBeNull();
+      });
+    });
   });
 
   it('tracks the selected metric', () => {

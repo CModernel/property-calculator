@@ -489,14 +489,38 @@ export function calculateLoanWithOffset({
     const principalPayment = currentMonthlyPayment - monthlyInterest;
     balance = Math.max(0, balance - principalPayment);
 
+    // TODO-168: retire the loan BEFORE the month is photographed. There used to
+    // be a `balance = 0` after the break below, which is what this always meant
+    // to do - but it ran after monthlyData.push, so nothing could ever observe
+    // it, and the final row kept the balance the offset had just extinguished.
+    // The shipped default reported months: 108 next to a final row reading
+    // balance: 357095, and the Strategy Comparison table then told the user the
+    // FASTEST-paying strategy still owed that at year 30.
+    //
+    // Discharging costs the offset the money it discharged with: leaving
+    // offsetBalance untouched while zeroing the balance would overstate net
+    // worth by the whole balance (you'd own the house outright AND still hold
+    // the cash). Reducing it keeps `-balance + offset` summing to what it
+    // always did, so net worth is unchanged on an organic payoff and CORRECTED
+    // where a large contribution overshot the balance (there the old reading
+    // understated it by the excess).
+    const offsetRetiresLoan = balance > 0 && effectiveOffset >= balance;
+    if (offsetRetiresLoan) {
+      offsetBalance -= balance;
+      balance = 0;
+    }
+    // Also true on an ordinary fully-amortized payoff, where the installment
+    // itself took the balance to 0 and no offset was involved.
+    const loanIsRetired = balance <= 0;
+
     // Save data for Timeline Explorer (Every Month)
     monthlyData.push({
       month: months,
       balance: Math.round(balance),
-      offset: Math.round(effectiveOffset),
+      offset: Math.round(offsetRetiresLoan ? offsetBalance : effectiveOffset),
       savings: Math.round(savingsBalance),
       etf: Math.round(etfBalance),
-      effectiveBalance: Math.round(effectiveBalance),
+      effectiveBalance: Math.round(loanIsRetired ? 0 : effectiveBalance),
       monthlyInterestPaid: Math.round(monthlyInterest),
       totalInterestPaid: Math.round(totalInterest),
       totalPrincipalPaid: Math.round(loanAmount - balance),
@@ -506,11 +530,11 @@ export function calculateLoanWithOffset({
       cashShortfall: Math.round(cashShortfallThisMonth)
     });
 
-    // If offset >= remaining balance, we're done
-    if (effectiveOffset >= balance) {
-      balance = 0;
-      break;
-    }
+    // Equivalent to the old `effectiveOffset >= balance` case by case: an
+    // already-zero balance (normal payoff) satisfied both; a positive balance
+    // the offset covers is now zeroed above; a balance it cannot cover breaks
+    // out of neither.
+    if (loanIsRetired) break;
   }
 
   return {
