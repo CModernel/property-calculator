@@ -1905,6 +1905,34 @@ describe('the payoff month reports the loan retired (TODO-168)', () => {
     expect(result.monthlyData.at(-1).effectiveBalance).toBe(0);
   });
 
+  // TODO-176: the invariant that makes App.jsx's baseline-bundle fix safe, and
+  // the refutation of that entry's central claim. It said seeding the baseline
+  // arm with the wrong savings balance "understates the ~$X saved in interest
+  // figure". It cannot: savingsBalance is written at three places and read at
+  // three, and never feeds offsetBalance, balance or the interest. Only the
+  // sentinel early-out looks at it, and only for its SIGN.
+  it('reports the same interest and payoff whatever the savings balance starts at', () => {
+    const shared = {
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 1000,
+      loanAmount: 200000,
+      monthlyRate: 0.005,
+      monthlyPayment: 1500,
+      savingsInterestRate: 0, // nonzero would flip the sentinel escape, a separate axis
+      maxMonths: 60,
+    };
+    const empty = calculateLoanWithOffset({ ...shared, initialSavingsBalance: 0 });
+    const funded = calculateLoanWithOffset({ ...shared, initialSavingsBalance: 50_000 });
+
+    expect(funded.totalInterest).toBe(empty.totalInterest);
+    expect(funded.months).toBe(empty.months);
+    // The savings pool itself is of course different - it just cannot reach
+    // the loan.
+    expect(funded.monthlyData.at(-1).savings).toBe(50_000);
+    expect(empty.monthlyData.at(-1).savings).toBe(0);
+  });
+
   it('still does not retire a loan the offset cannot cover', () => {
     const result = calculateLoanWithOffset({
       ...retiresEarly,

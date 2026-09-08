@@ -745,7 +745,16 @@ const PropertyInvestmentCalculator = () => {
     monthlyRate,
     monthlyPayment,
     interestRateField,
-    initialSavingsBalance: cashRemaining,
+    // TODO-176: liquidSavings, NOT cashRemaining - the one field where this
+    // bundle must differ from loanSimulation's beyond `contributions`, and the
+    // only one of the nine engine call sites where the two disagree about
+    // whether the contributions happen. cashRemaining has already had
+    // totalScheduledOffset subtracted, so passing it here hands the arm that
+    // makes NO contributions a bank balance reduced by those contributions -
+    // answering "you paid them and never used them" instead of "you never made
+    // them". liquidSavings is exactly cashRemaining + totalScheduledOffset.
+    // Do not "restore symmetry" with the bundle above: the asymmetry is the point.
+    initialSavingsBalance: liquidSavings,
     savingsInterestRate,
     propertyPrice,
     propertyGrowthRate: propertyGrowthRate,

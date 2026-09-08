@@ -5092,6 +5092,58 @@ optionally reuse in the commit message when you implement it.
   Suite 959 passing, lint and build clean.
 ---
 
+- [x] **TODO-176: `baselineSimulation` started with a savings balance that the contributions already spent**
+  Fixed in one line at `App.jsx`'s baseline bundle, reusing the already-computed
+  `liquidSavings` (`totalSavings - totalCashRequired`, i.e. exactly
+  `cashRemaining + totalScheduledOffset`) instead of `cashRemaining`. It is the
+  only one of the **nine** engine call sites where `contributions` and
+  `initialSavingsBalance` disagree about whether the contributions happen; the
+  other eight pass the real contributions, so the reduced value is right there.
+  The comment says not to "restore symmetry" with the sibling bundle, because
+  the asymmetry is the whole point.
+  **This entry's central claim was false, and the correction matters more than
+  the fix.** It said the defect *"understates the `~$X saved in interest`
+  figure"*. It cannot. `savingsBalance` is written at three places
+  (`offsetSimulation.js:208` init, `:366` interest, `:440` the TODO-170 draw) and
+  read at three, and **never feeds `offsetBalance`, `balance` or the interest** -
+  the only writes of `offsetBalance` don't reference it. `interestSaved` reads
+  only `.totalInterest`. Measured against the real render rather than argued:
+  the shipped default plus one $10,000 one-time contribution shows
+  **`~$7,160 saved in interest` both before and after the fix**, byte for byte.
+  **So what was actually wrong**: a conceptual incoherence at one call site, and
+  a latent trap - `baselineSimulation` exposes `totalCashShortfall`,
+  `totalDrawnFromSavings` and `totalSavingsInterest`, all three carrying the
+  wrong counterfactual, and TODO-170 had just made the savings pool spendable,
+  raising the odds a future consumer reads one.
+  **A concern that dissolved on checking.** `calculateTotalScheduledOffset`
+  counts ONLY one-time contributions (`loan.js:97`), while the baseline drops
+  recurring ones too - so `+ totalScheduledOffset` looked like an incomplete
+  correction. It isn't: `offsetSimulation.js:267` is `offsetBalance +=
+  getActiveAmount(...)`, a pure addition that subtracts from nothing. A recurring
+  contribution is money the model adds for free, so dropping it needs no
+  correction at all and `liquidSavings` is the complete fix. That did expose a
+  separate defect, recorded as TODO-178.
+  **Made observable without introducing mocking** (the repo uses `vi.mock`
+  nowhere - grep empty). The sentinel early-out tests
+  `initialSavingsBalance > 0` by **sign**, not magnitude, so there is a reachable
+  scenario where the seed decides whether the figure exists: a $40,000 one-time
+  contribution against the default's $28,453 of leftover cash drives
+  `cashRemaining` to **-$11,547** while `liquidSavings` stays $28,453. With no
+  income sources the baseline used to trip the sentinel and TODO-167's guard
+  suppressed the line entirely; seeded correctly it escapes via TODO-50, runs the
+  real loop, and renders **`~$4,925 saved in interest`** - correctly, since that
+  baseline really does hold $28,453 earning interest.
+  Verified by revert: the edge test fails with `Unable to find ~$4,925 saved in
+  interest`, while the typical-figure test **stays green** - which is the honest
+  demonstration that the fix moves no ordinary figure.
+  New `src/App.baselineSavingsSeed.test.jsx` (2 tests) - one of them finally pins
+  the `~$X saved in interest` VALUE, which had no value assertion anywhere and
+  could move by any amount with a green suite - plus an engine invariant test
+  that `totalInterest` and `months` are independent of `initialSavingsBalance`,
+  which is the refutation above written as a test rather than as a claim.
+  Suite 962 passing, lint and build clean.
+---
+
 ## 🔴 HIGH PRIORITY (Wrong dollar figures shown to the user)
 
 **All clear as of PCALC-118** - TODO-167, 168, 169 and 170 are all in Completed
@@ -6057,31 +6109,6 @@ gives `totalInterest` **$645,389.22**.
   difference rather than a calculation change (same resolution as TODO-60's
   52/12 weeks-per-month tooltip).
 
-- [ ] **TODO-176: `baselineSimulation` starts with a savings balance that the contributions already spent**
-  Found while mapping the two simulation bundles for TODO-167, and deliberately
-  left out of that fix as a separate defect.
-  `App.jsx` builds `baselineSimulation` as an exact copy of `loanSimulation`
-  except for `contributions: []` - all 25 other fields identical, name for name.
-  But one of those identical fields is `initialSavingsBalance: cashRemaining`,
-  and `cashRemaining` (`App.jsx:544`) has **already had `totalScheduledOffset`
-  subtracted from it**.
-  So the baseline arm is handed a starting balance reduced by contributions it
-  is explicitly not making. It is supposed to answer "what if I made no
-  contributions?" and instead answers "what if I paid the contributions and
-  then didn't use them?" - which understates the baseline's own interest and
-  therefore **understates** the "~$X saved in interest" figure that
-  `interestSaved` (`App.jsx:764`) reports. Opposite direction to TODO-167's
-  overstatement, and it survives that fix untouched.
-  **Not yet quantified** - unlike TODO-167's defects, no repro figure has been
-  measured. Do that first: the fix is plausibly a one-line change
-  (`initialSavingsBalance: cashRemaining + totalScheduledOffset` on the baseline
-  bundle only), but confirm the direction and size against a real render before
-  writing it, and check whether `cashRemaining`'s other consumers expect the
-  reduced value.
-  **Verification.** A test pinning that the baseline arm's starting balance is
-  independent of the contribution schedule, plus the measured `interestSaved`
-  figure before and after. Verify by revert.
-
 - [ ] **TODO-177: A strategy that pays off early stops being simulated, so every later figure is frozen**
   Found while fixing TODO-168, and the reason that entry's "highest property
   equity" verification could not be met.
@@ -6125,6 +6152,42 @@ gives `totalInterest` **$645,389.22**.
   growing `offset`/`propertyValue` at month N+12, and that the Strategy
   Comparison table then needs no `settledAtMonth` flag at all for it. Verify by
   revert.
+
+- [ ] **TODO-178: A recurring offset contribution is free money - it is added to the offset without coming out of anything**
+  Found while fixing TODO-176, checking whether `liquidSavings` was a complete
+  correction for the baseline bundle.
+  `offsetSimulation.js:267` is `offsetBalance += getActiveAmount(contributions,
+  months);` - a **pure addition**. Nothing is subtracted from the monthly
+  surplus, from `savingsBalance`, or from anywhere else.
+  For a ONE-TIME contribution that is correct: `calculateTotalScheduledOffset`
+  (`loan.js:97`) sums them and `calculateCashRemaining` subtracts that total
+  from the settlement cash, so the money really is debited - just outside the
+  loop, before the simulation starts.
+  For a RECURRING contribution nothing debits it, and the code says in as many
+  words that something should. `loan.js:93-94` justifies excluding recurring
+  contributions from `totalScheduledOffset` on the grounds that one *"comes out
+  of future cash flow, the same as the automatic monthly surplus, not a chunk of
+  savings sitting in the bank right now"*. The engine never takes it out of that
+  future cash flow. So a user who schedules "$500/month into the offset" gets
+  $500/month of offset growth **on top of** their surplus, for free - the
+  payoff accelerates and total interest falls with nothing paying for it.
+  **Not yet quantified.** Measure it before designing: build a scenario with one
+  recurring contribution and compare payoff month and total interest against the
+  same scenario with the contribution's amount instead subtracted from
+  `monthlyToOffset`. That difference is the size of the error.
+  **Decide before coding**, because there are two defensible readings. Either a
+  recurring contribution is a DIVERSION of surplus (then it must be subtracted
+  from `netMonthlyCashFlow`, and at 100% offset allocation it becomes a no-op,
+  which may make the feature pointless) or it is genuinely EXTRA money the user
+  is contributing from outside the modelled budget (then the current behaviour
+  is right and the `loan.js` comment is what needs correcting, plus a UI note
+  saying the amount is assumed to come from outside your surplus).
+  The second reading is probably the intended one - "Offset Contributions" reads
+  as money you inject - but the comment asserts the first, so one of them is
+  wrong today whichever way it is resolved.
+  **Verification.** Whichever branch: a test pinning where a recurring
+  contribution's money comes from, plus the measured payoff/interest figures
+  before and after. Verify by revert.
 ---
 
 ## ⚪ LOW PRIORITY (Deprioritized - excluded from default TODO listings)
