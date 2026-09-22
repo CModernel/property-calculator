@@ -735,6 +735,40 @@ const PropertyInvestmentCalculator = () => {
     etfReserveMonths: effectiveEtfReserveMonths,
     maxMonths: totalMonths,
   });
+  // TODO-171: isolates the negative-gearing tax credit's own effect, for
+  // disclosure - identical to loanSimulation in every field EXCEPT
+  // isInvestmentProperty, so the ONLY thing that can differ between the two
+  // runs is the gearing credit and its downstream compounding (a faster
+  // payoff means less interest for every month after the credit lands, not
+  // just the credit amount itself - see the comment at
+  // negativeGearingInterestImpact below for why the two figures differ).
+  const noGearingSimulation = calculateLoanWithOffset({
+    contributions: offsetContributions,
+    personalExpenseItems,
+    incomeSources,
+    expenseFields,
+    monthlyToOffset: baseMonthlySurplus,
+    loanAmount,
+    monthlyRate,
+    monthlyPayment,
+    interestRateField,
+    initialSavingsBalance: cashRemaining,
+    savingsInterestRate,
+    propertyPrice,
+    propertyGrowthRate: propertyGrowthRate,
+    salaryGrowthRate: salaryGrowthRate,
+    rentGrowthRate: rentGrowthRate,
+    vacancyWeeksPerYear: vacancyWeeksPerYear,
+    expenseGrowthRate: expenseGrowthRate,
+    effectiveTaxRate: effectiveTaxRate,
+    isInvestmentProperty: false,
+    etfAllocationPct: etfInvestingActive ? etfAllocationPct : 0,
+    expectedEtfReturn,
+    switchThresholdPct: effectiveSwitchThresholdPct,
+    etfStartMonth: effectiveEtfStartMonth,
+    etfReserveMonths: effectiveEtfReserveMonths,
+    maxMonths: totalMonths,
+  });
   const baselineSimulation = calculateLoanWithOffset({
     contributions: [], // No offsets
     personalExpenseItems,
@@ -780,6 +814,28 @@ const PropertyInvestmentCalculator = () => {
   // saving to quote; $0 would be just as false as $354,814.
   const interestSaved = hasUsableProjection(baselineSimulation) && hasUsableProjection(loanSimulation)
     ? baselineSimulation.totalInterest - loanSimulation.totalInterest
+    : null;
+
+  // TODO-171: what negative gearing is actually doing to the headline
+  // figures, entirely unmentioned anywhere before this. Gated on
+  // isInvestmentProperty (nothing to disclose otherwise) and >0 (a real loss
+  // that still nets to $0 relief post-TODO-174 - e.g. the Gearing indicator's
+  // OWN cash-flow reading, which uses the full installment, not just
+  // interest, can say "Negative gearing" while this stays $0 - is not worth a
+  // tile at all).
+  const negativeGearingDisclosure = isInvestmentProperty && loanSimulation.totalNegativeGearingBenefit > 0
+    && hasUsableProjection(noGearingSimulation) && hasUsableProjection(loanSimulation)
+    ? {
+        totalBenefit: loanSimulation.totalNegativeGearingBenefit,
+        // NOT the same number as totalBenefit above, and deliberately so: the
+        // credit that lands in the offset keeps saving interest every month
+        // afterward, same as any other offset balance - so the payoff/interest
+        // counterfactual compounds past the credit itself. Two real, different
+        // answers to two different questions ("how much tax relief did I get"
+        // vs "how much did that relief change my loan"), not a bug to reconcile.
+        interestImpact: noGearingSimulation.totalInterest - loanSimulation.totalInterest,
+        monthsImpact: noGearingSimulation.months - loanSimulation.months,
+      }
     : null;
 
   // TODO-93: "Total interest paid" in today's dollars - a pure display-layer
@@ -1389,7 +1445,7 @@ const PropertyInvestmentCalculator = () => {
                   Investment Property
                 </label>
                 {isInvestmentProperty && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Adds Land Tax and Property Management to Property Expenses.</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Adds Land Tax and Property Management to Property Expenses, and models tax relief on rental losses (negative gearing) - see the Loan Simulation card below.</p>
                 )}
                 {isFirstHomeBuyer && (
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Not available for a first home buyer - occupying the property and investing in it are mutually exclusive.</p>
@@ -3817,6 +3873,26 @@ const PropertyInvestmentCalculator = () => {
                     <p className="text-sm opacity-90">Savings interest earned:</p>
                     <p className="text-2xl font-bold">
                       ${Math.round(loanSimulation.totalSavingsInterest).toLocaleString()}
+                    </p>
+                  </div>
+                )}
+
+                {/* TODO-171: negative gearing was silently moving these headline
+                    figures with totalNegativeGearingBenefit rendered nowhere -
+                    disclosed here the same way Savings interest earned is,
+                    since this is a benefit, not a warning (unlike the red/amber
+                    banners above). */}
+                {negativeGearingDisclosure && (
+                  <div className="bg-white/20 backdrop-blur rounded-lg p-3">
+                    <p className="text-sm opacity-90">Negative gearing tax relief:</p>
+                    <p className="text-2xl font-bold">
+                      ${Math.round(negativeGearingDisclosure.totalBenefit).toLocaleString()}
+                    </p>
+                    <p className="text-xs opacity-75 mt-1">
+                      Without it, paying off would take {formatMonthsDetailed(Math.abs(negativeGearingDisclosure.monthsImpact)).human} longer and cost ~${Math.round(Math.abs(negativeGearingDisclosure.interestImpact)).toLocaleString()} more in interest.
+                    </p>
+                    <p className="text-xs opacity-75 mt-1">
+                      Different from the Gearing indicator below, which can read "Negative gearing" while this stays $0 - that one compares rent against your FULL installment, before tax; this is the tax refund on the property's loss against interest alone, and only exists once there's tax to actually recover.
                     </p>
                   </div>
                 )}

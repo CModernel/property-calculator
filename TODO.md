@@ -5217,6 +5217,58 @@ optionally reuse in the commit message when you implement it.
   Suite 966 passing, lint and build clean.
 ---
 
+- [x] **TODO-171: Negative gearing moved the headline figures with no disclosure anywhere in the app**
+  `totalNegativeGearingBenefit` had no UI consumer at all (confirmed by grep
+  before touching anything: only its own definition and test assertions), and
+  the Investment Property checkbox's explainer said only *"Adds Land Tax and
+  Property Management to Property Expenses."* A pure disclosure fix - no
+  calculation change.
+  **Re-measured the entry's scenario against TODO-174's already-capped engine
+  (PCALC-120), since 174 landed first** - the plan flagged this as required,
+  not optional. The entry's pre-cap numbers ($61,425 relief, 7.0 vs 7.7 years)
+  no longer apply. On the same repro, the post-cap engine gives **$53,571**
+  of relief and a **$74,650** interest difference (158 vs 175 months) - two
+  different, both real numbers, NOT the same figure read two ways: the credit
+  keeps saving interest every month it sits in the offset after it lands, so
+  the payoff/interest counterfactual compounds past the credit total itself.
+  Documented as such in the tile rather than reconciled away.
+  **Two DIFFERENT things now called "negative gearing" on the same screen,
+  and the disclosure has to keep them apart.** The Gearing health-check
+  indicator compares rent against the FULL installment, pre-tax, at month 1;
+  the engine's benefit compares rent against interest ALONE, post-TODO-174-cap.
+  Since the installment is always ≥ interest, a user can see "🟠 Negative
+  gearing" on the indicator while this new tile shows nothing at all (real
+  loss, but not one that clears the TODO-174 cap once absorbed) - the entry
+  under-described this as "the Gearing indicator... a different thing" without
+  naming the actual mechanism, so the tile's third line spells out the two
+  different bases explicitly rather than just gesturing at "different".
+  **Implementation, following the plan's chosen pattern exactly**: a third
+  simulation bundle (`noGearingSimulation`), identical to `loanSimulation` in
+  every field except `isInvestmentProperty: false` - same shape as
+  `baselineSimulation`/`interestSaved` (TODO-176's asymmetric-bundle idiom).
+  New tile in the Loan Simulation card follows "Savings interest earned:"'s
+  `bg-white/20 backdrop-blur` style, not the red/amber warning-banner idiom
+  above it - this is a benefit, not a problem. Gated on
+  `isInvestmentProperty && totalNegativeGearingBenefit > 0` plus
+  `hasUsableProjection` on both arms (TODO-167's sanctioned guard), so the
+  tile cannot render for a scenario that never qualifies OR that hit the
+  engine's sentinel.
+  Extended the checkbox explainer in the same sentence rather than a second
+  paragraph, and left the `<label>` itself untouched -
+  `App.mutualExclusionAndUpfront.test.jsx`'s exact-string
+  `getByLabelText('Investment Property')` queries stayed green unmodified.
+  Verified by revert: reverting only the `App.jsx` changes (keeping the new
+  test file) fails exactly the 3 tests that assert on the new tile/explainer
+  text, while the 2 tests asserting its ABSENCE (no gearing, or Investment
+  Property unticked) stay green for the right reason - there is nothing to
+  show either way.
+  New `src/App.negativeGearingDisclosure.test.jsx` (5 tests).
+  **Correction to this entry, folded in here rather than left for TODO-166**:
+  it closed saying "the related rate/cap questions are TODO-172" - that's
+  TODO-174 (172 is the unrelated `effectiveBalance`/`balance` timing entry).
+  Suite 971 passing, lint and build clean.
+---
+
 ## 🔴 HIGH PRIORITY (Wrong dollar figures shown to the user)
 
 **All clear as of PCALC-118** - TODO-167, 168, 169 and 170 are all in Completed
@@ -6070,33 +6122,6 @@ gives `totalInterest` **$645,389.22**.
   Documentation only, no code. Worth doing because two of the Phase 2C findings
   turned out to be real CODE defects hiding as documentation drift (shipped here
   as TODO-154 and TODO-155) - stale entries are how the next one hides.
-
-- [ ] **TODO-171: Negative gearing moves the headline figures with no disclosure anywhere in the app**
-  `offsetSimulation.js:430-451` credits a monthly negative-gearing tax benefit
-  straight into `offsetBalance`, which accelerates the payoff and cuts total
-  interest. The engine also accumulates `totalNegativeGearingBenefit` - and
-  **that field has no UI consumer at all.** Grep it across `src/`: the only hits
-  are its own definition/accumulation in `offsetSimulation.js` and assertions in
-  `offsetSimulation.test.js`. Nothing renders it.
-  Grep `-i "negative gearing"` across `src/`: the only user-facing strings are
-  the tax-suggestion tooltip (which says the suggestion *ignores* negative
-  gearing) and the Gearing indicator (which describes a cash-flow shortfall, a
-  different thing). The Investment Property checkbox's own explainer says only
-  *"Adds Land Tax and Property Management to Property Expenses."*
-  *Reproduced:* price $850,000, deposit $85,000 (loan $765,000), rate 8%/30y,
-  Salary/Wages $2,200/wk, House Rent $500/wk, land tax $2,000, property
-  management $200/mo, personal expenses $680/mo, tax rate 45%, Investment
-  Property ticked. With negative gearing active the app shows **"Time to pay
-  off: 7.0 years"** and **"Total interest paid: $233,991"**; with it suppressed
-  the same scenario is **7.7 years / $267,355**. $61,425 of tax-refund cash is
-  injected over 84 months with no line item and no mention. Adding a scheduled
-  rate change widens the swing in "Total interest paid" to **$290,326**.
-  **Suggested fix:** surface `totalNegativeGearingBenefit` somewhere the user
-  can see it (the Loan Simulation card already has sibling lines for savings
-  interest), and extend the Investment Property explainer to say that ticking
-  it also models tax relief on rental losses. No calculation change required -
-  this is a disclosure fix. Note the related rate/cap questions are TODO-172;
-  do not conflate them.
 
 - [ ] **TODO-172: `monthlyData`'s `effectiveBalance` and `balance` are measured at different instants, so the Timeline Explorer card never reconciles**
   `offsetSimulation.js:415` and `:418` compute `effectiveOffset` and
