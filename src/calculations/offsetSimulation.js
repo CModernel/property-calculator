@@ -13,6 +13,8 @@ import {
 } from './loan';
 import { calculateCompoundedValue } from './growthRate';
 import { calculateVacancyFactor } from './vacancyFactor';
+import { calculateIncomeTax, calculateMedicareLevy } from './auTaxBrackets';
+import { getGrossActiveAmount, getGrossActiveAmountWithGrowth } from './grossIncome';
 
 export function calculateLoanWithOffset({
   contributions,
@@ -212,6 +214,10 @@ export function calculateLoanWithOffset({
   let totalInterest = 0;
   let totalSavingsInterest = 0;
   let totalNegativeGearingBenefit = 0;
+  // TODO-174: a month's loss that outstrips the other income it could
+  // offset carries forward, same as a real trasladable tax loss - it isn't
+  // capped away permanently, just deferred until there's income to absorb it.
+  let negativeGearingLossCarryforward = 0;
   // TODO-170: how much of the user's own bank savings the plan had to consume
   // to stay afloat. Reported so a deficit absorbed by savings cannot pass
   // silently as "no shortfall" - the money still got spent.
@@ -470,18 +476,77 @@ export function calculateLoanWithOffset({
       // (property expenses + loan interest) - personal expenses deliberately
       // play no part, same as real negative gearing.
       const propertyCashFlow = rentalIncomeThisMonth - monthlyExpensesForMonth - monthlyInterest;
-      if (propertyCashFlow < 0) {
-        // Full effectiveTaxRate, NOT TODO-131's 50%-CGT-discounted rate -
-        // that discount is specific to capital gains; this is ordinary-
-        // income relief. Added directly to offsetBalance, bypassing the
-        // etfAllocationPct split entirely, same as one-time
-        // Offset Contributions above - and only AFTER this month's own
-        // monthlyInterest/effectiveOffset are already fixed, so the benefit
-        // affects next month's offset onward, never this month's (avoids a
-        // circular dependency on the interest figure it's derived from).
-        const negativeGearingBenefit = -propertyCashFlow * (effectiveTaxRate / 100);
+      const propertyLossThisMonth = propertyCashFlow < 0 ? -propertyCashFlow : 0;
+      // TODO-174: the loss actually available to offset this month - this
+      // month's own shortfall PLUS whatever an earlier month's loss couldn't
+      // find enough other income to absorb (see the carryforward write below).
+      // Combined even in a cash-flow-positive month, so a loss can keep being
+      // absorbed after the property itself turns around.
+      const deductibleLossThisMonth = propertyLossThisMonth + negativeGearingLossCarryforward;
+
+      if (deductibleLossThisMonth > 0 && effectiveTaxRate > 0) {
+        // TODO-174: the relief is capped at the tax actually payable on the
+        // user's OTHER (non-rental) income, at the MARGINAL rate that income
+        // sits in - not `loss * effectiveTaxRate`, which had neither property
+        // and could refund up to ~4x the real tax paid. Computed as a real
+        // differential (tax on other income, minus tax on other income after
+        // the loss) rather than reading a rate off the bracket table, so it's
+        // exactly right even when the loss straddles a bracket boundary.
+        //
+        // Gated on effectiveTaxRate > 0 explicitly - calculateIncomeTax uses
+        // the real AU brackets regardless of the slider, so at the app's own
+        // "flat baseline" (0%, no tax modeled) the differential would
+        // otherwise still be a real, nonzero number. That would break the
+        // flat-baseline promise (App.jsx's projectionIsFlatBaseline).
+        //
+        // TODO-90/91 convention: salary grows at salaryGrowthRate, everything
+        // else in "other income" resolves plain - same split
+        // monthlyIncomeThisMonth uses. getGrossActiveAmount(WithGrowth)
+        // reconstructs the PRE-TAX figure for both gross-marked items (taken
+        // at face value) and net-entered ones in a taxable category (grossed
+        // up by effectiveTaxRate) - see grossIncome.js. A non-taxable
+        // category (Government Benefits, Gift, ...) is left at face value
+        // rather than invented income, same reasoning grossIncome.js already
+        // documents for the two Health Check indicators that use it.
+        //
+        // Annualized (×52 for the weekly-stored amounts, ×12 for the
+        // loss) to consult the AU_TAX_BRACKETS table, then divided back to a
+        // monthly figure - the same "applied smoothly every month (PAYG-
+        // style), not as an annual tax return" simplification already
+        // disclosed to the user for effectiveTaxRate itself (App.jsx). This
+        // full annualize-then-divide round trip re-runs every month rather
+        // than being cached, since salary growth and one-off items can change
+        // it from one month to the next.
+        const annualOtherIncome = (
+          getGrossActiveAmountWithGrowth(salaryIncomeSources, months, salaryGrowthRate, effectiveTaxRate)
+          + getGrossActiveAmount(otherIncomeSources, months, effectiveTaxRate)
+        ) * 52;
+        const annualDeductibleLoss = deductibleLossThisMonth * 12;
+        const annualIncomeAfterLoss = Math.max(0, annualOtherIncome - annualDeductibleLoss);
+        // How much of this month's pooled loss the other income could
+        // actually absorb this year, at most annualOtherIncome's worth - the
+        // rest is the carryforward, unused because there wasn't enough other
+        // income to offset it against.
+        const annualLossAbsorbed = annualOtherIncome - annualIncomeAfterLoss;
+
+        const taxWithoutLoss = calculateIncomeTax(annualOtherIncome) + calculateMedicareLevy(annualOtherIncome);
+        const taxWithLoss = calculateIncomeTax(annualIncomeAfterLoss) + calculateMedicareLevy(annualIncomeAfterLoss);
+        // Added directly to offsetBalance, bypassing the etfAllocationPct
+        // split entirely, same as one-time Offset Contributions above - and
+        // only AFTER this month's own monthlyInterest/effectiveOffset are
+        // already fixed, so the benefit affects next month's offset onward,
+        // never this month's (avoids a circular dependency on the interest
+        // figure it's derived from).
+        const negativeGearingBenefit = (taxWithoutLoss - taxWithLoss) / 12;
         offsetBalance += negativeGearingBenefit;
         totalNegativeGearingBenefit += negativeGearingBenefit;
+        negativeGearingLossCarryforward = (annualDeductibleLoss - annualLossAbsorbed) / 12;
+      } else {
+        // No relief this month (no loss to offset, or effectiveTaxRate is 0)
+        // - but a real loss still carries forward rather than vanishing, in
+        // case a later month (more other income, or a rate the user then
+        // sets above 0%) can use it.
+        negativeGearingLossCarryforward = deductibleLossThisMonth;
       }
     }
 

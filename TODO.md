@@ -5144,6 +5144,79 @@ optionally reuse in the commit message when you implement it.
   Suite 962 passing, lint and build clean.
 ---
 
+- [x] **TODO-174: Negative-gearing relief was uncapped by tax actually payable and used the average rather than the marginal rate**
+  `offsetSimulation.js`'s negative-gearing block computed
+  `-propertyCashFlow * (effectiveTaxRate / 100)` - a flat percentage of the
+  loss, no ceiling. *Reproduced close to the entry's own scenario:* a
+  $807,500 loan, modest other income and a large ongoing loss returned
+  **$69,757** of relief over 36 months against **$10,374** of real tax the
+  household would actually owe on that income over the same period - about
+  6.7x, the same order of magnitude the entry measured (~4x on its own
+  numbers). Confirmed the defect was real and current before touching code.
+  **Decision, confirmed with the user before implementing:** rebuild the
+  benefit as a real tax DIFFERENTIAL - `tax(other income) - tax(other income -
+  loss)`, using the existing `calculateIncomeTax`/`calculateMedicareLevy`
+  (`auTaxBrackets.js`) - rather than `loss x rate` plus a bolted-on cap. This
+  fixes both halves of the entry in one expression: it tops out at the real
+  tax bill by construction, and it runs through the progressive brackets
+  (so it's inherently marginal-rate) without needing a second mechanism or a
+  `marginalRentalRate`-shaped parameter. An unabsorbed loss (bigger than the
+  other income available to offset it against) carries forward to later
+  months, same as a real Australian tax loss, rather than being discarded.
+  **Reused `getGrossActiveAmount`/`getGrossActiveAmountWithGrowth`
+  (`grossIncome.js`) instead of inventing a gross-up**, found only once
+  exploration was underway - not in the plan. They already reconstruct
+  pre-tax income correctly for both `isGross`-marked items (face value) and
+  net-entered ones in a taxable category (grossed up), and correctly leave a
+  non-taxable category (Government Benefits, Gift, ...) at face value instead
+  of inventing income - exactly the "otherwise the cap collapses to $0 for a
+  net-entered salary" trap the plan flagged as a blocker. Zero new parameters
+  reached the engine; every input was already in scope (`salaryIncomeSources`,
+  `otherIncomeSources`, `effectiveTaxRate`).
+  **Explicitly gated on `effectiveTaxRate > 0`, not left to the formula.**
+  `calculateIncomeTax` uses the real AU brackets regardless of the slider, so
+  the tax differential is a real nonzero number even at the app's "flat
+  baseline" (0%, no tax modeled) - relying on the arithmetic alone would have
+  broken `projectionIsFlatBaseline`'s promise that every tax assumption at 0%
+  means no tax anywhere.
+  **Rewrote the negative-gearing describe block, not just its numbers.** Its
+  shared fixture (`lossMakingShared`) had no income outside the rental itself,
+  so under the cap its relief collapses to exactly $0 - which is CORRECT (no
+  other income means nothing to refund against), but meant three assertions
+  built on a nonzero flat-rate credit could no longer be satisfied by ANY
+  correct implementation. Split it in two: `lossMakingShared` is now its own
+  dedicated test of the zero-income cap, and a new sibling
+  `lossMakingWithIncomeShared` (adds a salary, with `monthlyToOffset` set to
+  exactly cancel that salary's own net cash-flow contribution) keeps
+  exercising the credit mechanism the original tests were written for. Added:
+  a hand-computable test that two households with the identical $1,000/month
+  loss but different salaries (one in the 15% bracket, one in the 30%) get
+  different relief - $2,600/yr vs $3,840/yr, worked out by hand from the
+  bracket table, not derived from the production code - which is the direct
+  proof the marginal-rate half of the fix is real; a test that total relief
+  never exceeds the real tax owed on other income over the run, on a scenario
+  shaped like the entry's own repro; and a carryforward test across 60 months
+  of a loss too large for a modest income to fully absorb.
+  Verified by revert: reverting only `offsetSimulation.js` (keeping the new
+  tests) fails exactly the 5 tests that exercise the fix, with the pre-cap
+  magnitudes reappearing - `69756.94` where the cap now holds it to
+  `10374.01`, `27000` where the carryforward test caps it near `5850`, and the
+  marginal-rate test collapsing to an identical `5400` for both brackets
+  instead of `2600`/`3840`. Every other test in the file - the CGT discount,
+  the gross/net income split, the offset floor, the re-amortization guarantee
+  - is untouched, confirming the change stayed inside the negative-gearing
+  block as scoped.
+  New/rewritten tests in `offsetSimulation.test.js`'s negative-gearing
+  describe block (+4 net: one dedicated zero-income cap test, and three new
+  ones for the cap-vs-real-tax invariant, the marginal-rate difference, and
+  the carryforward).
+  **Sequencing note for TODO-171** (not yet implemented): that entry's plan
+  drafted a caveat saying this relief is "uncapped, at the average rate" -
+  false as of this commit. Remove that caveat before writing 171's
+  disclosure copy.
+  Suite 966 passing, lint and build clean.
+---
+
 ## 🔴 HIGH PRIORITY (Wrong dollar figures shown to the user)
 
 **All clear as of PCALC-118** - TODO-167, 168, 169 and 170 are all in Completed
@@ -6069,29 +6142,6 @@ gives `totalInterest` **$645,389.22**.
   `savingsBalance` receives no deposits at all - so "new deposits start earning
   next month" describes an account that never gets one, while the only account
   that DOES get deposits uses the other convention.
-
-- [ ] **TODO-174: Negative-gearing relief is uncapped by tax actually payable and uses the average rather than the marginal rate**
-  Two related questions about the same expression,
-  `offsetSimulation.js:447`: `-propertyCashFlow * (effectiveTaxRate / 100)`.
-  **(a) No cap.** The relief is unbounded, so it can exceed the tax the user
-  would actually pay. *Measured:* loan $807,500 (95% LVR), House Rent $300/wk,
-  other income $700/wk, tax rate 45%, land tax $2,000, property management
-  $200/mo → **$333,658 of relief over 359 months, about $11,153/yr**, against
-  $36,400/yr of other income whose real Australian tax is about **$2,730**. The
-  model is refunding roughly four times the tax paid.
-  **(b) Average vs marginal rate.** `App.jsx` tells the user, in the tax
-  suggestion tooltip, that the suggested rate is *"an average rate across all
-  your income - not the marginal rate on your top dollar, which matters most for
-  rental income"*, and it even computes a `marginalRentalRate` purely for
-  display. The engine then uses the average rate for what is by definition
-  marginal-rate relief. The direction of the error depends on the user's own
-  slider, so it can err either way.
-  **Suggested fix:** at minimum cap the relief at the tax actually payable on
-  other income (there is an existing `calculateIncomeTax` helper - grep for it),
-  and either use `marginalRentalRate` or document why the average rate is
-  deliberate. This changes simulation output, so expect to update pinned
-  expectations in `offsetSimulation.test.js`'s negative-gearing describe block.
-  Disclosure is TODO-171; keep the two separate.
 
 - [ ] **TODO-175: Growth makes month 1 disagree between the static cards and the Timeline Explorer**
   `growthRate.js` applies `Math.pow(1 + rate/12, month)` with `month` 1-indexed,
