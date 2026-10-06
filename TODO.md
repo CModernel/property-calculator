@@ -7,6 +7,37 @@ optionally reuse in the commit message when you implement it.
 
 ## ✅ Completed
 
+- [x] **TODO-179: `InfoTooltip` can render partly off-screen when its "?" button sits near a window edge**
+  Found during the manual browser pass over TODO-173 (2026-10-06), not caused
+  by it. `src/components/InfoTooltip.jsx` anchors the popover with `top-full
+  left-1/2 -translate-x-1/2 w-64 max-w-[90vw]` - centred on the button, fixed
+  256px wide, with nothing that keeps it inside the viewport. `max-w-[90vw]`
+  only caps the width; it does not shift the box.
+  *Measured:* the "What is this comparing?" tooltip (`App.jsx`, next to
+  "Compare Offset vs ETF Investing") has its "?" button on its own line flush
+  with the left margin, so on a ~1400px window the tooltip's left edge lands at
+  **-64px** and the first ~64px of every line are cut off. TODO-173 made that
+  tooltip longer, so it is now more noticeable, but the clipping depends only
+  on the button's position.
+  Likely affects any tooltip whose button is near either edge, and narrow
+  (mobile) widths more than desktop - TODO-17 made the page mobile
+  responsive, so check a phone-width viewport too before deciding the fix.
+  Candidate fixes, to decide: measure the popover's rect when it opens and
+  shift it back inside the viewport; or flip which side it anchors to when
+  there is not room; or move that one button next to its label's text instead
+  of on its own line. A render test in jsdom cannot see layout, so
+  verification is a manual pass across the tooltips at a few viewport widths.
+  **Retrospective (PCALC-136):** new `useTooltipViewportShift` hook, used by
+  `InfoTooltip` and `LvrBadge`: measures the popover (layout survives
+  `visibility: hidden`) and applies a `margin-left` that keeps it 8px inside
+  `documentElement.clientWidth`; the left clamp wins when it is wider than the
+  viewport. Re-measures on mount, resize, hover, focus and tap. Opus review
+  found the applied shift was tracked in a ref, which StrictMode's double effect
+  doubled (72 -> 144px in dev) - now read from the DOM, with a StrictMode test;
+  also a zero-size guard and wiring tests. jsdom can't lay out, so tests fake the
+  rect; the real behaviour at ~1400/768/375px still needs a manual look.
+  Clipping by scroll-container wrappers is not solved: TODO-186.
+
 - [x] **TODO-182: A quarterly or yearly item reads as absent in the Stabilized (and sometimes Day-1) Health Check month**
   Found by the Opus review of TODO-181. `isScheduleActive` counts a quarterly or
   yearly item only in months that match its start alignment. Example: a yearly
@@ -6444,27 +6475,6 @@ gives `totalInterest` **$645,389.22**.
 
 
 
-- [ ] **TODO-179: `InfoTooltip` can render partly off-screen when its "?" button sits near a window edge**
-  Found during the manual browser pass over TODO-173 (2026-10-06), not caused
-  by it. `src/components/InfoTooltip.jsx` anchors the popover with `top-full
-  left-1/2 -translate-x-1/2 w-64 max-w-[90vw]` - centred on the button, fixed
-  256px wide, with nothing that keeps it inside the viewport. `max-w-[90vw]`
-  only caps the width; it does not shift the box.
-  *Measured:* the "What is this comparing?" tooltip (`App.jsx`, next to
-  "Compare Offset vs ETF Investing") has its "?" button on its own line flush
-  with the left margin, so on a ~1400px window the tooltip's left edge lands at
-  **-64px** and the first ~64px of every line are cut off. TODO-173 made that
-  tooltip longer, so it is now more noticeable, but the clipping depends only
-  on the button's position.
-  Likely affects any tooltip whose button is near either edge, and narrow
-  (mobile) widths more than desktop - TODO-17 made the page mobile
-  responsive, so check a phone-width viewport too before deciding the fix.
-  Candidate fixes, to decide: measure the popover's rect when it opens and
-  shift it back inside the viewport; or flip which side it anchors to when
-  there is not room; or move that one button next to its label's text instead
-  of on its own line. A render test in jsdom cannot see layout, so
-  verification is a manual pass across the tooltips at a few viewport widths.
-
 - [ ] **TODO-180: Rethink the strategy grid and the "idle cash earns 0%" assumption now that the engine runs past payoff**
   Deferred from TODO-177 by user decision. Since TODO-177 the engine keeps
   simulating after payoff, but the 441-cell grid (`strategyComparison.js`,
@@ -6494,6 +6504,18 @@ gives `totalInterest` **$645,389.22**.
   4") and `taxRateSuggestion.test.js`. Needs a decision first: treat a
   non-monthly income amount as per-occurrence dollars (like personal
   expenses), or keep weekly and change the label. Touches the simulation.
+
+- [ ] **TODO-186: Tooltips inside `overflow-x-auto` table wrappers are still clipped**
+  Known limit of TODO-179, found by its Opus review. The viewport clamp can't
+  help where the clipping edge is a scroll container's padding box rather than
+  the window: `overflow-x: auto` forces `overflow-y` to `auto` too, so a popover
+  from a `<thead>` cell that drops below the table is cut vertically (or makes
+  the wrapper scroll), and the first ~16-40px of one near the table's left edge
+  stays hidden. Places: `App.jsx` (the strategy comparison table wrapper and
+  its header tooltip), `EtfCrashStressTest.jsx`, `EtfReturnSensitivity.jsx`,
+  `StrategyScenarioComparison.jsx`. Needs a `position: fixed` / portal popover
+  or clamping to the nearest scroll container; a portal also touches the
+  hover/focus-within CSS the components rely on, so decide before coding.
 
 ---
 

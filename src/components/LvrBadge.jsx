@@ -1,5 +1,6 @@
 import { classifyLvr, LVR_BANDS } from '../calculations/classifyLvr';
 import { useTooltipToggle } from '../hooks/useTooltipToggle';
+import { useTooltipViewportShift } from '../hooks/useTooltipViewportShift';
 
 // Hover/focus handled with Tailwind's `group`/`group-focus-within`, plus
 // (TODO-114) useTooltipToggle for a tap-to-open/tap-outside-to-close path on
@@ -8,12 +9,19 @@ import { useTooltipToggle } from '../hooks/useTooltipToggle';
 const LvrBadge = ({ lvr }) => {
   const current = classifyLvr(lvr);
   const { isOpen, toggle, ref } = useTooltipToggle();
+  // TODO-179: keeps the popover inside the viewport near a window edge.
+  const { popoverRef, shiftPx, remeasure } = useTooltipViewportShift();
 
   return (
-    <span ref={ref} className="relative inline-flex group align-middle ml-1">
+    <span
+      ref={ref}
+      onMouseEnter={remeasure}
+      onFocus={remeasure}
+      className="relative inline-flex group align-middle ml-1"
+    >
       <button
         type="button"
-        onClick={toggle}
+        onClick={() => { remeasure(); toggle(); }}
         className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] leading-none border cursor-pointer focus:outline-none focus:ring-2 focus:ring-gray-300 ${current.bgClass}`}
         aria-label={`LVR risk: ${current.summary} (${current.band})`}
       >
@@ -22,6 +30,8 @@ const LvrBadge = ({ lvr }) => {
 
       <div
         role="tooltip"
+        ref={popoverRef}
+        style={{ marginLeft: shiftPx }}
         className={`${isOpen ? 'visible opacity-100' : 'invisible opacity-0'} group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 transition-opacity duration-150 absolute z-20 top-full left-1/2 -translate-x-1/2 mt-2 w-72 max-w-[90vw] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 shadow-lg text-xs`}
       >
         <p className="text-gray-600 dark:text-gray-300 mb-2">
