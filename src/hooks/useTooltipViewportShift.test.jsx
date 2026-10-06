@@ -23,10 +23,10 @@ afterEach(() => {
 });
 
 function Harness() {
-  const { popoverRef, shiftPx, remeasure } = useTooltipViewportShift();
+  const { popoverRef, remeasure } = useTooltipViewportShift();
   return (
     <div>
-      <div role="tooltip" ref={popoverRef} style={{ marginLeft: shiftPx }} />
+      <div role="tooltip" ref={popoverRef} />
       <button type="button" onClick={remeasure}>measure</button>
     </div>
   );
@@ -89,13 +89,15 @@ describe('useTooltipViewportShift', () => {
   it('ignores a popover with no layout (display: none)', () => {
     natural = { left: 0, width: 0 };
     render(<Harness />);
-    expect(marginLeft()).toBe('0px');
+    // Never written at all.
+    expect(marginLeft()).toBe('');
   });
 
   it('does nothing when the viewport has no measurable width', () => {
     Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 0 });
     natural = { left: -64, width: 256 };
     render(<Harness />);
-    expect(marginLeft()).toBe('0px');
+    // Never written at all.
+    expect(marginLeft()).toBe('');
   });
 });

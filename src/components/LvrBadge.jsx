@@ -10,7 +10,7 @@ const LvrBadge = ({ lvr }) => {
   const current = classifyLvr(lvr);
   const { isOpen, toggle, ref } = useTooltipToggle();
   // TODO-179: keeps the popover inside the viewport near a window edge.
-  const { popoverRef, shiftPx, remeasure } = useTooltipViewportShift();
+  const { popoverRef, remeasure } = useTooltipViewportShift();
 
   return (
     <span
@@ -31,7 +31,6 @@ const LvrBadge = ({ lvr }) => {
       <div
         role="tooltip"
         ref={popoverRef}
-        style={{ marginLeft: shiftPx }}
         className={`${isOpen ? 'visible opacity-100' : 'invisible opacity-0'} group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 transition-opacity duration-150 absolute z-20 top-full left-1/2 -translate-x-1/2 mt-2 w-72 max-w-[90vw] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 shadow-lg text-xs`}
       >
         <p className="text-gray-600 dark:text-gray-300 mb-2">

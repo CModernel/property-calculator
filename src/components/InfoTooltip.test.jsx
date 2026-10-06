@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '../test/reactTestSetup';
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import InfoTooltip from './InfoTooltip';
 import { fakePopoverLayout, restorePopoverLayout } from '../test/popoverLayout';
