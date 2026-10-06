@@ -5459,6 +5459,30 @@ optionally reuse in the commit message when you implement it.
   drifted ~68; found the live Simple-mode badges - for TODO-160 - and the
   stabilization-month bug logged as TODO-181). Suite 1016 passing, lint and
   build clean.
+
+- [x] **TODO-165: The scenario matrix pins Day-1 classifications the panel never renders**
+  `purchaseHealthCheck.scenarios.test.js` now classifies by the same path as
+  `App.jsx`: `runScenario` copies the Stabilized wiring (`findStabilizationMonth`,
+  `resolveProjectedFinancials`, `worseOf`, with App's growth fallbacks 3/3/2.5)
+  and exposes both readings per indicator - the unsuffixed `*Class` is what the
+  panel renders, `*Day1Class` the old raw label. Every row pins its Stabilized
+  values (`STAB`), so a failing row says which half moved. All 12 existing rows
+  kept their labels (none had Stabilized worse - which is exactly why nothing
+  could notice), so there was no re-baseline. Five rows added: three
+  "Stabilized worse" (Emergency Buffer Good -> Moderate, Housing Cost Ratio
+  Caution -> High risk, Stress Test Excellent -> High risk) plus the two band
+  gaps (Stress Test === 1 'Moderate', Upfront Cost Ratio 'Normal' at $900k as a
+  first home buyer). The HCR 0%-tax block now asserts the Day-1 label on
+  purpose (the original audit only had Day 1).
+  Mutation check on the matrix's own wiring: inverting or deleting `worseOf`
+  at each of its three sites fails 2-10 tests per mutation (none failed before).
+  Header rewritten with the honest limit: the file copies App's wiring, so
+  mutating `App.jsx` itself cannot fail a row here - that is pinned by
+  `App.worseOfDirection.test.jsx` (TODO-163), cross-referenced with the same
+  inputs - and the two copies can drift. Opus 5.5 review: wiring confirmed
+  faithful; fixed a fragile `Math.round` pin on two HCR values within 0.05 of
+  a .5 boundary (now 2-decimal `toBeCloseTo`), and a house-strata gating
+  divergence. Suite 1030 passing, lint and build clean.
 ---
 
 ## 🔴 HIGH PRIORITY (Wrong dollar figures shown to the user)
@@ -6263,22 +6287,6 @@ gives `totalInterest` **$645,389.22**.
   Simple on Day-1 alone (which would under-report risk). Analysis first.
 
 
-
-- [ ] **TODO-165: The scenario matrix pins Day-1 classifications the panel never renders**
-  `purchaseHealthCheck.scenarios.test.js` (TODO-147) is the broadest regression
-  net in the Health Check cluster, but it **imports nothing from
-  `projectedHealthCheck.js`** (verified in its import list) and classifies the
-  raw Day-1 numbers directly (`:129-132`). `App.jsx:836, 855, 869` classify
-  `worseOf(Day-1, Stabilized)` instead, so three of the four pinned labels are
-  ones the panel never shows. A regression in the Stabilized half moves every
-  badge in the panel without failing a single matrix row.
-  The entry does say "Day-1 wiring", which is adequate disclosure for the
-  VALUES; the labels are the part that misleads. Either extend the matrix to the
-  Stabilized path or state the limit in the file - but do not leave it reading
-  as the regression net for "the four Tier-1 Health Check indicators".
-  Band gaps in the rows themselves, worth knowing but pinned at unit level: no
-  row produces Stress Test `=== 1` ('Moderate'), and none produces Upfront Cost
-  Ratio in `[2, 4)` ('Normal').
 
 - [ ] **TODO-166: Apply the twelve documented corrections to existing TODO.md entries**
   The Phase 2C audit compared what fifteen Health Check entries CLAIM against

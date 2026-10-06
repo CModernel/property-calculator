@@ -6,16 +6,40 @@
 // of these four could move all of them silently. This file is that audit,
 // made permanent.
 //
-// Deliberately does NOT render <App/> - it replicates App.jsx's own wiring in
-// `run()` below, calling the real calculation modules directly, so it stays
-// fast and isolated from DOM churn. No formula is re-derived here: every
-// number comes from the same `loan.js`/`recurringAmount.js`/`lmi.js`/
-// `closingCosts.js`/`states/`/`totalCashRequired.js`/`purchaseHealthCheck.js`
+// TODO-165: what the labels here MEAN. The panel classifies
+// worseOf(Day 1, Stabilized) for Emergency Buffer, Housing Cost Ratio and
+// Stress Test (App.jsx), and Upfront Cost Ratio raw (it has no Stabilized
+// reading). This file used to classify Day 1 alone, so three of its four pinned
+// labels were ones the panel never showed. `runScenario` now follows the same
+// path, each row pins the Stabilized reading beside the Day-1 one (`STAB`), and
+// the rows named "Stabilized worse" are the ones where the panel label is
+// the Stabilized one (the two readings' labels also differ where Stabilized is better, but there
+// the panel keeps Day 1's).
+//
+// WHAT THIS FILE CAN AND CANNOT CATCH. It does NOT render <App/> - it replicates
+// App.jsx's wiring by hand in `runScenario` below (Day 1 AND Stabilized),
+// calling the real calculation modules directly, so it stays fast and isolated
+// from DOM churn. That makes it a check on the calculation modules and on this
+// copy of the wiring, and NOT on App.jsx's own wiring: deleting worseOf from
+// App.jsx, or flipping a direction there, cannot fail a row here. That is pinned
+// at render level by App.worseOfDirection.test.jsx (TODO-163). The two copies
+// can also drift apart silently - when App.jsx's health-check wiring changes,
+// update `runScenario` with it.
+//
+// No formula is re-derived here: every number comes from the same `loan.js`/
+// `recurringAmount.js`/`lmi.js`/`closingCosts.js`/`states/`/
+// `totalCashRequired.js`/`purchaseHealthCheck.js`/`projectedHealthCheck.js`
 // functions App.jsx itself calls - this file would fail to catch a bug that
 // was baked into one of those functions identically on both sides, but that
 // is true of any test that reuses the code under test's own building blocks,
 // and re-deriving the formulas here would stop this being a check on the code
 // at all (see the TODO's own instruction not to).
+//
+// Cross-check against what the panel renders (App.worseOfDirection.test.jsx,
+// same inputs): 'Stabilized worse: expenses grow 10% a year' reads
+// 🟠 6.3 months there; 'the rate jumps to 8% at month 2' reads 🔴 44%; and
+// '$800k at 6%, 8% from month 300' reads 🔴 Survives +3% - the Moderate /
+// High risk / High risk labels pinned below.
 import { describe, it, expect } from 'vitest';
 import {
   calculateLoanAmount, calculateMonthlyRate, calculateMonthlyPayment,
@@ -32,6 +56,7 @@ import { getStateModule } from './states';
 import { calculateTotalCashRequired, calculateLiquidSavings } from './totalCashRequired';
 import { calculateVacancyFactor } from './vacancyFactor';
 import { getGrossActiveAmount } from './grossIncome';
+import { findStabilizationMonth, resolveProjectedFinancials, worseOf } from './projectedHealthCheck';
 import {
   calculateEmergencyBufferMonths, classifyEmergencyBuffer,
   calculateHousingCostRatio, classifyHousingCostRatio,
@@ -51,6 +76,12 @@ function runScenario(overrides = {}) {
     payLmiUpfront: overrides.payLmiUpfront ?? false,
     // Same fallback chain App.jsx:395 uses (`config.vacancyWeeksPerYear ?? 2`).
     vacancyWeeksPerYear: overrides.vacancyWeeksPerYear ?? defaultConfig.vacancyWeeksPerYear ?? 2,
+    // TODO-165: the same fallbacks App.jsx applies to the growth assumptions
+    // (App.jsx: `config.salaryGrowthRate ?? 3`, `rentGrowthRate ?? 3`,
+    // `expenseGrowthRate ?? 2.5`) - config.default.json carries none of them.
+    salaryGrowthRate: overrides.salaryGrowthRate ?? defaultConfig.salaryGrowthRate ?? 3,
+    rentGrowthRate: overrides.rentGrowthRate ?? defaultConfig.rentGrowthRate ?? 3,
+    expenseGrowthRate: overrides.expenseGrowthRate ?? defaultConfig.expenseGrowthRate ?? 2.5,
   };
   const stateModule = getStateModule(c.state);
 
@@ -107,11 +138,47 @@ function runScenario(overrides = {}) {
   const monthlyIncomeBeforeTax = calculateMonthlyFromWeekly(weeklyIncomeBeforeTax);
   const monthlyRentalIncomeBeforeTax = calculateMonthlyFromWeekly(weeklyRentalIncomeBeforeTaxAndVacancy * calculateVacancyFactor(c.vacancyWeeksPerYear));
 
+  // TODO-165: the Stabilized half of App.jsx's wiring (App.jsx's
+  // `stabilizationMonth` / `projected` block), so each classification below is
+  // the one the panel RENDERS - worseOf(Day-1, Stabilized) - rather than the
+  // Day-1 label alone. Everything is hand-copied from App.jsx like the rest of
+  // this function, so see the header for the limit that implies.
+  const steppedField = (base, changes) => ({ base, changes: changes ?? [] });
+  const expenseFields = {
+    // A house has no strata for the whole simulation, same as App.jsx.
+    strataFees: c.propertyType === 'house' ? steppedField(0, []) : steppedField(strataFees, c.strataFeesChanges),
+    utilities: steppedField(c.utilities, c.utilitiesChanges),
+    councilRates: steppedField(c.councilRates, c.councilRatesChanges),
+    insurance: steppedField(c.insurance, c.insuranceChanges),
+    maintenance: steppedField(c.maintenance, c.maintenanceChanges),
+    waterRates: steppedField(c.waterRates, c.waterRatesChanges),
+    landTax: c.isInvestmentProperty ? steppedField(c.landTax, c.landTaxChanges) : steppedField(0, []),
+    propertyManagement: c.isInvestmentProperty ? steppedField(c.propertyManagement, c.propertyManagementChanges) : steppedField(0, []),
+    miscPropertyExpense: steppedField(c.miscPropertyExpense ?? 0, c.miscPropertyExpenseChanges),
+  };
+  const interestRateField = steppedField(c.interestRate, c.interestRateChanges);
+  const stabilizationMonth = findStabilizationMonth({
+    incomeSources: c.incomeSources, personalExpenseItems: c.personalExpenseItems, expenseFields, interestRateField,
+  });
+  const projected = resolveProjectedFinancials(stabilizationMonth, {
+    incomeSources: c.incomeSources, personalExpenseItems: c.personalExpenseItems, expenseFields, interestRateField,
+    effectiveTaxRate: c.effectiveTaxRate, salaryGrowthRate: c.salaryGrowthRate, rentGrowthRate: c.rentGrowthRate,
+    expenseGrowthRate: c.expenseGrowthRate, vacancyWeeksPerYear: c.vacancyWeeksPerYear,
+    loanAmount, monthlyPayment, interestRate: c.interestRate, totalMonths,
+  });
+  const projectedTotalPropertyCost = calculateTotalPropertyCost(projected.monthlyPayment, projected.monthlyPropertyExpenses);
+
   const emergencyBufferMonths = calculateEmergencyBufferMonths(liquidSavings, totalPropertyCost + monthlyPersonalExpenses);
+  const stabilizedEmergencyBufferMonths = calculateEmergencyBufferMonths(liquidSavings, projectedTotalPropertyCost + projected.monthlyPersonalExpenses);
   const housingCostRatio = calculateHousingCostRatio(totalPropertyCost, monthlyIncomeBeforeTax + monthlyRentalIncomeBeforeTax);
+  const stabilizedHousingCostRatio = calculateHousingCostRatio(projectedTotalPropertyCost, projected.monthlyIncomeBeforeTax + projected.monthlyRentalIncomeBeforeTax);
   const stressTestSurvivedDelta = calculateStressTestSurvivedDelta({
     loanAmount, interestRate: c.interestRate, totalMonths, monthlyPropertyExpenses,
     monthlyIncome, monthlyRentalIncome, monthlyPersonalExpenses,
+  });
+  const stabilizedStressTestSurvivedDelta = calculateStressTestSurvivedDelta({
+    loanAmount, interestRate: projected.interestRate, totalMonths: projected.remainingMonths, monthlyPropertyExpenses: projected.monthlyPropertyExpenses,
+    monthlyIncome: projected.monthlyIncome, monthlyRentalIncome: projected.monthlyRentalIncome, monthlyPersonalExpenses: projected.monthlyPersonalExpenses,
   });
   const upfrontCostRatio = calculateUpfrontCostRatio(totalCashRequired, c.downPayment, c.propertyPrice);
 
@@ -126,9 +193,20 @@ function runScenario(overrides = {}) {
     monthlyNetBalance: calculateMonthlyNetBalance(monthlyIncome, monthlyRentalIncome, monthlyPersonalExpenses, totalPropertyCost),
     rentalYield: calculateRentalYield(weeklyRentalIncomeBeforeTaxAndVacancy, c.propertyPrice),
     rentalYieldHasData: hasEnoughDataForRentalYield(weeklyRentalIncomeBeforeVacancy),
-    emergencyBufferMonths, emergencyBufferClass: classifyEmergencyBuffer(emergencyBufferMonths),
-    housingCostRatio, housingCostRatioClass: classifyHousingCostRatio(housingCostRatio),
-    stressTestSurvivedDelta, stressTestClass: classifyStressTest(stressTestSurvivedDelta),
+    // Each indicator exposes BOTH readings, so a failing row says which half
+    // moved. The unsuffixed `*Class` is what the panel renders (worse of the
+    // two, directions exactly as App.jsx passes them); `*Day1Class` is the
+    // raw Day-1 label this file used to pin on its own.
+    stabilizationMonth,
+    emergencyBufferMonths, stabilizedEmergencyBufferMonths,
+    emergencyBufferDay1Class: classifyEmergencyBuffer(emergencyBufferMonths),
+    emergencyBufferClass: classifyEmergencyBuffer(worseOf(emergencyBufferMonths, stabilizedEmergencyBufferMonths, 'higherIsBetter')),
+    housingCostRatio, stabilizedHousingCostRatio,
+    housingCostRatioDay1Class: classifyHousingCostRatio(housingCostRatio),
+    housingCostRatioClass: classifyHousingCostRatio(worseOf(housingCostRatio, stabilizedHousingCostRatio, 'higherIsWorse')),
+    stressTestSurvivedDelta, stabilizedStressTestSurvivedDelta,
+    stressTestDay1Class: classifyStressTest(stressTestSurvivedDelta),
+    stressTestClass: classifyStressTest(worseOf(stressTestSurvivedDelta, stabilizedStressTestSurvivedDelta, 'higherIsBetter')),
     upfrontCostRatio, upfrontCostRatioClass: classifyUpfrontCostRatio(upfrontCostRatio),
   };
 }
@@ -160,62 +238,96 @@ const MATRIX = [
   {
     name: 'baseline (config.default.json)',
     overrides: {},
-    expect: { EB: [6.3, 'Good'], HCR: [44, 'Caution'], HCR0: [55, 'High risk'], ST: [3, 'Excellent'], UCR: [1.7, 'Excellent'] },
+    expect: { EB: [6.3, 'Good'], HCR: [44, 'Caution'], HCR0: [55, 'High risk'], ST: [3, 'Excellent'], UCR: [1.7, 'Excellent'], STAB: { EB: 6.1, HCR: 38.56, ST: 3 } },
   },
   {
     name: 'not a first home buyer - loses the stamp duty concession',
     overrides: { isFirstHomeBuyer: false },
-    expect: { EB: [1.3, 'High risk'], HCR: [44, 'Caution'], HCR0: [55, 'High risk'], ST: [3, 'Excellent'], UCR: [4.4, 'High'] },
+    expect: { EB: [1.3, 'High risk'], HCR: [44, 'Caution'], HCR0: [55, 'High risk'], ST: [3, 'Excellent'], UCR: [4.4, 'High'], STAB: { EB: 1.2, HCR: 38.56, ST: 3 } },
   },
   {
     name: 'a much more expensive property',
     overrides: { propertyPrice: 1200000 },
-    expect: { EB: [-1.5, 'High risk'], HCR: [68, 'High risk'], HCR0: [85, 'High risk'], ST: [0, 'High risk'], UCR: [4.4, 'High'] },
+    expect: { EB: [-1.5, 'High risk'], HCR: [68, 'High risk'], HCR0: [85, 'High risk'], ST: [0, 'High risk'], UCR: [4.4, 'High'], STAB: { EB: -1.5, HCR: 59.51, ST: 2 } },
   },
   {
     name: 'more available savings',
     overrides: { totalSavings: 500000 },
-    expect: { EB: [39.4, 'Excellent'], HCR: [44, 'Caution'], HCR0: [55, 'High risk'], ST: [3, 'Excellent'], UCR: [1.7, 'Excellent'] },
+    expect: { EB: [39.4, 'Excellent'], HCR: [44, 'Caution'], HCR0: [55, 'High risk'], ST: [3, 'Excellent'], UCR: [1.7, 'Excellent'], STAB: { EB: 38.1, HCR: 38.56, ST: 3 } },
   },
   {
     name: 'a higher interest rate',
     overrides: { interestRate: 10 },
-    expect: { EB: [4.8, 'Moderate'], HCR: [61, 'High risk'], HCR0: [76, 'High risk'], ST: [2, 'Good'], UCR: [1.7, 'Excellent'] },
+    expect: { EB: [4.8, 'Moderate'], HCR: [61, 'High risk'], HCR0: [76, 'High risk'], ST: [2, 'Good'], UCR: [1.7, 'Excellent'], STAB: { EB: 4.6, HCR: 52.98, ST: 3 } },
   },
   {
     name: 'a shorter loan term',
     overrides: { loanTermYears: 15 },
-    expect: { EB: [4.9, 'Moderate'], HCR: [59, 'High risk'], HCR0: [74, 'High risk'], ST: [3, 'Excellent'], UCR: [1.7, 'Excellent'] },
+    expect: { EB: [4.9, 'Moderate'], HCR: [59, 'High risk'], HCR0: [74, 'High risk'], ST: [3, 'Excellent'], UCR: [1.7, 'Excellent'], STAB: { EB: 4.7, HCR: 51.55, ST: 3 } },
   },
   {
     name: 'a smaller deposit',
     overrides: { downPayment: 100000 },
-    expect: { EB: [40.7, 'Excellent'], HCR: [58, 'High risk'], HCR0: [73, 'High risk'], ST: [2, 'Good'], UCR: [1.7, 'Excellent'] },
+    expect: { EB: [40.7, 'Excellent'], HCR: [58, 'High risk'], HCR0: [73, 'High risk'], ST: [2, 'Good'], UCR: [1.7, 'Excellent'], STAB: { EB: 39.6, HCR: 50.95, ST: 3 } },
   },
   {
     name: 'a smaller deposit with LMI paid upfront',
     overrides: { downPayment: 100000, payLmiUpfront: true },
-    expect: { EB: [37.2, 'Excellent'], HCR: [58, 'High risk'], HCR0: [73, 'High risk'], ST: [2, 'Good'], UCR: [4.1, 'High'] },
+    expect: { EB: [37.2, 'Excellent'], HCR: [58, 'High risk'], HCR0: [73, 'High risk'], ST: [2, 'Good'], UCR: [4.1, 'High'], STAB: { EB: 36.1, HCR: 50.95, ST: 3 } },
   },
   {
     name: 'a much higher salary',
     overrides: { incomeSources: salaryOnly(3000) },
-    expect: { EB: [6.3, 'Good'], HCR: [24, 'Excellent'], HCR0: [30, 'Excellent'], ST: [3, 'Excellent'], UCR: [1.7, 'Excellent'] },
+    expect: { EB: [6.3, 'Good'], HCR: [24, 'Excellent'], HCR0: [30, 'Excellent'], ST: [3, 'Excellent'], UCR: [1.7, 'Excellent'], STAB: { EB: 6.1, HCR: 20.74, ST: 3 } },
   },
   {
     name: 'a much lower salary',
     overrides: { incomeSources: salaryOnly(800) },
-    expect: { EB: [6.3, 'Good'], HCR: [89, 'High risk'], HCR0: [111, 'High risk'], ST: [0, 'High risk'], UCR: [1.7, 'Excellent'] },
+    expect: { EB: [6.3, 'Good'], HCR: [89, 'High risk'], HCR0: [111, 'High risk'], ST: [0, 'High risk'], UCR: [1.7, 'Excellent'], STAB: { EB: 6.1, HCR: 77.79, ST: 0 } },
   },
   {
     name: 'higher personal expenses',
     overrides: { personalExpenseItems: groceriesOnly(1300) },
-    expect: { EB: [5.5, 'Moderate'], HCR: [44, 'Caution'], HCR0: [55, 'High risk'], ST: [3, 'Excellent'], UCR: [1.7, 'Excellent'] },
+    expect: { EB: [5.5, 'Moderate'], HCR: [44, 'Caution'], HCR0: [55, 'High risk'], ST: [3, 'Excellent'], UCR: [1.7, 'Excellent'], STAB: { EB: 5.3, HCR: 38.56, ST: 3 } },
   },
   {
     name: 'a cheaper property with a smaller deposit',
     overrides: { propertyPrice: 400000, downPayment: 100000 },
-    expect: { EB: [80.5, 'Excellent'], HCR: [27, 'Excellent'], HCR0: [34, 'Good'], ST: [3, 'Excellent'], UCR: [1.2, 'Excellent'] },
+    expect: { EB: [80.5, 'Excellent'], HCR: [27, 'Excellent'], HCR0: [34, 'Good'], ST: [3, 'Excellent'], UCR: [1.2, 'Excellent'], STAB: { EB: 76.4, HCR: 24.01, ST: 3 } },
+  },
+  // TODO-165: rows where STABILIZED is the worse reading - the only case where
+  // the panel's label differs from the Day-1 one, and so the only rows that
+  // fail if this file goes back to classifying Day 1 alone.
+  {
+    name: 'Stabilized worse: expenses grow 10% a year',
+    overrides: { expenseGrowthRate: 10 },
+    expect: { EB: [6.3, 'Moderate'], HCR: [44, 'Caution'], HCR0: [55, 'High risk'], ST: [3, 'Excellent'], UCR: [1.7, 'Excellent'], STAB: { EB: 5.4, HCR: 41.29, ST: 3 } },
+  },
+  {
+    name: 'Stabilized worse: the rate jumps to 8% at month 2',
+    overrides: { salaryGrowthRate: 0, rentGrowthRate: 0, expenseGrowthRate: 0, interestRateChanges: [{ id: 1, amount: 8, startMonth: 2 }] },
+    expect: { EB: [6.3, 'Moderate'], HCR: [44, 'High risk'], HCR0: [55, 'High risk'], ST: [3, 'Excellent'], UCR: [1.7, 'Excellent'], STAB: { EB: 5.5, HCR: 51.81, ST: 3 } },
+  },
+  {
+    name: 'Stabilized worse: $800k at 6%, 8% from month 300 puts the Stress Test in deficit',
+    overrides: {
+      salaryGrowthRate: 0, rentGrowthRate: 0, expenseGrowthRate: 0, downPayment: 50000, interestRate: 6,
+      interestRateChanges: [{ id: 1, amount: 8, startMonth: 300 }],
+      incomeSources: [...salaryOnly(1614), { id: 2, name: 'Salary/Wages', amount: 1500, startMonth: 1, recurrence: 'monthly', endMonth: 360 }],
+    },
+    expect: { EB: [47.4, 'Excellent'], HCR: [32, 'High risk'], HCR0: [40, 'Good'], ST: [3, 'High risk'], UCR: [1.7, 'Excellent'], STAB: { EB: 16.6, HCR: 98.1, ST: 0 } },
+  },
+  // TODO-165: closes two band gaps the matrix used to have - no row produced
+  // Stress Test === 1 ('Moderate') or an Upfront Cost Ratio in [2, 4) ('Normal').
+  {
+    name: 'a lower salary that survives only a 1-point rise (Stress Test Moderate)',
+    overrides: { incomeSources: salaryOnly(1200) },
+    expect: { EB: [6.3, 'Good'], HCR: [59, 'High risk'], HCR0: [74, 'High risk'], ST: [1, 'Moderate'], UCR: [1.7, 'Excellent'], STAB: { EB: 6.1, HCR: 51.86, ST: 3 } },
+  },
+  {
+    name: 'a first home buyer over the full-exemption threshold (Upfront Cost Ratio Normal)',
+    overrides: { propertyPrice: 900000 },
+    expect: { EB: [3.9, 'Moderate'], HCR: [47, 'Caution'], HCR0: [59, 'High risk'], ST: [3, 'Excellent'], UCR: [2.7, 'Normal'], STAB: { EB: 3.7, HCR: 41.55, ST: 3 } },
   },
 ];
 
@@ -234,16 +346,59 @@ describe('Purchase Health Check Tier-1 indicators - scenario matrix (TODO-147)',
 
     expect(result.upfrontCostRatio).toBeCloseTo(exp.UCR[0], 1);
     expect(result.upfrontCostRatioClass.label).toBe(exp.UCR[1]);
+
+    // TODO-165: the Stabilized reading each label above was resolved against.
+    // Pinned so a failing row says WHICH half moved.
+    expect(result.stabilizedEmergencyBufferMonths).toBeCloseTo(exp.STAB.EB, 1);
+    expect(result.stabilizedHousingCostRatio).toBeCloseTo(exp.STAB.HCR, 1);
+    expect(result.stabilizedStressTestSurvivedDelta).toBe(exp.STAB.ST);
   });
 
   // TODO-151: at a 0% rate the before-tax reconstruction is a no-op, so every
-  // row must reproduce the ORIGINAL 2026-08-17 audit figure exactly. This is
+  // row must reproduce (TODO-165: rows added later carry no 2026-08-17 figure;
+  // theirs pin the same no-op property at their own scenario) the ORIGINAL 2026-08-17 audit figure exactly. This is
   // the whole-matrix version of grossIncome.test.js's bitwise no-op test, and
   // it's what makes the tax-rate default the only thing that moved.
-  it.each(MATRIX)('$name - unchanged from the original audit at a 0% tax rate', ({ overrides, expect: exp }) => {
+  it.each(MATRIX)('$name - Day-1 ratio unchanged from the original audit at a 0% tax rate', ({ overrides, expect: exp }) => {
     const result = runScenario({ ...overrides, effectiveTaxRate: 0 });
     expect(Math.round(result.housingCostRatio)).toBe(exp.HCR0[0]);
-    expect(result.housingCostRatioClass.label).toBe(exp.HCR0[1]);
+    // The Day-1 label on purpose: HCR0 is the ORIGINAL audit figure, which only
+    // ever had a Day-1 reading (TODO-165 made the unsuffixed class Stabilized-aware).
+    expect(result.housingCostRatioDay1Class.label).toBe(exp.HCR0[1]);
+  });
+
+  // TODO-165: the assertion that justifies the Stabilized wiring. For these
+  // rows the panel label is the Stabilized reading's, not Day 1's; a
+  // classification that goes back to Day 1 alone leaves the Day-1 label here.
+  describe('the panel label is the worse of the two readings (TODO-165)', () => {
+    const named = (name) => runScenario(MATRIX.find((row) => row.name === name).overrides);
+
+    it('Emergency Buffer: Day 1 is Good, Stabilized is Moderate, the panel says Moderate', () => {
+      const result = named('Stabilized worse: expenses grow 10% a year');
+      expect(result.emergencyBufferDay1Class.label).toBe('Good');
+      expect(result.emergencyBufferClass.label).toBe('Moderate');
+    });
+
+    it('Housing Cost Ratio: Day 1 is Caution, Stabilized is High risk, the panel says High risk', () => {
+      const result = named('Stabilized worse: the rate jumps to 8% at month 2');
+      expect(result.housingCostRatioDay1Class.label).toBe('Caution');
+      expect(result.housingCostRatioClass.label).toBe('High risk');
+    });
+
+    it('Stress Test: Day 1 is Excellent, Stabilized is in deficit, the panel says High risk', () => {
+      const result = named('Stabilized worse: $800k at 6%, 8% from month 300 puts the Stress Test in deficit');
+      expect(result.stressTestDay1Class.label).toBe('Excellent');
+      expect(result.stressTestClass.label).toBe('High risk');
+    });
+
+    // The opposite case, so a "pick the lower one" shortcut cannot pass: when
+    // Stabilized is the BETTER reading the panel keeps the Day-1 label.
+    it('keeps the Day-1 label when Stabilized is better', () => {
+      const result = named('baseline (config.default.json)');
+      expect(result.housingCostRatioDay1Class.label).toBe('Caution');
+      expect(result.housingCostRatioClass.label).toBe('Caution');
+      expect(result.stabilizedHousingCostRatio).toBeLessThan(result.housingCostRatio);
+    });
   });
 
   // Two properties worth pinning explicitly because they surprise people and
@@ -267,6 +422,8 @@ describe('Purchase Health Check Tier-1 indicators - scenario matrix (TODO-147)',
       const rest = { ...result };
       delete rest.housingCostRatio;
       delete rest.housingCostRatioClass;
+      delete rest.housingCostRatioDay1Class;
+      delete rest.stabilizedHousingCostRatio;
       return rest;
     };
 
