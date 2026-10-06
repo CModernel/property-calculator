@@ -198,6 +198,8 @@ describe('Offset Contributions', () => {
     await user.click(screen.getByRole('button', { name: 'Add Contribution' }));
 
     expect(screen.getByText(/Plus 1 recurring contribution - applied/)).toBeInTheDocument();
+    // TODO-178: says where the money is assumed to come from.
+    expect(screen.getByText(/assumed to come from outside your monthly surplus/)).toBeInTheDocument();
 
     // Offset Contributions now lives on its own card (TODO-115) - scope to
     // its section (two levels up from its own heading: past the header row,
@@ -207,6 +209,15 @@ describe('Offset Contributions', () => {
     const offsetSection = screen.getByText('💰 Offset Contributions Schedule').parentElement.parentElement;
     await user.click(within(offsetSection).getByRole('button', { name: '✕' }));
     expect(screen.queryByText(/Plus 1 recurring contribution/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/assumed to come from outside your monthly surplus/)).not.toBeInTheDocument();
+  });
+
+  it('Remaining Savings tooltip no longer claims recurring contributions come out of future income (TODO-178)', () => {
+    render(<App />);
+    const button = screen.getByLabelText('How is Remaining Savings different from Available Savings?');
+    const tooltip = button.parentElement.querySelector('[role="tooltip"]');
+    expect(tooltip.textContent).not.toMatch(/come out of future income/);
+    expect(tooltip.textContent).toMatch(/assumed to be money you add from outside/);
   });
 });
 

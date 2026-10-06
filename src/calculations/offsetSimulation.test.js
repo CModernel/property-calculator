@@ -216,6 +216,33 @@ describe('calculateLoanWithOffset', () => {
     expect(offsets).toEqual([200, 400, 600, 600]);
   });
 
+  // TODO-178: a recurring contribution is added to the offset WITHOUT being
+  // debited from the monthly surplus or savings - deliberately, it models
+  // money injected from outside the budget. This pins that behavior and its
+  // size so a future "fix" that starts debiting it is a visible decision.
+  // Measured on a $500k / 6% / 360-month loan with a $1,000/month surplus:
+  //   + $500/month recurring contribution -> payoff month 163, interest ~$229,979
+  //   same $1,000 surplus, nothing added  -> payoff month 197, interest ~$285,263
+  // i.e. the $500/month is worth ~34 months and ~$55k of interest.
+  it('treats a recurring contribution as extra money on top of the surplus, not funded from it', () => {
+    const loanAmount = 500_000;
+    const monthlyRate = calculateMonthlyRate(6);
+    const monthlyPayment = calculateMonthlyPayment(loanAmount, monthlyRate, 360);
+    const base = { personalExpenseItems: [], loanAmount, monthlyRate, monthlyPayment, maxMonths: 360, monthlyToOffset: 1000 };
+
+    const withRecurring = calculateLoanWithOffset({
+      ...base,
+      contributions: [{ startMonth: 1, recurrence: 'monthly', endMonth: MAX_MONTH, amount: 500 }],
+    });
+    const surplusOnly = calculateLoanWithOffset({ ...base, contributions: [] });
+
+    expect(withRecurring.months).toBe(163);
+    expect(withRecurring.monthlyData).toHaveLength(163);
+    expect(Math.round(withRecurring.totalInterest)).toBe(229979);
+    expect(surplusOnly.months).toBe(197);
+    expect(Math.round(surplusOnly.totalInterest)).toBe(285263);
+  });
+
   it('sums a one-time and a recurring contribution together in the same month', () => {
     const result = calculateLoanWithOffset({
       contributions: [

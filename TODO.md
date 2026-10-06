@@ -5286,6 +5286,32 @@ optionally reuse in the commit message when you implement it.
   strict top-of-loop variant lands later, re-check the $17.
   New `src/App.monthOneGrowthDisclosure.test.jsx` (1 test, asserts the text at
   both render sites). Suite 972 passing, lint and build clean.
+- [x] **TODO-178: A recurring offset contribution is free money - it is added to the offset without coming out of anything**
+  Resolved as a documentation/disclosure fix, no calculation change - the
+  user's decision: a recurring contribution is money injected from OUTSIDE the
+  modelled budget. `offsetSimulation.js` still does a pure
+  `offsetBalance += getActiveAmount(contributions, months)`; what was wrong
+  were two written claims that it came out of future cash flow/income.
+  Fixed the `loan.js` comment above `calculateTotalScheduledOffset` and the
+  Remaining Savings tooltip (`App.jsx`), and added one sentence to the existing
+  "Plus N recurring contribution(s)" helper line (same `<p>`, so the
+  `/Plus 1 recurring contribution - applied/` test still matches): it is
+  assumed to come from outside your monthly surplus.
+  **Quantified, as the entry asked** ($500k / 6% / 360 months, $1,000/month
+  surplus): adding a $500/month recurring contribution pays off in month 163
+  with ~$229,979 interest, versus month 197 and ~$285,263 for the same surplus
+  with nothing added - the "free" $500/month is worth ~34 months and ~$55k.
+  Pinned in `offsetSimulation.test.js` with measured values, so any future
+  change that starts debiting it is a visible decision.
+  Renamed the `loan.test.js` title that repeated the false claim; assertions
+  untouched. The plan's note about `offsetSimulation.test.js:218-228` was
+  wrong - that test is a plain sum (5000 one-time + 200/month = offsets 5200,
+  5400), nothing surprising.
+  Verified in the browser against the dev server: the new sentence renders
+  under the contributions total after adding a recurring one, the tooltip shows
+  the new wording, and Remaining Savings stayed +$28,453 (not debited).
+  Confirmed TODO-173's plan note: with the external-money reading, 173 does NOT
+  get simpler. Suite 974 passing, lint and build clean.
 ---
 
 ## 🔴 HIGH PRIORITY (Wrong dollar figures shown to the user)
@@ -6231,41 +6257,6 @@ gives `totalInterest` **$645,389.22**.
   Comparison table then needs no `settledAtMonth` flag at all for it. Verify by
   revert.
 
-- [ ] **TODO-178: A recurring offset contribution is free money - it is added to the offset without coming out of anything**
-  Found while fixing TODO-176, checking whether `liquidSavings` was a complete
-  correction for the baseline bundle.
-  `offsetSimulation.js:267` is `offsetBalance += getActiveAmount(contributions,
-  months);` - a **pure addition**. Nothing is subtracted from the monthly
-  surplus, from `savingsBalance`, or from anywhere else.
-  For a ONE-TIME contribution that is correct: `calculateTotalScheduledOffset`
-  (`loan.js:97`) sums them and `calculateCashRemaining` subtracts that total
-  from the settlement cash, so the money really is debited - just outside the
-  loop, before the simulation starts.
-  For a RECURRING contribution nothing debits it, and the code says in as many
-  words that something should. `loan.js:93-94` justifies excluding recurring
-  contributions from `totalScheduledOffset` on the grounds that one *"comes out
-  of future cash flow, the same as the automatic monthly surplus, not a chunk of
-  savings sitting in the bank right now"*. The engine never takes it out of that
-  future cash flow. So a user who schedules "$500/month into the offset" gets
-  $500/month of offset growth **on top of** their surplus, for free - the
-  payoff accelerates and total interest falls with nothing paying for it.
-  **Not yet quantified.** Measure it before designing: build a scenario with one
-  recurring contribution and compare payoff month and total interest against the
-  same scenario with the contribution's amount instead subtracted from
-  `monthlyToOffset`. That difference is the size of the error.
-  **Decide before coding**, because there are two defensible readings. Either a
-  recurring contribution is a DIVERSION of surplus (then it must be subtracted
-  from `netMonthlyCashFlow`, and at 100% offset allocation it becomes a no-op,
-  which may make the feature pointless) or it is genuinely EXTRA money the user
-  is contributing from outside the modelled budget (then the current behaviour
-  is right and the `loan.js` comment is what needs correcting, plus a UI note
-  saying the amount is assumed to come from outside your surplus).
-  The second reading is probably the intended one - "Offset Contributions" reads
-  as money you inject - but the comment asserts the first, so one of them is
-  wrong today whichever way it is resolved.
-  **Verification.** Whichever branch: a test pinning where a recurring
-  contribution's money comes from, plus the measured payoff/interest figures
-  before and after. Verify by revert.
 ---
 
 ## ⚪ LOW PRIORITY (Deprioritized - excluded from default TODO listings)

@@ -90,9 +90,12 @@ export function calculateFortnightlyToOffset(fortnightlyNetBalance) {
 }
 
 // Only one-time contributions count as "already reserved from today's
-// savings" - a recurring contribution (e.g. "$500 every quarter") comes out
-// of future cash flow, the same as the automatic monthly surplus, not a
-// chunk of savings sitting in the bank right now.
+// savings", because only those are debited anywhere (calculateCashRemaining
+// subtracts this total from settlement cash). A recurring contribution (e.g.
+// "$500 every quarter") is excluded for a different reason (TODO-178): the
+// simulation adds it to the offset without debiting the monthly surplus or
+// savings, so it is modelled as money injected from OUTSIDE the budget, not as
+// something that comes out of future cash flow.
 export function calculateTotalScheduledOffset(offsetContributions) {
   return offsetContributions
     .filter(contrib => contrib.recurrence === 'none')

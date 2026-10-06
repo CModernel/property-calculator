@@ -254,7 +254,7 @@ describe('calculateTotalScheduledOffset', () => {
     expect(calculateTotalScheduledOffset([])).toBe(0);
   });
 
-  it('excludes recurring contributions - they come from future cash flow, not savings already set aside', () => {
+  it('excludes recurring contributions - they are assumed external money, never debited from settlement cash (TODO-178)', () => {
     expect(calculateTotalScheduledOffset([
       { amount: 10000, recurrence: 'none' },
       { amount: 500, recurrence: 'quarterly', startMonth: 1, endMonth: 360 },

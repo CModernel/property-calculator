@@ -2613,6 +2613,7 @@ const PropertyInvestmentCalculator = () => {
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       Plus {recurringContributionsCount} recurring contribution{recurringContributionsCount !== 1 ? 's' : ''} - applied
                       automatically each month it's active, not counted in this total or in Cash Remaining below.
+                      It's assumed to come from outside your monthly surplus, so it speeds up payoff on top of it.
                     </p>
                   )}
                   {totalScheduledOffset > 0 && (
@@ -3324,7 +3325,7 @@ const PropertyInvestmentCalculator = () => {
                     <span className="text-gray-700 dark:text-gray-200">
                       Remaining Savings:
                       <InfoTooltip label="How is Remaining Savings different from Available Savings?">
-                        <p>Available Savings − Total Cash Required − any one-time Offset Contributions you've already scheduled (recurring contributions aren't counted here, since they come out of future income, not savings sitting in the bank today).</p>
+                        <p>Available Savings − Total Cash Required − any one-time Offset Contributions you've already scheduled (recurring contributions aren't counted here - they're assumed to be money you add from outside your modelled income and expenses, not savings sitting in the bank today).</p>
                         <p className="mt-2">This is what's left in savings right after settlement - it doesn't include your ongoing monthly surplus (see 🎯 TO OFFSET below for that).</p>
                       </InfoTooltip>
                     </span>
