@@ -421,7 +421,7 @@ export function calculateLoanWithOffset({
     } else {
       // A deficit draws down the offset first, and NEVER below zero. That
       // floor is load-bearing, not defensive: a negative offsetBalance would
-      // make effectiveBalance exceed balance below, inflating interest and
+      // make interestBearingBalance exceed balance below, inflating interest and
       // breaking the re-amortization guarantee that a loan still pays off
       // exactly at term end. Deliberately no ETF contribution in a deficit
       // month - you cannot invest money you don't have.
@@ -440,7 +440,7 @@ export function calculateLoanWithOffset({
       // savingsBalance * savingsMonthlyRate as NEGATIVE interest, compounding a
       // debt this model has no way to represent. Unlike the offset's own zero
       // floor this one is not load-bearing for interest, since savingsBalance
-      // never feeds effectiveBalance.
+      // never feeds interestBearingBalance.
       const stillShort = deficit - drawnFromOffset;
       const drawnFromSavings = Math.min(stillShort, savingsBalance);
       savingsBalance -= drawnFromSavings;
@@ -455,11 +455,12 @@ export function calculateLoanWithOffset({
     // Offset cannot exceed loan balance
     const effectiveOffset = Math.min(offsetBalance, balance);
 
-    // Balance on which interest is calculated
-    const effectiveBalance = balance - effectiveOffset;
+    // TODO-172: the PRE-payment base this month's interest is charged on. Not
+    // what monthlyData reports as effectiveBalance - that is end-of-month,
+    // derived from the reported row itself (see the push below).
+    const interestBearingBalance = balance - effectiveOffset;
 
-    // Monthly interest on effective balance
-    const monthlyInterest = effectiveBalance * currentMonthlyRate;
+    const monthlyInterest = interestBearingBalance * currentMonthlyRate;
     totalInterest += monthlyInterest;
 
     // TODO-129: negative gearing - a SECOND, independent computation of the
@@ -578,14 +579,24 @@ export function calculateLoanWithOffset({
     // itself took the balance to 0 and no offset was involved.
     const loanIsRetired = balance <= 0;
 
-    // Save data for Timeline Explorer (Every Month)
+    // TODO-172: every field is the END of the month, after the installment.
+    // `offset` is the real cash in the account - it used to be effectiveOffset,
+    // capped against the PRE-payment balance and fixed before the negative
+    // gearing credit, so a payoff row could hide cash and an investment
+    // property's row lagged by a month's credit. effectiveBalance is derived
+    // from the two reported fields so the Timeline card always reconciles
+    // (it used to be the pre-payment interest base, one principal payment off).
+    // The 0 floor is load-bearing: a retired loan has balance 0 and leftover
+    // offset, which also covers TODO-168's "effectiveBalance 0 on payoff".
+    const reportedBalance = Math.round(balance);
+    const reportedOffset = Math.round(offsetBalance);
     monthlyData.push({
       month: months,
-      balance: Math.round(balance),
-      offset: Math.round(offsetRetiresLoan ? offsetBalance : effectiveOffset),
+      balance: reportedBalance,
+      offset: reportedOffset,
       savings: Math.round(savingsBalance),
       etf: Math.round(etfBalance),
-      effectiveBalance: Math.round(loanIsRetired ? 0 : effectiveBalance),
+      effectiveBalance: Math.max(0, reportedBalance - reportedOffset),
       monthlyInterestPaid: Math.round(monthlyInterest),
       totalInterestPaid: Math.round(totalInterest),
       totalPrincipalPaid: Math.round(loanAmount - balance),

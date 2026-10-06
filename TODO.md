@@ -5312,6 +5312,39 @@ optionally reuse in the commit message when you implement it.
   the new wording, and Remaining Savings stayed +$28,453 (not debited).
   Confirmed TODO-173's plan note: with the external-money reading, 173 does NOT
   get simpler. Suite 974 passing, lint and build clean.
+- [x] **TODO-172: `monthlyData`'s `effectiveBalance` and `balance` are measured at different instants, so the Timeline Explorer card never reconciles**
+  Re-measured first: the gap `effectiveBalance - (balance - offset)` was
+  exactly each month's principal payment ($540, $555, $617 at months 1/2/6 of a
+  $543k / 6.13% / $2,470.42-surplus run). Every row field is now END of month:
+  `offset` reports the real `offsetBalance` (uncapped - review recommendation
+  accepted by the user), and `effectiveBalance` is derived as
+  `max(0, balance - offset)` from the row's own rounded fields, so the
+  invariant holds by construction. The local interest base was renamed
+  `interestBearingBalance`; interest/payoff are byte-identical (pinned: 129
+  months, $196,743.33, measured before the change; an independent Opus review
+  also diffed HEAD's engine against the new one on 6 scenarios - every
+  `balance`/`monthlyInterestPaid`/`totalInterestPaid` identical).
+  Why the offset changed too: it was `effectiveOffset`, capped against the
+  PRE-payment balance and fixed before the negative-gearing credit, so a payoff
+  row could hide cash and an investment property's row lagged a month's credit.
+  This also pre-solves TODO-177's "trap nº1" (post-payoff rows reporting offset
+  0). TODO-168's `loanIsRetired ? 0 : ...` is subsumed by the 0 floor.
+  Two negative-gearing tests rewritten, not re-baselined: the credit now shows
+  in the row of the month it lands ([0,0] -> measured [341,342]), and the real
+  one-month lag is now asserted where it lives - `monthlyInterestPaid` (month 1
+  identical, month 2 lower).
+  Review follow-up: the "(offset applied)" tag next to month-1 interest was
+  gated on the row's `offset`, now end-of-month; it is gated on month-1
+  interest being below `monthZeroInterest` instead.
+  Known cosmetic edge (review): a negative-gearing credit landing after the
+  retirement check can leave one row with offset >= balance and the loan
+  retired only the next month (effectiveBalance 0, balance > 0). Impossible
+  without negative gearing; TODO-173 separates the two offset notions anyway.
+  New `src/App.timelineCardReconciles.test.jsx` (net = loan - offset at months
+  1/24/60, verified by revert to fail by exactly the principal payment; plus the
+  tag) and a `monthlyData rows reconcile (TODO-172)` describe in
+  `offsetSimulation.test.js`. Verified in the browser (month 24: $525,428 -
+  $63,861 = $461,567, payoff still 108). Suite 985 passing, lint and build clean.
 ---
 
 ## 🔴 HIGH PRIORITY (Wrong dollar figures shown to the user)
@@ -6167,29 +6200,6 @@ gives `totalInterest` **$645,389.22**.
   Documentation only, no code. Worth doing because two of the Phase 2C findings
   turned out to be real CODE defects hiding as documentation drift (shipped here
   as TODO-154 and TODO-155) - stale entries are how the next one hides.
-
-- [ ] **TODO-172: `monthlyData`'s `effectiveBalance` and `balance` are measured at different instants, so the Timeline Explorer card never reconciles**
-  `offsetSimulation.js:415` and `:418` compute `effectiveOffset` and
-  `effectiveBalance` from the **pre-payment** balance; `:454-455` then pays the
-  installment and reduces `balance`; `:458` pushes the **post-payment**
-  `balance` into the same row as that pre-payment `effectiveBalance`. So in
-  EVERY month, `effectiveBalance - (balance - offset)` equals that month's
-  principal payment.
-  *Measured on the shipped default:* month 1 → $558, month 2 → $589, month 6 →
-  $720, growing to a full installment. `App.jsx:3870` renders "Net Effective
-  Balance" directly above `App.jsx:3873`/`:3875`'s "🏦 Loan: … | 💰 Offset: …",
-  and the two do not net out. The invariant IS intended elsewhere:
-  `timelineSnapshot.js`'s synthetic month-0 snapshot satisfies
-  `effectiveBalance = balance - offset`, and `timelineSnapshot.test.js`'s
-  fixtures are built that way.
-  **Suggested fix:** decide which instant the row represents and make all three
-  fields agree. Pushing a post-payment `effectiveBalance` is probably right
-  (the row already reports a post-payment `balance`), but check
-  `offsetSimulation.test.js` for what is pinned first - grep `effectiveBalance`
-  there; today the only assertion is a `toBeGreaterThanOrEqual(0)`, so the
-  convention is essentially unpinned and you are free to choose.
-  Related to TODO-168 (same row, different defect: that one is about the final
-  month only). Consider doing them together.
 
 - [ ] **TODO-173: The offset credits its interest saving on the post-deposit balance while savings and ETF use the pre-deposit convention**
   `offsetSimulation.js:343-352` explicitly document savings and ETF growth as

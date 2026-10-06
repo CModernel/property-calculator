@@ -1778,15 +1778,22 @@ describe('negative gearing tax benefit (isInvestmentProperty, TODO-129/174)', ()
     //   Then gearing credits a real amount (capped by the $104k salary's own
     //   tax bill, not a flat 30% of the 1066.67 loss - see the dedicated
     //   marginal-rate test below for why that matters).
-    // Month 2: that credit gets drawn down by the same 566.67 deficit.
-    expect(result.monthlyData.map(d => d.offset)).toEqual([0, 0]);
+    // Month 2: that credit gets drawn down by the same 566.67 deficit, then
+    //   month 2's own credit lands.
+    // TODO-172: rows report the END-of-month offset, so each row now holds
+    // that month's own credit (measured 341, then 342) - it used to read
+    // [0, 0] because the reported offset was fixed before the credit landed.
+    expect(result.monthlyData.map(d => d.offset)).toEqual([341, 342]);
     expect(result.totalNegativeGearingBenefit).toBeGreaterThan(0);
     expect(result.monthlyData[0].cashShortfall).toBeCloseTo(567, 0);
-    // Whatever the credit was, month 2's shortfall is smaller than month 1's
-    // by exactly that credit (the same relationship TODO-136 established),
-    // and strictly less than the uncapped 247 the pre-174 flat-rate formula
+    // Month 2's shortfall is smaller than month 1's by exactly the credit
+    // month 1 ended holding (the same relationship TODO-136 established), and
+    // strictly less than the uncapped 247 the pre-174 flat-rate formula
     // produced on this same fixture.
-    expect(result.monthlyData[1].cashShortfall).toBeLessThan(result.monthlyData[0].cashShortfall);
+    // Within $1: all three figures are rounded independently in monthlyData.
+    expect(Math.abs(
+      result.monthlyData[1].cashShortfall - (result.monthlyData[0].cashShortfall - result.monthlyData[0].offset)
+    )).toBeLessThanOrEqual(1);
     expect(result.monthlyData[1].cashShortfall).toBeLessThan(247);
   });
 
@@ -1799,10 +1806,15 @@ describe('negative gearing tax benefit (isInvestmentProperty, TODO-129/174)', ()
     const plain = calculateLoanWithOffset(covered);
 
     expect(geared.totalCashShortfall).toBe(0);
-    // Month 1 is identical - the credit lands after that month's offset is
-    // already fixed. Only month 2 onward diverges.
-    expect(geared.monthlyData[0].offset).toBe(plain.monthlyData[0].offset);
-    expect(geared.monthlyData[1].offset).toBeGreaterThan(plain.monthlyData[1].offset);
+    // The lag is in INTEREST: month 1's interest is identical, because the
+    // credit lands after that month's interest is already fixed; it only
+    // starts saving interest from month 2.
+    expect(geared.monthlyData[0].monthlyInterestPaid).toBe(plain.monthlyData[0].monthlyInterestPaid);
+    expect(geared.monthlyData[1].monthlyInterestPaid).toBeLessThan(plain.monthlyData[1].monthlyInterestPaid);
+    // TODO-172: the reported offset is end-of-month cash, so the credit is
+    // already visible in month 1's row (measured 7,829 vs 7,500) - it used to
+    // be hidden until month 2's row.
+    expect(geared.monthlyData[0].offset).toBeGreaterThan(plain.monthlyData[0].offset);
   });
 
   it('applies no benefit when the property is cash-flow POSITIVE that month', () => {
@@ -2458,5 +2470,70 @@ describe('ETF market-drop stress test (etfCrashMonth/etfCrashPct, TODO-145)', ()
     expect(crashed.monthlyData[1].etf).toBe(1000);
     expect(crashed.monthlyData[2].etf).toBe(2000);
     expect(crashed.monthlyData[3].etf).toBe(3000);
+  });
+});
+
+// TODO-172: every monthlyData row is ONE instant - the end of the month,
+// after the installment. effectiveBalance used to be the PRE-payment interest
+// base sitting next to a POST-payment balance, so the Timeline card's
+// "net = loan - offset" was off by that month's principal payment, every month.
+describe('monthlyData rows reconcile (TODO-172)', () => {
+  const loanAmount = 543_000;
+  const monthlyRate = calculateMonthlyRate(6.13);
+  const monthlyPayment = calculateMonthlyPayment(loanAmount, monthlyRate, 360);
+  const shipped = { personalExpenseItems: [], contributions: [], loanAmount, monthlyRate, monthlyPayment, maxMonths: 360, monthlyToOffset: 2470.42 };
+
+  const scenarios = {
+    'shipped-like surplus': shipped,
+    'deficit drawing a lump sum down': {
+      ...shipped,
+      contributions: [{ startMonth: 1, recurrence: 'none', amount: 20_000 }],
+      monthlyToOffset: -300,
+      maxMonths: 120,
+    },
+    'a contribution that retires the loan': {
+      ...shipped,
+      loanAmount: 100_000,
+      monthlyPayment: calculateMonthlyPayment(100_000, monthlyRate, 360),
+      contributions: [{ startMonth: 3, recurrence: 'none', amount: 150_000 }],
+      monthlyToOffset: 0,
+    },
+    'ordinary amortization payoff': {
+      personalExpenseItems: [],
+      contributions: [{ startMonth: 1, recurrence: 'none', amount: 12 }],
+      loanAmount: 10_000,
+      monthlyRate,
+      monthlyPayment: calculateMonthlyPayment(10_000, monthlyRate, 12),
+      maxMonths: 12,
+      monthlyToOffset: 0,
+    },
+  };
+
+  it.each(Object.entries(scenarios))('every row satisfies effectiveBalance = max(0, balance - offset): %s', (_, params) => {
+    const { monthlyData } = calculateLoanWithOffset(params);
+    expect(monthlyData.length).toBeGreaterThan(0);
+    monthlyData.forEach(d => {
+      expect(d.effectiveBalance).toBe(Math.max(0, d.balance - d.offset));
+    });
+  });
+
+  it('changes only what is reported - interest and payoff are untouched', () => {
+    // Measured on this exact scenario BEFORE the change (129 months,
+    // $196,743.33): the interest base never moved, only the reported row.
+    const result = calculateLoanWithOffset(shipped);
+    expect(result.months).toBe(129);
+    expect(result.monthlyData).toHaveLength(129);
+    expect(result.totalInterest).toBeCloseTo(196743.33, 2);
+    // Month 1 used to report effectiveBalance 540,530 (the pre-payment base);
+    // end-of-month it is 542,460 - 2,470 = 539,990, one principal payment on.
+    expect(result.monthlyData[0]).toMatchObject({ balance: 542460, offset: 2470, effectiveBalance: 539990 });
+  });
+
+  it('reports a retired loan as fully owned, keeping the leftover cash in the offset (TODO-168)', () => {
+    const { monthlyData } = calculateLoanWithOffset(scenarios['a contribution that retires the loan']);
+    const last = monthlyData.at(-1);
+    expect(last.balance).toBe(0);
+    expect(last.effectiveBalance).toBe(0);
+    expect(last.offset).toBeGreaterThan(0);
   });
 });

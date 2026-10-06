@@ -859,7 +859,11 @@ const PropertyInvestmentCalculator = () => {
   // simulation can't run (no surplus and no contributions -> monthlyData is empty).
   const firstMonth = loanSimulation.monthlyData[0];
   const firstMonthInterest = firstMonth?.monthlyInterestPaid ?? Math.round(monthZeroInterest);
-  const firstMonthOffset = firstMonth?.offset ?? 0;
+  // TODO-172: row `offset` is END-of-month cash (it can include a credit that
+  // landed after interest was charged, or survive a deficit that drained the
+  // offset the interest was charged on), so whether the offset was applied is
+  // read from the interest itself.
+  const firstMonthOffsetApplied = firstMonthInterest < Math.round(monthZeroInterest);
 
   // Total interest on a plain 30-year loan with no offset at all, used as the
   // comparison baseline in the savings card.
@@ -3249,7 +3253,7 @@ const PropertyInvestmentCalculator = () => {
                   <div className="flex justify-between">
                     <span className="text-gray-600 dark:text-gray-300">Interest Amount (monthly):</span>
                     <span className="text-orange-600 dark:text-orange-400">-${firstMonthInterest.toLocaleString()}</span>
-                    {firstMonthOffset > 0 && <span className="text-xs text-green-600 dark:text-green-400 ml-1 self-center">(offset applied)</span>}
+                    {firstMonthOffsetApplied && <span className="text-xs text-green-600 dark:text-green-400 ml-1 self-center">(offset applied)</span>}
                   </div>
                 </div>
               </div>
