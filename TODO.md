@@ -5345,6 +5345,43 @@ optionally reuse in the commit message when you implement it.
   tag) and a `monthlyData rows reconcile (TODO-172)` describe in
   `offsetSimulation.test.js`. Verified in the browser (month 24: $525,428 -
   $63,861 = $461,567, payoff still 108). Suite 985 passing, lint and build clean.
+- [x] **TODO-173: The offset credits its interest saving on the post-deposit balance while savings and ETF use the pre-deposit convention**
+  All three accounts now share one convention: each month earns on what was
+  in the account at its start. `offsetSimulation.js` captures
+  `offsetAtMonthStart` right AFTER this month's contributions and BEFORE the
+  surplus split / deficit drain; interest uses `min(offsetAtMonthStart,
+  balance)`. Decisions confirmed by the user: pre-deposit for the surplus,
+  pre-drain for a deficit, and variant (ii) - a contribution counts from its
+  own month (a start-of-month deposit; a one-time one was already debited from
+  settlement cash), which is also the realistic reading.
+  The two offset notions are kept apart on purpose: loan retirement
+  (`offsetRetiresLoan`, TODO-168) still uses the running offset, so a large
+  contribution still clears the loan in its own month (pinned).
+  **Measured, default render:** total interest $170,611 -> $173,003 (+$2,392,
+  1.4% - exactly the entry's prediction), payoff month unchanged (108). Month-1
+  interest is now the full no-offset figure, so the "(offset applied)" tag is
+  gone on the default and only shows with a month-1 contribution.
+  This did NOT touch TODO-175's ~$17/month gap (that is income growth, not
+  interest) - the 175 retrospective's "re-check the $17 if 173 lands" is moot.
+  Test census: the plan expected 4 assertions in 2 files; 7 tests failed, the
+  extra ones all pinned interest and were added after the plan (TODO-172/174/
+  178). Each was re-pinned with a measured value and an old -> new comment, and
+  `offsetSimulation.test.js`'s "subtracts the recurring monthly surplus from
+  month 1 interest" test - which pinned the OLD contract - was rewritten with
+  its title, not just re-baselined. New tests: the Offset-vs-ETF asymmetry
+  (both halves of a 50/50 split earn nothing in their own month, both start in
+  month 2), month-1 interest with no contribution, the tooltip disclosure.
+  Revert check: every new test fails without the engine change; the TODO-168
+  retirement test passes either way. `App.baselineSavingsSeed`: ~$7,160 ->
+  ~$7,238, and the no-income scenario ~$4,925 -> ~$6,166.
+  **Independent Opus review** found nothing blocking, but caught that the
+  convention is conservative only in SURPLUS months - in a deficit month money
+  drawn out mid-month still saves the whole month's interest, i.e. generous
+  (that is the $4,925 -> $6,166 jump). Tooltip copy ("What is this
+  comparing?") and the engine comment now say both; two stale comments fixed.
+  A "half-month" convention would be more faithful still, but would change the
+  ETF and the TODO-50/96/145 conventions too - left as a possible refinement.
+  Suite 989 passing, lint and build clean.
 ---
 
 ## 🔴 HIGH PRIORITY (Wrong dollar figures shown to the user)
@@ -6200,28 +6237,6 @@ gives `totalInterest` **$645,389.22**.
   Documentation only, no code. Worth doing because two of the Phase 2C findings
   turned out to be real CODE defects hiding as documentation drift (shipped here
   as TODO-154 and TODO-155) - stale entries are how the next one hides.
-
-- [ ] **TODO-173: The offset credits its interest saving on the post-deposit balance while savings and ETF use the pre-deposit convention**
-  `offsetSimulation.js:343-352` explicitly document savings and ETF growth as
-  *"interest accrues on last month's ending balance BEFORE this month's deposit
-  … matches how a real bank statement works"*. The offset does the opposite:
-  this month's contributions and surplus land in `offsetBalance` BEFORE
-  `effectiveOffset` (`:415`) and `monthlyInterest` (`:421`) are computed, with
-  no comment acknowledging the asymmetry.
-  *Measured:* re-running the shipped default with the pre-deposit convention for
-  the offset gives `totalInterest` **$173,003.07** versus the shipped
-  **$170,611.48** - the shipped convention is **$2,391.59 (1.4%) more
-  optimistic**. Payoff month is unchanged at 108. Per-month effect: $12.70
-  (m1), $13.55 (m12), $17.56 (m60).
-  This is a MODELLING CHOICE, not clearly a defect: a real offset account nets
-  interest daily, so money deposited early in the month genuinely does reduce
-  that month's interest - roughly half of that $2,392 is defensible. Decide and
-  document rather than silently keeping it.
-  Worth knowing while deciding: the savings comment's stated justification is
-  vacuous today. Since TODO-136 removed the ongoing savings destination,
-  `savingsBalance` receives no deposits at all - so "new deposits start earning
-  next month" describes an account that never gets one, while the only account
-  that DOES get deposits uses the other convention.
 
 - [ ] **TODO-177: A strategy that pays off early stops being simulated, so every later figure is frozen**
   Found while fixing TODO-168, and the reason that entry's "highest property

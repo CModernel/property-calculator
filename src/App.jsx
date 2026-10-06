@@ -853,10 +853,10 @@ const PropertyInvestmentCalculator = () => {
   // lump sum at the end). Nothing about the simulation itself changes.
   const totalInterestInTodaysDollars = calculatePresentValueOfInterest(loanSimulation.monthlyData, inflationRate);
 
-  // First month of the simulation. Taken from the simulation itself so it accounts for
-  // everything the loop does in month 1: any scheduled lump sum, the recurring monthly
-  // surplus, and exceptional expenses. Falls back to the un-offset figure when the
-  // simulation can't run (no surplus and no contributions -> monthlyData is empty).
+  // First month of the simulation, taken from the simulation itself. Since TODO-173
+  // only a month-1 contribution reduces month-1 interest - the surplus (and any
+  // exceptional expense) only moves the offset from month 2. Falls back to the
+  // un-offset figure when the simulation can't run (monthlyData is empty).
   const firstMonth = loanSimulation.monthlyData[0];
   const firstMonthInterest = firstMonth?.monthlyInterestPaid ?? Math.round(monthZeroInterest);
   // TODO-172: row `offset` is END-of-month cash (it can include a credit that
@@ -1967,6 +1967,9 @@ const PropertyInvestmentCalculator = () => {
                 <InfoTooltip label="What is this comparing?">
                   <p>Your offset's "return" is exactly your mortgage rate - guaranteed and tax-free, since it's not income, the bank just stops charging you interest on that portion of the loan. Matching that with an ETF needs an even higher return before tax, since capital gains/dividends are taxable and returns aren't guaranteed.</p>
                   <p className="mt-2">This calculator applies Australia's 50% capital gains discount (assuming a &gt;12 month holding) before taxing ETF growth at your Effective Tax Rate - still less favorable than the offset's fully tax-free return, but not taxed at the full rate either.</p>
+                  {/* TODO-173: the timing convention, in the same "Simplification:
+                      … + size of the error" idiom as Effective Tax Rate's. */}
+                  <p className="mt-2"><strong>Simplification: each month earns on what was in the account at its start</strong> - so money you add each month starts working the following month, in the offset and the ETF alike, and neither gets a head start; a one-off contribution counts from its own month. Real offsets credit the daily balance, so in months you save this is slightly conservative (about 1.4% more total interest on the default scenario), while in months your spending draws the offset down it is slightly generous, since money leaving mid-month still counts for the whole month.</p>
                   <p className="mt-2">This is a simple side-by-side, not a recommendation - always consult a licensed financial adviser before making investment decisions.</p>
                 </InfoTooltip>
                 {!showOpportunityCost && (

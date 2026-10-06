@@ -271,6 +271,19 @@ export function calculateLoanWithOffset({
     // same as before; a recurring one now fires every month/quarter/year
     // within its range, same resolution as Income Sources/Exceptional Expenses.
     offsetBalance += getActiveAmount(contributions, months);
+    // TODO-173: the offset this month's interest is charged against - captured
+    // AFTER this month's contributions but BEFORE this month's surplus lands
+    // or a deficit drains it. A contribution is a deposit made at the start of
+    // its month (a one-time one was already debited from settlement cash), so
+    // it saves interest from that month; the surplus accrues across the month,
+    // so it starts saving from the next one - the same "before the deposit"
+    // convention savings and the ETF already use below (TODO-50/96), which
+    // keeps the Offset-vs-ETF comparison fair. A real offset is credited on
+    // the daily balance, so this is slightly conservative in a surplus month
+    // (the deposit really saves a part-month) and slightly generous in a
+    // deficit month (money drawn out mid-month still counts for the whole
+    // month) - both disclosed in the "What is this comparing?" tooltip.
+    const offsetAtMonthStart = offsetBalance;
 
     // TODO-92: a single growth multiplier applied to both expense
     // categories below - a no-op (1) at the 0% default.
@@ -356,18 +369,17 @@ export function calculateLoanWithOffset({
     // once that's empty, reported (see the branch below).
     const netMonthlyCashFlow = monthlyToOffset + (initialMonthlyPayment - currentMonthlyPayment)
       + monthlyIncomeThisMonth - monthlyExpensesForMonth - monthlyPersonalExpensesCost;
-    // TODO-50: interest accrues on last month's ending balance BEFORE this
-    // month's deposit is added - matches how a real bank statement works
-    // (existing balance earns interest, new deposits start earning next
-    // month). Runs even when savingsInterestRate is 0 (a no-op multiply).
-    // TODO-170: the account receives no deposits (TODO-136 removed the ongoing
-    // savings destination) but it now has WITHDRAWALS, drawn further down to
-    // cover a deficit month. This line runs first, so money spent later in the
-    // month still earns that month's interest - the mirror of the deposit rule
-    // above, and what a real account paying on the daily balance would do.
-    // Deliberately left where it is: moving it after the draw would silently
-    // change totalSavingsInterest for every existing scenario (see TODO-173,
-    // which owns the pre/post-deposit convention question).
+    // TODO-50/173: ONE convention for all three accounts - savings, ETF and
+    // offset each earn on the balance they started the month with, before this
+    // month's surplus lands or a deficit drains it (the offset's start-of-month
+    // capture is offsetAtMonthStart, above). Chosen over crediting deposits in
+    // their own month because it is the conservative reading and, above all,
+    // because it treats a dollar the same whichever account the Offset-vs-ETF
+    // split sends it to. Runs even when savingsInterestRate is 0 (a no-op).
+    // TODO-170: this account receives no deposits (TODO-136 removed the
+    // ongoing savings destination) but it has WITHDRAWALS, drawn further down
+    // to cover a deficit month - which, by the same rule, still earn this
+    // month's interest.
     const savingsInterestThisMonth = savingsBalance * savingsMonthlyRate;
     savingsBalance += savingsInterestThisMonth;
     totalSavingsInterest += savingsInterestThisMonth;
@@ -421,10 +433,11 @@ export function calculateLoanWithOffset({
     } else {
       // A deficit draws down the offset first, and NEVER below zero. That
       // floor is load-bearing, not defensive: a negative offsetBalance would
-      // make interestBearingBalance exceed balance below, inflating interest and
+      // carry into next month's offsetAtMonthStart (inflating interest and
       // breaking the re-amortization guarantee that a loan still pays off
-      // exactly at term end. Deliberately no ETF contribution in a deficit
-      // month - you cannot invest money you don't have.
+      // exactly at term end), into the retirement check, and into the reported
+      // row. Deliberately no ETF contribution in a deficit month - you cannot
+      // invest money you don't have.
       const deficit = -netMonthlyCashFlow;
       const drawnFromOffset = Math.min(deficit, offsetBalance);
       offsetBalance -= drawnFromOffset;
@@ -452,13 +465,18 @@ export function calculateLoanWithOffset({
       }
     }
 
-    // Offset cannot exceed loan balance
+    // TODO-173: two different offsets, deliberately kept apart. Interest uses
+    // the start-of-month one; retiring the loan (offsetRetiresLoan below) uses
+    // the running one, so a contribution large enough to clear the loan still
+    // clears it in its own month (TODO-168). Both are capped at the loan
+    // balance - an offset can't save interest on more than is owed.
+    const interestOffset = Math.min(offsetAtMonthStart, balance);
     const effectiveOffset = Math.min(offsetBalance, balance);
 
     // TODO-172: the PRE-payment base this month's interest is charged on. Not
     // what monthlyData reports as effectiveBalance - that is end-of-month,
     // derived from the reported row itself (see the push below).
-    const interestBearingBalance = balance - effectiveOffset;
+    const interestBearingBalance = balance - interestOffset;
 
     const monthlyInterest = interestBearingBalance * currentMonthlyRate;
     totalInterest += monthlyInterest;

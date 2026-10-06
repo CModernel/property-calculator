@@ -36,13 +36,14 @@ describe('The "saved in interest" figure (TODO-176)', () => {
   // This figure had NO value assertion anywhere before this test - only two
   // presence/absence checks in App.sentinelNeverRenders.test.jsx - so it could
   // move by any amount with the whole suite green. Measured against the real
-  // render, not derived by hand.
+  // render, not derived by hand. TODO-173 (pre-deposit offset interest) moved
+  // it from ~$7,160.
   it('is pinned on the shipped default plus one $10,000 one-time contribution', async () => {
     const user = userEvent.setup();
     render(<App />);
     await openContributionsAndAddDefault(user);
 
-    expect(screen.getByText(/~\$7,160 saved in interest/)).toBeInTheDocument();
+    expect(screen.getByText(/~\$7,238 saved in interest/)).toBeInTheDocument();
   });
 });
 
@@ -81,6 +82,9 @@ describe('The baseline arm keeps the cash it never spent (TODO-176)', () => {
 
     // Confirms the scenario really is over-committed before trusting the rest.
     expect(screen.getByText(/-\$11,547/)).toBeInTheDocument();
-    expect(screen.getByText(/~\$4,925 saved in interest/)).toBeInTheDocument();
+    // TODO-173 moved this from ~$4,925: with no income every month is a
+    // deficit, and interest is now charged on the offset BEFORE that month's
+    // deficit drains it.
+    expect(screen.getByText(/~\$6,166 saved in interest/)).toBeInTheDocument();
   });
 });

@@ -221,9 +221,11 @@ describe('calculateLoanWithOffset', () => {
   // money injected from outside the budget. This pins that behavior and its
   // size so a future "fix" that starts debiting it is a visible decision.
   // Measured on a $500k / 6% / 360-month loan with a $1,000/month surplus:
-  //   + $500/month recurring contribution -> payoff month 163, interest ~$229,979
-  //   same $1,000 surplus, nothing added  -> payoff month 197, interest ~$285,263
-  // i.e. the $500/month is worth ~34 months and ~$55k of interest.
+  //   + $500/month recurring contribution -> payoff month 163, interest ~$231,233
+  //   same $1,000 surplus, nothing added  -> payoff month 197, interest ~$286,934
+  // i.e. the $500/month is worth ~34 months and ~$56k of interest.
+  // (Re-measured under TODO-173's pre-deposit offset convention; was
+  // $229,979 / $285,263, payoff months unchanged.)
   it('treats a recurring contribution as extra money on top of the surplus, not funded from it', () => {
     const loanAmount = 500_000;
     const monthlyRate = calculateMonthlyRate(6);
@@ -238,9 +240,9 @@ describe('calculateLoanWithOffset', () => {
 
     expect(withRecurring.months).toBe(163);
     expect(withRecurring.monthlyData).toHaveLength(163);
-    expect(Math.round(withRecurring.totalInterest)).toBe(229979);
+    expect(Math.round(withRecurring.totalInterest)).toBe(231233);
     expect(surplusOnly.months).toBe(197);
-    expect(Math.round(surplusOnly.totalInterest)).toBe(285263);
+    expect(Math.round(surplusOnly.totalInterest)).toBe(286934);
   });
 
   it('sums a one-time and a recurring contribution together in the same month', () => {
@@ -260,14 +262,16 @@ describe('calculateLoanWithOffset', () => {
     expect(offsets).toEqual([5200, 5400]);
   });
 
-  // Regression guard for the bug where the "Interest Amount (monthly)" panel used
-  // (loanAmount - month1Offset) * monthlyRate, silently ignoring the recurring
-  // monthly surplus that this loop deposits into the offset in month 1. That made
-  // the panel disagree with the Timeline Explorer's own month-1 figure.
-  it('subtracts the recurring monthly surplus from month 1 interest, not just the lump sum', () => {
+  // TODO-173: this test used to pin the OPPOSITE convention - that month 1's
+  // surplus already reduced month 1's interest. The offset now follows the
+  // same "before this month's deposit" rule as savings and the ETF: a
+  // contribution is a start-of-month deposit and saves interest from its own
+  // month, while the surplus accrues across the month and saves from the next.
+  it('lets a month-1 contribution reduce month-1 interest, but the surplus only from month 2', () => {
     const loanAmount = 250000;
     const monthlyRate = 0.005;
     const monthlyToOffset = 4000;
+    const monthlyPayment = 1400;
     const contributions = [{ startMonth: 1, recurrence: 'none', amount: 20000 }];
 
     const result = calculateLoanWithOffset({
@@ -276,22 +280,39 @@ describe('calculateLoanWithOffset', () => {
       monthlyToOffset,
       loanAmount,
       monthlyRate,
-      monthlyPayment: 1400,
+      monthlyPayment,
     });
 
-    const lumpSumOnlyInterest = (loanAmount - 20000) * monthlyRate;
-    const expected = (loanAmount - 20000 - monthlyToOffset) * monthlyRate;
-
-    expect(result.monthlyData[0].monthlyInterestPaid).toBe(Math.round(expected));
-    expect(result.monthlyData[0].monthlyInterestPaid).toBeLessThan(Math.round(lumpSumOnlyInterest));
-    // The month-1 offset the UI reports must include both parts.
+    const month1Interest = (loanAmount - 20000) * monthlyRate;
+    expect(result.monthlyData[0].monthlyInterestPaid).toBe(Math.round(month1Interest));
+    // The month-1 offset the UI reports is end-of-month cash, so it includes both.
     expect(result.monthlyData[0].offset).toBe(20000 + monthlyToOffset);
+
+    const balanceAfterMonth1 = loanAmount - (monthlyPayment - month1Interest);
+    const month2Interest = (balanceAfterMonth1 - 20000 - monthlyToOffset) * monthlyRate;
+    expect(result.monthlyData[1].monthlyInterestPaid).toBe(Math.round(month2Interest));
+  });
+
+  it('charges month-1 interest on the full loan when month 1 has no contribution (TODO-173)', () => {
+    // The surplus deposited during month 1 only starts saving in month 2, so
+    // with nothing deposited at the start of month 1 its interest is exactly
+    // the no-offset figure.
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 4000,
+      loanAmount: 250000,
+      monthlyRate: 0.005,
+      monthlyPayment: 1400,
+    });
+    expect(result.monthlyData[0].monthlyInterestPaid).toBe(Math.round(250000 * 0.005));
   });
 
   it('reports a month-1 offset even with no lump sum, when there is a monthly surplus', () => {
     // With the app's defaults there are no contributions at all, yet the loop
-    // still deposits the surplus - so the panel's "(offset applied)" badge must
-    // key off this value, not off a month-1 lump sum.
+    // still deposits the surplus - so the month-1 row's end-of-month offset
+    // shows it (TODO-172), even though it only saves interest from month 2
+    // (TODO-173).
     const result = calculateLoanWithOffset({
       contributions: [],
       personalExpenseItems: [],
@@ -1781,9 +1802,10 @@ describe('negative gearing tax benefit (isInvestmentProperty, TODO-129/174)', ()
     // Month 2: that credit gets drawn down by the same 566.67 deficit, then
     //   month 2's own credit lands.
     // TODO-172: rows report the END-of-month offset, so each row now holds
-    // that month's own credit (measured 341, then 342) - it used to read
-    // [0, 0] because the reported offset was fixed before the credit landed.
-    expect(result.monthlyData.map(d => d.offset)).toEqual([341, 342]);
+    // that month's own credit (measured 341, then 341 - 342 before TODO-173
+    // moved month 2's interest) - it used to read [0, 0] because the reported
+    // offset was fixed before the credit landed.
+    expect(result.monthlyData.map(d => d.offset)).toEqual([341, 341]);
     expect(result.totalNegativeGearingBenefit).toBeGreaterThan(0);
     expect(result.monthlyData[0].cashShortfall).toBeCloseTo(567, 0);
     // Month 2's shortfall is smaller than month 1's by exactly the credit
@@ -2517,16 +2539,17 @@ describe('monthlyData rows reconcile (TODO-172)', () => {
     });
   });
 
-  it('changes only what is reported - interest and payoff are untouched', () => {
-    // Measured on this exact scenario BEFORE the change (129 months,
-    // $196,743.33): the interest base never moved, only the reported row.
+  it('pins the interest and payoff the reported rows sit on', () => {
+    // TODO-172 changed only the reported row, so it left this at 129 months /
+    // $196,743.33. TODO-173 then moved the offset to the pre-deposit
+    // convention: +$2,288.88 (1.2%) of interest, same payoff month.
     const result = calculateLoanWithOffset(shipped);
     expect(result.months).toBe(129);
     expect(result.monthlyData).toHaveLength(129);
-    expect(result.totalInterest).toBeCloseTo(196743.33, 2);
-    // Month 1 used to report effectiveBalance 540,530 (the pre-payment base);
-    // end-of-month it is 542,460 - 2,470 = 539,990, one principal payment on.
-    expect(result.monthlyData[0]).toMatchObject({ balance: 542460, offset: 2470, effectiveBalance: 539990 });
+    expect(result.totalInterest).toBeCloseTo(199032.21, 2);
+    // End-of-month row: 542,473 - 2,470 = 540,003. Month 1's interest is the
+    // full no-offset figure, since the surplus only saves from month 2.
+    expect(result.monthlyData[0]).toMatchObject({ balance: 542473, offset: 2470, effectiveBalance: 540003 });
   });
 
   it('reports a retired loan as fully owned, keeping the leftover cash in the offset (TODO-168)', () => {
@@ -2535,5 +2558,54 @@ describe('monthlyData rows reconcile (TODO-172)', () => {
     expect(last.balance).toBe(0);
     expect(last.effectiveBalance).toBe(0);
     expect(last.offset).toBeGreaterThan(0);
+  });
+});
+
+// TODO-173: the offset used to start saving interest on a dollar in the SAME
+// month it was deposited, while the ETF only grew on it from the NEXT month -
+// one month of structural head start for the offset on every dollar split
+// between the two, compounding over the horizon of the Offset-vs-ETF
+// comparison. Both now follow "before this month's deposit".
+describe('offset and ETF share one deposit convention (TODO-173)', () => {
+  const loanAmount = 300_000;
+  const monthlyRate = calculateMonthlyRate(6);
+  const monthlyPayment = calculateMonthlyPayment(loanAmount, monthlyRate, 360);
+  const split = {
+    contributions: [],
+    personalExpenseItems: [],
+    loanAmount,
+    monthlyRate,
+    monthlyPayment,
+    monthlyToOffset: 2000,
+    etfAllocationPct: 50,
+    expectedEtfReturn: 12,
+    maxMonths: 3,
+  };
+
+  it('treats both halves of a split surplus the same: neither earns in the month it lands', () => {
+    const { monthlyData } = calculateLoanWithOffset(split);
+    const etfMonthlyRate = calculateMonthlyRate(12);
+
+    // Month 1: the ETF half has not grown, and the offset half has saved nothing.
+    expect(monthlyData[0].etf).toBe(1000);
+    expect(monthlyData[0].monthlyInterestPaid).toBe(Math.round(loanAmount * monthlyRate));
+
+    // Month 2: both halves start working on month 1's deposit.
+    expect(monthlyData[1].etf).toBe(Math.round(1000 * (1 + etfMonthlyRate) + 1000));
+    const balanceAfterMonth1 = loanAmount - (monthlyPayment - loanAmount * monthlyRate);
+    expect(monthlyData[1].monthlyInterestPaid).toBe(Math.round((balanceAfterMonth1 - 1000) * monthlyRate));
+  });
+
+  it('still retires the loan in the month a large contribution clears it (TODO-168)', () => {
+    const { months, monthlyData } = calculateLoanWithOffset({
+      contributions: [{ startMonth: 3, recurrence: 'none', amount: 150_000 }],
+      personalExpenseItems: [],
+      loanAmount: 100_000,
+      monthlyRate,
+      monthlyPayment: calculateMonthlyPayment(100_000, monthlyRate, 360),
+      monthlyToOffset: 0,
+    });
+    expect(months).toBe(3);
+    expect(monthlyData.at(-1)).toMatchObject({ month: 3, balance: 0 });
   });
 });
