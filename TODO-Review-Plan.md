@@ -328,6 +328,8 @@ entradas* — exactamente lo que solo se ve leyendo lo que cada entrada prometi�
 | TODO-133 (`4384`, `4388`) | dos citas de línea | Derivadas: Offset Utilisation renderiza en `App.jsx:3906-3914`, y `OFFSET_UTILISATION_BANDS` está en `purchaseHealthCheck.js:175`, no `:168` (ahí está `classifyMortgageFreeAge`). |
 | TODO-147 (`5038-5041`) | nombra la propiedad *"effectiveTaxRate es inerte"* | Estrechada por TODO-151: el test ahora dice *"changes nothing OUTSIDE Housing Cost Ratio"* (`:273`) y `:277` pinnea lo contrario para HCR. Obsoleta, no oculta. |
 
+**Aplicadas (TODO-166, PCALC-134, 2026-10-06):** las 11 vigentes, como notas `Correction (TODO-166)` en cada entrada; TODO-135 ya era cierta tras TODO-160.
+
 **Prioridad 4 (aritmética de conteos): cero hallazgos.** Todos los conteos por
 archivo y desgloses internos se sostienen — TODO-146 (5), TODO-147 (12 filas),
 TODO-148 (3), TODO-149 (4), TODO-150 (16 = 4+4+6+2), TODO-152 (2), TODO-135

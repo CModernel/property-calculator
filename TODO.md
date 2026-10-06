@@ -7,6 +7,34 @@ optionally reuse in the commit message when you implement it.
 
 ## ✅ Completed
 
+- [x] **TODO-166: Apply the twelve documented corrections to existing TODO.md entries**
+  The Phase 2C audit compared what fifteen Health Check entries CLAIM against
+  what shipped, and confirmed twelve false or incomplete claims - each with
+  proposed correction text already written, recorded in `TODO-Review-Plan.md`.
+  The ones that would actively mislead a reader: TODO-135 claims Simple mode
+  keeps TODO-134's annotations (it rendered none until TODO-160 - now true, so
+  leave that claim alone); TODO-148 describes its fix
+  without saying it reached only Advanced, while its sibling TODO-149 DOES record
+  its Simple-mode half, so the asymmetry reads as "Simple wasn't affected";
+  TODO-95 states "default 0 (no vacancy modeled)" when the shipped default is 2
+  (`App.jsx:397` falls through to `?? 2`, and `config.default.json` has no such
+  key - the same missing key that produced the `NaN` trap during TODO-150), and
+  separately claims "only the future simulation is affected", false since
+  TODO-150; TODO-134 bundles Stress Test and Gearing into one sentence about
+  re-amortization when they used different terms (the defect fixed as TODO-153);
+  TODO-68/69/70 says `HealthCheckIndicator` is used by "all 10 indicators" (nine
+  - the FHB warning is bespoke markup) and describes a `currentAge` sentinel
+  design that TODO-88 replaced.
+  Documentation only, no code. Worth doing because two of the Phase 2C findings
+  turned out to be real CODE defects hiding as documentation drift (shipped here
+  as TODO-154 and TODO-155) - stale entries are how the next one hides.
+  **Retrospective (PCALC-134):** 11 corrections appended as
+  `**Correction (TODO-166):**` notes (history left intact) to TODO-68/69/70,
+  95, 133, 134, 147, 148, 149 and 150; TODO-135's claim became true with
+  TODO-160 and was left alone. Each fact re-verified against today's code first:
+  TODO-149's third site (`RiskToleranceProfiles.jsx`) had meanwhile been fixed,
+  and TODO-150's month-1 gate (`hasRentalIncome`) is still as described.
+
 - [x] **TODO-184: Stabilized re-amortization uses the ORIGINAL loan amount, so a late rate change yields an absurd payment**
   Found by the Opus review of TODO-183. `resolveProjectedFinancials` re-amortizes
   the original `loanAmount` over `totalMonths - month + 1`, not the balance still
@@ -2252,6 +2280,11 @@ optionally reuse in the commit message when you implement it.
   Timeline Explorer's slider and confirmed Offset Utilisation tracked
   the selected month (21.4% at month ~70); confirmed an `InfoTooltip`
   opens correctly showing the threshold summary.
+  **Correction (TODO-166):** `HealthCheckIndicator` is used by 9 indicators, not
+  10 - the FHB concession warning is hand-built markup with no classification,
+  tooltip or action. And the `currentAge` "0 means not provided" / "Not set"
+  design described below was replaced by TODO-88: `currentAge ?? 30`, a
+  separate `showMortgageFreeAge ?? false` gate, slider floor 18.
 
 - [x] **TODO-86/87: Grupo H - two more "missing text-color class" dark-mode bugs, plus a sweep for others**
   Same root cause as TODO-72/73: a text-bearing element with zero
@@ -2850,6 +2883,12 @@ optionally reuse in the commit message when you implement it.
   reloaded, confirmed persistence; cleared the saved scenario, confirmed
   it reset to the original baseline (House Rent removed too, as
   expected).
+  **Correction (TODO-166):** the shipped default is 2 weeks, not 0 - App.jsx
+  falls through to `config.vacancyWeeksPerYear ?? 2` and `config.default.json`
+  has no such key (the same missing key behind the `NaN` trap during TODO-150).
+  And "only the future simulation is affected" is false since TODO-150: the
+  Day-1 rental income applies the vacancy factor too, which moves the monthly
+  net balance, Housing Cost Ratio and Gearing.
 
 - [x] **TODO-97: Opportunity Cost comparison (static, no dependency)**
   Resulting split from TODO-52's analysis (see TODO-52's own write-up for
@@ -4433,6 +4472,9 @@ optionally reuse in the commit message when you implement it.
   Implementation of all of the above now lives in TODO-134, which already
   had the two-value display design and the worse-of-two classification rule
   - see that entry for the full mechanism.
+  **Correction (TODO-166):** the line citations in this entry have drifted - find
+  Offset Utilisation by its label `"Offset Utilisation (this month)"` in App.jsx
+  and the bands by `OFFSET_UTILISATION_BANDS` in `purchaseHealthCheck.js`.
 
 - [x] **TODO-134: Health Check indicators - Day1/Stabilized dual-value display, unified with TODO-133**
   Emergency Buffer, Housing Cost Ratio, Interest Rate Stress Test, Gearing,
@@ -4465,6 +4507,11 @@ optionally reuse in the commit message when you implement it.
   `App.healthCheckStabilized.test.jsx`'s year-5-fallback and
   scheduled-salary-raise cases) plus updated `OFFSET_UTILISATION_BANDS`
   label assertions; full suite (594 tests), lint, and build all clean.
+  **Correction (TODO-166):** the sentence grouping Stress Test and Gearing as
+  "only re-amortizing if a scheduled rate change applies" hides that the two
+  amortized over DIFFERENT terms - the defect fixed as TODO-153. TODO-184 later
+  replaced the original-loan re-amortization with the scheduled balance still
+  owed.
 
 - [x] **TODO-116: Extract the 3x-duplicated "add item" recurrence-picker form**
   The One-Time checkbox -> Start-Month slider -> Monthly/Quarterly/Yearly
@@ -6048,6 +6095,11 @@ gives `totalInterest` **$645,389.22**.
   completely income-independent, and `effectiveTaxRate` is inert with no
   income item Gross-marked). Suite 770 passing, lint and build clean, and this
   is a pure test addition - no production file touched.
+  **Correction (TODO-166):** "replicates App.jsx's own Day-1 wiring" held for
+  the VALUES, not the labels - the matrix classified raw Day-1 numbers while the
+  panel classifies the worse of Day-1 and Stabilized; TODO-165 fixed that. And
+  the "effectiveTaxRate is inert" property was narrowed by TODO-151 to "changes
+  nothing OUTSIDE Housing Cost Ratio".
 
 - [x] **TODO-148: Stress Test claims "Fails at +1%" when the scenario is ALREADY in deficit at today's rate**
   Presentation-only fix, exactly as the entry specified -
@@ -6072,6 +6124,9 @@ gives `totalInterest` **$645,389.22**.
   ternary, confirmed the "already in deficit" case wrongly read "Fails at +1%"
   and the test failed for exactly that reason, then restored.
   Suite 774 passing, lint and build clean, no Spanish text in changed files.
+  **Correction (TODO-166):** this fix reached Advanced mode only; Simple mode's
+  Stress Test half (and its "stabilizes to" note) shipped later with TODO-160.
+  Unlike TODO-149, this entry never said so.
 
 - [x] **TODO-149: Emergency Buffer renders a negative month count when settlement itself is unaffordable**
   Presentation-only, exactly as specified - `calculateEmergencyBufferMonths`/
@@ -6104,6 +6159,9 @@ gives `totalInterest` **$645,389.22**.
   reverted `SimpleModeView.jsx`'s indicator alone (confirmed only the Simple
   mode test failed), restored.
   Suite 778 passing, lint and build clean, no Spanish text in changed files.
+  **Correction (TODO-166):** there was a third display site,
+  `RiskToleranceProfiles.jsx` ("Your Emergency Buffer right now"), still
+  rendering negative months; it now uses `bufferDisplay` too.
 
 - [x] **TODO-150: Day-1 rental income skipped the vacancy factor while the Stabilized reading applied it**
   `App.jsx`'s Day-1 `weeklyRentalIncome`/`monthlyRentalIncome` now apply the
@@ -6182,6 +6240,10 @@ gives `totalInterest` **$645,389.22**.
   Acceptance criterion met: **no existing test's expected value changed.**
   Suite 794 passing, lint and build clean, no Spanish text in changed files.
   Recorded the Timeline Explorer's remaining *growth* divergence as TODO-152.
+  **Correction (TODO-166):** the gates are still month-1 questions -
+  `hasRentalIncome` is `weeklyRentalIncomeBeforeVacancy > 0` at month 1. The
+  52-weeks case is fixed; a rent with a scheduled (later) start still reads as
+  "no rental income" on Day 1.
 
 - [x] **TODO-152: Timeline Explorer's Income Context showed un-grown income while the trajectory beside it applies growth rates**
   `App.jsx`'s Income Context column now uses the same three-way
@@ -6355,28 +6417,6 @@ gives `totalInterest` **$645,389.22**.
   Suite 874 passing, lint and build clean.
 
 
-
-- [ ] **TODO-166: Apply the twelve documented corrections to existing TODO.md entries**
-  The Phase 2C audit compared what fifteen Health Check entries CLAIM against
-  what shipped, and confirmed twelve false or incomplete claims - each with
-  proposed correction text already written, recorded in `TODO-Review-Plan.md`.
-  The ones that would actively mislead a reader: TODO-135 claims Simple mode
-  keeps TODO-134's annotations (it rendered none until TODO-160 - now true, so
-  leave that claim alone); TODO-148 describes its fix
-  without saying it reached only Advanced, while its sibling TODO-149 DOES record
-  its Simple-mode half, so the asymmetry reads as "Simple wasn't affected";
-  TODO-95 states "default 0 (no vacancy modeled)" when the shipped default is 2
-  (`App.jsx:397` falls through to `?? 2`, and `config.default.json` has no such
-  key - the same missing key that produced the `NaN` trap during TODO-150), and
-  separately claims "only the future simulation is affected", false since
-  TODO-150; TODO-134 bundles Stress Test and Gearing into one sentence about
-  re-amortization when they used different terms (the defect fixed as TODO-153);
-  TODO-68/69/70 says `HealthCheckIndicator` is used by "all 10 indicators" (nine
-  - the FHB warning is bespoke markup) and describes a `currentAge` sentinel
-  design that TODO-88 replaced.
-  Documentation only, no code. Worth doing because two of the Phase 2C findings
-  turned out to be real CODE defects hiding as documentation drift (shipped here
-  as TODO-154 and TODO-155) - stale entries are how the next one hides.
 
 - [ ] **TODO-179: `InfoTooltip` can render partly off-screen when its "?" button sits near a window edge**
   Found during the manual browser pass over TODO-173 (2026-10-06), not caused
