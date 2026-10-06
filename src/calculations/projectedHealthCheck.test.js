@@ -51,12 +51,39 @@ describe('findStabilizationMonth', () => {
     expect(month).toBe(24);
   });
 
-  it('counts a recurring item ending before MAX_MONTH (a tenant moving out)', () => {
+  // TODO-181: endMonth is INCLUSIVE (isScheduleActive keeps the item through
+  // it), so the first month the item is gone - the one "after it ended" refers
+  // to - is endMonth + 1. Reading at endMonth itself still counted the item.
+  it('settles the month AFTER a recurring item ends (a tenant moving out)', () => {
     const month = findStabilizationMonth({
       ...BASE_SCHEDULES,
       incomeSources: [{ name: 'House Rent', amount: 500, startMonth: 1, recurrence: 'monthly', endMonth: 36 }],
     });
-    expect(month).toBe(36);
+    expect(month).toBe(37);
+  });
+
+  it('reaches MAX_MONTH for an item ending in the month before it, and ignores one that runs to it', () => {
+    const endsAt359 = findStabilizationMonth({
+      ...BASE_SCHEDULES,
+      incomeSources: [{ name: 'House Rent', amount: 500, startMonth: 1, recurrence: 'monthly', endMonth: 359 }],
+    });
+    expect(endsAt359).toBe(360);
+    const endsAt360 = findStabilizationMonth({
+      ...BASE_SCHEDULES,
+      incomeSources: [{ name: 'House Rent', amount: 500, startMonth: 1, recurrence: 'monthly', endMonth: 360 }],
+    });
+    expect(endsAt360).toBe(DEFAULT_STABILIZATION_MONTH);
+  });
+
+  it('takes the later of an end and a start, each at its own month', () => {
+    const month = findStabilizationMonth({
+      ...BASE_SCHEDULES,
+      incomeSources: [
+        { name: 'House Rent', amount: 500, startMonth: 1, recurrence: 'monthly', endMonth: 36 },
+        { name: 'Salary/Wages', amount: 1000, startMonth: 40, recurrence: 'monthly', endMonth: 360 },
+      ],
+    });
+    expect(month).toBe(40);
   });
 
   it('excludes one-time items - a lump sum is a transient blip, not a new steady state', () => {

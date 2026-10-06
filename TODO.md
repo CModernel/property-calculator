@@ -5508,6 +5508,28 @@ optionally reuse in the commit message when you implement it.
   Simple fails all 14; flipping any note's direction literal fails 2-3.
   Manual browser pass: three grey lines under the badges, hierarchy of the
   view unchanged.
+
+- [x] **TODO-181: A recurring item that ENDS never shows up in the Stabilized Health Check reading**
+  Found by the Opus review of TODO-163. `lastRecurringChangeMonth` took an
+  item's `endMonth` as the month things settle, but `endMonth` is inclusive
+  (`isScheduleActive` keeps the item through it), so the Stabilized reading was
+  taken in a month where the item still existed: a tenant or second income that
+  stops at month N never showed up as stopped, and "stabilizes to" described a
+  world where the ending never happened (feeding the worse-of badge, Simple mode
+  and the critical banner). One-line fix: an end settles at `endMonth + 1`, the
+  first month it is gone. Starts and rate/field changes were already right
+  (they fire at `startMonth`). The "reflects month N" tooltip copy stays
+  accurate. Unit test for the tenant-moves-out case updated 36 -> 37, plus
+  359 -> 360, 360 still ignored, and end-vs-start ordering. New
+  `App.endedItemStabilized.test.jsx`: a second $800/wk salary ending at month 24
+  now reads `↘ stabilizes to 44%` and "reflects month 25" (it read `→ ... 29%`,
+  i.e. Day 1 again, before). No existing Health Check scenario ended an item
+  (other tests do, but none assert Stabilized figures), so nothing was
+  re-baselined. Not browser-checked by hand: the render test seeds the same
+  scenario through the real App. Suite 1048 passing, lint and build clean.
+  The Opus review confirmed two neighbouring problems, logged separately as
+  TODO-182 (quarterly/yearly items) and TODO-183 (Stabilized month past the
+  loan term).
 ---
 
 ## 🔴 HIGH PRIORITY (Wrong dollar figures shown to the user)
@@ -6358,19 +6380,30 @@ gives `totalInterest` **$645,389.22**.
   instead of ETF balance alone?); (3) whether "Offset only" should mean "never
   invest" or "invest once paid off".
 
-- [ ] **TODO-181: A recurring item that ENDS never shows up in the Stabilized Health Check reading**
-  Found by the Opus review of TODO-163. `lastRecurringChangeMonth`
-  (`projectedHealthCheck.js`) treats an item's `endMonth` as the month things
-  "settle", but `isScheduleActive` still counts the item as active IN its end
-  month (`month > endMonth` is false). So a job, rent or expense that ends at
-  month N is still included in the reading that claims to be "after everything
-  scheduled has happened": the "stabilizes to..." figures describe a world
-  where the ending never occurred. Quarterly/yearly items can additionally
-  flip inactive at month 60 depending on their start month.
-  Likely fix: the stabilization month for an end is `endMonth + 1`. Verify
-  with a render scenario first (salary ending at month 24 should make the
-  Stabilized income drop), then check the Simple-mode and critical-banner
-  paths, since they consume the same classification.
+- [ ] **TODO-182: A quarterly or yearly item reads as absent in the Stabilized (and sometimes Day-1) Health Check month**
+  Found by the Opus review of TODO-181. `isScheduleActive` counts a quarterly or
+  yearly item only in months that match its start alignment. Example: a yearly
+  $1,200 personal expense starting at month 1 with nothing else scheduled. Day 1
+  (month 1) charges the whole $1,200 to that month; the default Stabilized month
+  is 60 and (60-1) % 12 != 0, so the item reads as $0 and the arrow shows a false
+  "improves". Quarterly items starting at month 1 also miss month 60. It hits the
+  default no-schedule case, so it is probably more common than item endings.
+  Needs a convention decision first (it also moves Day 1): e.g. average such
+  items to amount / interval for the point-in-time health readings, or keep
+  Day 1 as is and average only the Stabilized reading. Analysis before code;
+  check how the monthly-cash-flow cards treat the same items for consistency.
+
+- [ ] **TODO-183: The Stabilized month is not capped at the loan term**
+  Found by the Opus review of TODO-181. Schedule sliders run to month 360
+  whatever the loan term (1-30 years) and `findStabilizationMonth` never caps
+  at `totalMonths`. Example: a 25-year term, an item ending at month 300 plus
+  any scheduled rate change: the Stabilized month is 301 (300 before TODO-181's
+  `+ 1`... and a later `startMonth` already did this), so `remainingMonths =
+  300 - 301 + 1 = 0` and `calculateMonthlyPayment` returns Infinity (NaN at 0%),
+  which feeds the Stabilized Stress Test. Pre-existing class of bug (a
+  `startMonth` past the term gives negative months). Likely fix: cap the month
+  at `totalMonths` (or treat "after the loan" as not a meaningful Stabilized
+  reading) and add a render test with a short term and a late schedule.
 
 ---
 

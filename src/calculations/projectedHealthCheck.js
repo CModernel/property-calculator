@@ -39,7 +39,10 @@ function lastRecurringChangeMonth(items) {
   for (const item of items) {
     if (item.recurrence === 'none') continue;
     if (item.startMonth > 1) last = Math.max(last, item.startMonth);
-    if (item.endMonth < MAX_MONTH) last = Math.max(last, item.endMonth);
+    // TODO-181: endMonth is inclusive - isScheduleActive still counts the item
+    // IN that month - so the first month it is actually gone is endMonth + 1.
+    // Settling at endMonth itself read a world where the ending never happened.
+    if (item.endMonth < MAX_MONTH) last = Math.max(last, item.endMonth + 1);
   }
   return last;
 }
