@@ -1,9 +1,9 @@
-import { getActiveAmount, getActiveAmountWithGrowth, MAX_MONTH } from './recurringAmount';
+import { getAveragedAmount, getAveragedAmountWithGrowth, MAX_MONTH } from './recurringAmount';
 import { getSteppedValue } from './steppedValue';
 import { calculateCompoundedValue } from './growthRate';
 import { SALARY_INCOME_CATEGORY, RENTAL_INCOME_CATEGORIES } from './incomeCategories';
 import { calculateVacancyFactor } from './vacancyFactor';
-import { getGrossActiveAmount, getGrossActiveAmountWithGrowth } from './grossIncome';
+import { getGrossAveragedAmount, getGrossAveragedAmountWithGrowth } from './grossIncome';
 import {
   calculateMonthlyFromWeekly,
   calculateMonthlyRate,
@@ -24,7 +24,7 @@ import {
 // after each iteration), and none of the six affected indicators actually
 // need the loan simulation's own bookkeeping (offset/balance/interest) - they
 // only need income/expense SCHEDULES resolved at a different month, which is
-// exactly what getActiveAmountWithGrowth/getSteppedValue already do. Keeping
+// exactly what getAveragedAmountWithGrowth/getSteppedValue already do. Keeping
 // this independent avoids coupling Health Check to the heavily-tested
 // simulation loop.
 //
@@ -78,11 +78,14 @@ export function findStabilizationMonth({ incomeSources, personalExpenseItems, ex
   return Math.min(last > 0 ? last : DEFAULT_STABILIZATION_MONTH, maxMonth);
 }
 
-// The same figures App.jsx's Day-1 Health Check code computes at month 1
-// (App.jsx:490-518, 539-542), re-evaluated at an arbitrary month with growth
+// The same figures App.jsx's Day-1 block computes at month 1 (search for
+// `monthlyPersonalExpenses =` there), re-evaluated at an arbitrary month with growth
 // applied - the same salary/rental/other category split offsetSimulation.js
 // uses internally (so growth compounds identically either way), regrouped
-// into the rental-vs-non-rental buckets the Day-1 code already uses.
+// into the rental-vs-non-rental buckets the Day-1 code already uses. Like the
+// Day-1 block, a quarterly/yearly item counts at its monthly average
+// (TODO-182) - an exact-month read would drop it whenever this month isn't
+// one it fires in, which the default month 60 usually isn't.
 export function resolveProjectedFinancials(month, {
   incomeSources, personalExpenseItems, expenseFields, interestRateField,
   effectiveTaxRate, salaryGrowthRate, rentGrowthRate, expenseGrowthRate, vacancyWeeksPerYear,
@@ -96,14 +99,14 @@ export function resolveProjectedFinancials(month, {
   const vacancyFactor = calculateVacancyFactor(vacancyWeeksPerYear);
 
   const monthlyIncome = calculateMonthlyFromWeekly(
-    getActiveAmountWithGrowth(salarySources, month, salaryGrowthRate, effectiveTaxRate)
-      + getActiveAmount(otherNonRentalSources, month, effectiveTaxRate)
+    getAveragedAmountWithGrowth(salarySources, month, salaryGrowthRate, effectiveTaxRate)
+      + getAveragedAmount(otherNonRentalSources, month, effectiveTaxRate)
   );
   // Hoisted rather than inlined twice so the vacancy-adjusted expression below
   // stays byte-identical to what it was before TODO-150 added the
   // BeforeVacancy sibling - reordering `x * f` into `f * x` here would risk
   // sub-cent drift against tests that assert to 5 decimals.
-  const weeklyRentalBeforeVacancy = getActiveAmountWithGrowth(rentalSources, month, rentGrowthRate, effectiveTaxRate);
+  const weeklyRentalBeforeVacancy = getAveragedAmountWithGrowth(rentalSources, month, rentGrowthRate, effectiveTaxRate);
   const monthlyRentalIncome = calculateMonthlyFromWeekly(weeklyRentalBeforeVacancy * vacancyFactor);
 
   // TODO-151: the BEFORE-TAX counterparts, for the two indicators whose bands
@@ -113,10 +116,10 @@ export function resolveProjectedFinancials(month, {
   // Named `BeforeTax` to mirror TODO-150's `BeforeVacancy` convention rather
   // than "Gross", which in this codebase already means the per-item, user-
   // declared `isGross` basis - a different concept from a derived figure.
-  const weeklyRentalBeforeTaxAndVacancy = getGrossActiveAmountWithGrowth(rentalSources, month, rentGrowthRate, effectiveTaxRate);
+  const weeklyRentalBeforeTaxAndVacancy = getGrossAveragedAmountWithGrowth(rentalSources, month, rentGrowthRate, effectiveTaxRate);
   const monthlyIncomeBeforeTax = calculateMonthlyFromWeekly(
-    getGrossActiveAmountWithGrowth(salarySources, month, salaryGrowthRate, effectiveTaxRate)
-      + getGrossActiveAmount(otherNonRentalSources, month, effectiveTaxRate)
+    getGrossAveragedAmountWithGrowth(salarySources, month, salaryGrowthRate, effectiveTaxRate)
+      + getGrossAveragedAmount(otherNonRentalSources, month, effectiveTaxRate)
   );
   // Vacancy and tax are independent axes: how much rent actually arrives, versus
   // whether the figure is stated before or after tax. Housing Cost Ratio wants
@@ -129,7 +132,7 @@ export function resolveProjectedFinancials(month, {
   const monthlyRentalIncomeBeforeTaxAndVacancy = calculateMonthlyFromWeekly(weeklyRentalBeforeTaxAndVacancy);
 
   const expenseGrowthMultiplier = calculateCompoundedValue(1, expenseGrowthRate, month);
-  const monthlyPersonalExpenses = getActiveAmount(personalExpenseItems, month) * expenseGrowthMultiplier;
+  const monthlyPersonalExpenses = getAveragedAmount(personalExpenseItems, month) * expenseGrowthMultiplier;
 
   const strata = getSteppedValue(expenseFields.strataFees.base, expenseFields.strataFees.changes, month);
   const utilities = getSteppedValue(expenseFields.utilities.base, expenseFields.utilities.changes, month);

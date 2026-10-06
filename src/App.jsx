@@ -47,7 +47,7 @@ import { calculatePresentValueOfInterest } from './calculations/inflation';
 import { clampToRange } from './calculations/clampToRange';
 import { safePercentage } from './calculations/safePercentage';
 import { calculateVacancyFactor } from './calculations/vacancyFactor';
-import { getGrossActiveAmount } from './calculations/grossIncome';
+import { getGrossAveragedAmount } from './calculations/grossIncome';
 import { estimateLmi } from './calculations/lmi';
 import { sumClosingCosts } from './calculations/closingCosts';
 import { getStateModule } from './calculations/states';
@@ -70,7 +70,7 @@ import { findStabilizationMonth, resolveProjectedFinancials, worseOf } from './c
 import HealthCheckIndicator from './components/HealthCheckIndicator';
 import { calculateTotalCashRequired, calculateCashRemaining, calculateLiquidSavings } from './calculations/totalCashRequired';
 import { getSteppedValue } from './calculations/steppedValue';
-import { getActiveAmount, getActiveAmountWithGrowth, isScheduleActive, countOccurrencesUpTo, classifyScheduleStatus, formatScheduleLabel } from './calculations/recurringAmount';
+import { getActiveAmount, getActiveAmountWithGrowth, getAveragedAmount, isScheduleActive, countOccurrencesUpTo, classifyScheduleStatus, formatScheduleLabel } from './calculations/recurringAmount';
 import { getTimelineSnapshot, calculateEffectiveProgress, calculateTimeRemaining } from './calculations/timelineSnapshot';
 import { hasUsableProjection } from './calculations/usableProjection';
 import { INCOME_CATEGORIES, INCOME_CATEGORY_DEFAULTS, RENTAL_INCOME_CATEGORIES, SALARY_INCOME_CATEGORY } from './calculations/incomeCategories';
@@ -129,11 +129,14 @@ const PERSONAL_EXPENSE_CATEGORIES = ['Groceries', 'Transport', 'Bills', 'Health'
 // paragraph (TODO-175) explains why the two can differ by a month of growth:
 // the static cards are today's un-grown snapshot, while the projection's month
 // 1 already carries one month of compounding (calculateCompoundedValue is
-// 1-indexed). Both conventions are correct in their own context.
+// 1-indexed). Both conventions are correct in their own context. The third
+// paragraph (TODO-182) covers the other way the two differ: quarterly/yearly
+// items averaged on the cards, charged in their own month in the projection.
 const WEEKLY_TO_MONTHLY_TOOLTIP = (
   <>
     <p>Monthly figures convert weekly amounts using the actual number of weeks per year: <strong>52 ÷ 12 ≈ 4.33</strong>, not a flat ×4.</p>
     <p className="mt-2">The cards show today's situation with no growth applied. The projection starts compounding growth from its first month, so month 1 there is slightly higher - about <strong>$17/month</strong> of income on the default scenario.</p>
+    <p className="mt-2">The cards spread a quarterly or yearly item evenly across the months it covers. The projection charges it in full in the month it falls, and nothing in between.</p>
   </>
 );
 
@@ -599,7 +602,13 @@ const PropertyInvestmentCalculator = () => {
   // Income Sources; weeklyPersonalExpenses is only kept around for
   // calculateWeeklyNetBalance's own weekly-denominated math below, via the
   // 12/52 inverse of the usual weekly->monthly factor.
-  const monthlyPersonalExpenses = getActiveAmount(personalExpenseItems, 1);
+  //
+  // TODO-182: every Day-1 figure in this block is the monthly AVERAGE of what
+  // is in force in month 1 (getAveragedAmount), not that exact month - a
+  // yearly bill charged in full to "right now" overstated it 12x, and the
+  // Stabilized reading, taken at a month it doesn't fire in, then dropped it.
+  // The simulation and the Timeline Explorer keep exact months.
+  const monthlyPersonalExpenses = getAveragedAmount(personalExpenseItems, 1);
   const weeklyPersonalExpenses = monthlyPersonalExpenses * 12 / 52;
 
   // Total cash flow. Same "right now" (month 1) convention as exceptional
@@ -608,7 +617,7 @@ const PropertyInvestmentCalculator = () => {
   // live inside incomeSources like any other entry - this just partitions
   // the same array into the two subtotals the rest of the app already
   // expects, instead of drawing from two separate arrays.
-  const weeklyIncome = getActiveAmount(incomeSources.filter(i => !RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
+  const weeklyIncome = getAveragedAmount(incomeSources.filter(i => !RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
   // TODO-150: rental income is haircut by the vacancy assumption here, the same
   // way offsetSimulation.js does it from month 1 and resolveProjectedFinancials
   // does it for the Stabilized reading. Before this, the Day-1 figure was the
@@ -629,7 +638,7 @@ const PropertyInvestmentCalculator = () => {
   // silently hide the indicator and the whole card. Rental Yield's VALUE used
   // to be a third site here; PCALC-100 moved it to the before-tax figure below.
   const vacancyFactor = calculateVacancyFactor(vacancyWeeksPerYear);
-  const weeklyRentalIncomeBeforeVacancy = getActiveAmount(incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
+  const weeklyRentalIncomeBeforeVacancy = getAveragedAmount(incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
   const weeklyRentalIncome = weeklyRentalIncomeBeforeVacancy * vacancyFactor;
   const hasRentalIncome = weeklyRentalIncomeBeforeVacancy > 0;
   const monthlyIncome = calculateMonthlyFromWeekly(weeklyIncome);
@@ -647,8 +656,8 @@ const PropertyInvestmentCalculator = () => {
   // non-rental one, but it can never matter: TAXABLE_INCOME_CATEGORIES and
   // RENTAL_INCOME_CATEGORIES are disjoint (pinned in incomeCategories.test.js),
   // so rent is always taken at face value here.
-  const weeklyIncomeBeforeTax = getGrossActiveAmount(incomeSources.filter(i => !RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
-  const weeklyRentalIncomeBeforeTaxAndVacancy = getGrossActiveAmount(incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
+  const weeklyIncomeBeforeTax = getGrossAveragedAmount(incomeSources.filter(i => !RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
+  const weeklyRentalIncomeBeforeTaxAndVacancy = getGrossAveragedAmount(incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
   const monthlyIncomeBeforeTax = calculateMonthlyFromWeekly(weeklyIncomeBeforeTax);
   const monthlyRentalIncomeBeforeTax = calculateMonthlyFromWeekly(weeklyRentalIncomeBeforeTaxAndVacancy * vacancyFactor);
 
@@ -878,7 +887,8 @@ const PropertyInvestmentCalculator = () => {
   );
 
   // Purchase Health Check panel (TODO-68/69/70) - all "month 1"/"right now"
-  // snapshots, same convention as every other static figure on this page.
+  // snapshots, same convention as every other static figure on this page
+  // (quarterly/yearly items at their monthly average since TODO-182).
   // TODO-134: six of these also get a "Stabilized" reading - the month the
   // last scheduled income/expense/rate change fires (or year 5 if nothing is
   // scheduled), with growth applied - computed independently of the loan
@@ -3449,7 +3459,7 @@ const PropertyInvestmentCalculator = () => {
                         {personalExpenseItems.filter(item => isScheduleActive(item, 1)).map(item => (
                           <div key={item.id} className="flex justify-between">
                             <span className="text-gray-500 dark:text-gray-400">{item.name}:</span>
-                            <span className="text-red-500">-${Math.round(item.amount).toLocaleString()}</span>
+                            <span className="text-red-500">-${Math.round(getAveragedAmount([item], 1)).toLocaleString()}</span>
                           </div>
                         ))}
                         {personalExpenseItems.filter(item => isScheduleActive(item, 1)).length === 0 && (
@@ -3837,7 +3847,8 @@ const PropertyInvestmentCalculator = () => {
                   the projection carried on as if the money had appeared.
                   Complements, doesn't duplicate, the "❌ Need $X/month extra"
                   status in Total Summary above: that one catches a month-1
-                  shortfall from static figures, this one catches shortfalls
+                  shortfall from the static figures (quarterly/yearly items at
+                  their monthly average, TODO-182), this one catches shortfalls
                   that only emerge DURING the projection (scheduled expenses,
                   a rate change, expense growth outpacing income). */}
               {loanSimulation.totalCashShortfall > 0 && (

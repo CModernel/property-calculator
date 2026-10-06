@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { getActiveAmount, getActiveAmountWithGrowth, isScheduleActive, countOccurrencesUpTo, classifyScheduleStatus, formatScheduleLabel, MAX_MONTH } from './recurringAmount';
+import { calculateCompoundedValue } from './growthRate';
+import { getActiveAmount, getActiveAmountWithGrowth, getAveragedAmount, getAveragedAmountWithGrowth, isScheduleActive, countOccurrencesUpTo, classifyScheduleStatus, formatScheduleLabel, MAX_MONTH } from './recurringAmount';
 
 describe('isScheduleActive', () => {
   it('is active only on its exact month when recurrence is "none"', () => {
@@ -230,5 +231,63 @@ describe('formatScheduleLabel', () => {
 
   it('formats a degenerate bounded schedule where startMonth equals endMonth', () => {
     expect(formatScheduleLabel({ startMonth: 5, recurrence: 'monthly', endMonth: 5 })).toBe('Monthly, months 5-5');
+  });
+});
+
+// TODO-182: the point-in-time figures (Day-1 cards, Health Check Day-1 and
+// Stabilized) spread a quarterly/yearly item evenly over the months it is in
+// force, instead of charging it in full in its firing month and $0 elsewhere.
+describe('getAveragedAmount', () => {
+  const sched = (recurrence, extra = {}) => ({ amount: 1200, startMonth: 1, recurrence, endMonth: MAX_MONTH, ...extra });
+
+  it('spreads quarterly over 3 months and yearly over 12, leaving monthly as is', () => {
+    expect(getAveragedAmount([sched('quarterly')], 1)).toBe(400);
+    expect(getAveragedAmount([sched('yearly')], 1)).toBe(100);
+    expect(getAveragedAmount([sched('monthly')], 1)).toBe(1200);
+  });
+
+  it('counts the average in months the item does not fire', () => {
+    // A yearly item from month 1 fires at 1, 13, 25, ... - month 60 is not one of them.
+    expect(getActiveAmount([sched('yearly')], 60)).toBe(0);
+    expect(getAveragedAmount([sched('yearly')], 60)).toBe(100);
+  });
+
+  it('counts nothing before the start or after the end', () => {
+    const bounded = sched('quarterly', { startMonth: 10, endMonth: 30 });
+    expect(getAveragedAmount([bounded], 9)).toBe(0);
+    expect(getAveragedAmount([bounded], 10)).toBe(400);
+    expect(getAveragedAmount([bounded], 30)).toBe(400);
+    expect(getAveragedAmount([bounded], 31)).toBe(0);
+  });
+
+  it('keeps a one-time item exact - it is a lump sum, not a rate', () => {
+    const once = { amount: 1200, startMonth: 5, recurrence: 'none' };
+    expect(getAveragedAmount([once], 4)).toBe(0);
+    expect(getAveragedAmount([once], 5)).toBe(1200);
+    expect(getAveragedAmount([once], 6)).toBe(0);
+  });
+
+  it('nets a Gross-marked item the same way getActiveAmount does', () => {
+    expect(getAveragedAmount([sched('quarterly', { isGross: true })], 1, 25)).toBe(300);
+  });
+
+  it('applies growth compounding from month 1', () => {
+    expect(getAveragedAmountWithGrowth([sched('yearly')], 60, 3)).toBeCloseTo(100 * calculateCompoundedValue(1, 3, 60), 10);
+  });
+
+  // Like getActiveAmount, an item that doesn't count is skipped outright, so a
+  // malformed one can't turn the whole figure into NaN.
+  it('ignores a malformed amount on an item that is not in force', () => {
+    const future = sched('yearly', { amount: undefined, startMonth: 24 });
+    expect(getAveragedAmount([sched('yearly'), future], 1)).toBe(100);
+  });
+
+  it('counts an unknown recurrence as nothing, as the exact path does', () => {
+    expect(getAveragedAmount([sched('fortnightly')], 1)).toBe(0);
+    expect(getActiveAmount([sched('fortnightly')], 1)).toBe(0);
+  });
+
+  it('counts nothing for an end before the start', () => {
+    expect(getAveragedAmount([sched('quarterly', { startMonth: 10, endMonth: 5 })], 10)).toBe(0);
   });
 });

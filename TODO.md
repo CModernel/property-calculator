@@ -7,6 +7,32 @@ optionally reuse in the commit message when you implement it.
 
 ## ✅ Completed
 
+- [x] **TODO-182: A quarterly or yearly item reads as absent in the Stabilized (and sometimes Day-1) Health Check month**
+  Found by the Opus review of TODO-181. `isScheduleActive` counts a quarterly or
+  yearly item only in months that match its start alignment. Example: a yearly
+  $1,200 personal expense starting at month 1 with nothing else scheduled. Day 1
+  (month 1) charges the whole $1,200 to that month; the default Stabilized month
+  is 60 and (60-1) % 12 != 0, so the item reads as $0 and the arrow shows a false
+  "improves". Quarterly items starting at month 1 also miss month 60. It hits the
+  default no-schedule case, so it is probably more common than item endings.
+  Needs a convention decision first (it also moves Day 1): e.g. average such
+  items to amount / interval for the point-in-time health readings, or keep
+  Day 1 as is and average only the Stabilized reading. Analysis before code;
+  check how the monthly-cash-flow cards treat the same items for consistency.
+  **Retrospective (PCALC-135):** user decision - average in ALL point-in-time
+  figures. New `getAveragedAmount(WithGrowth)` (recurringAmount.js) and gross
+  twins (grossIncome.js): a recurring item in force counts amount / interval,
+  a one-time item stays exact, an item that doesn't count is skipped (so a
+  malformed amount can't NaN the total). Used by App's Day-1 block (cards,
+  donut, Simple, Health Check Day-1, the Total Summary expense list) and
+  `resolveProjectedFinancials`; the simulation, Timeline Explorer and tax
+  suggestion keep exact months. Tooltip gained a sentence. No scenario
+  re-baselined. Mutations (Day-1 block, Stabilized, list line) each fail a
+  test. Opus review found the expense list not adding up to its subtotal, the
+  NaN regression and unknown-recurrence case, and a tooltip claim false for
+  weekly-denominated income - all fixed. Income denomination logged as
+  TODO-185. Plan: `obsidian/TODO-182-plan.md`.
+
 - [x] **TODO-166: Apply the twelve documented corrections to existing TODO.md entries**
   The Phase 2C audit compared what fifteen Health Check entries CLAIM against
   what shipped, and confirmed twelve false or incomplete claims - each with
@@ -6457,18 +6483,17 @@ gives `totalInterest` **$645,389.22**.
   instead of ETF balance alone?); (3) whether "Offset only" should mean "never
   invest" or "invest once paid off".
 
-- [ ] **TODO-182: A quarterly or yearly item reads as absent in the Stabilized (and sometimes Day-1) Health Check month**
-  Found by the Opus review of TODO-181. `isScheduleActive` counts a quarterly or
-  yearly item only in months that match its start alignment. Example: a yearly
-  $1,200 personal expense starting at month 1 with nothing else scheduled. Day 1
-  (month 1) charges the whole $1,200 to that month; the default Stabilized month
-  is 60 and (60-1) % 12 != 0, so the item reads as $0 and the arrow shows a false
-  "improves". Quarterly items starting at month 1 also miss month 60. It hits the
-  default no-schedule case, so it is probably more common than item endings.
-  Needs a convention decision first (it also moves Day 1): e.g. average such
-  items to amount / interval for the point-in-time health readings, or keep
-  Day 1 as is and average only the Stabilized reading. Analysis before code;
-  check how the monthly-cash-flow cards treat the same items for consistency.
+- [ ] **TODO-185: Quarterly/yearly INCOME is still read as dollars per week**
+  Found while doing TODO-182. Income amounts are always weekly-denominated
+  (`calculateMonthlyFromWeekly`, x52/12), even when the item recurs quarterly
+  or yearly: a yearly $1,200 dividend is paid as $5,200 in its month by the
+  simulation, and averages to ~$433/month on the cards instead of $100. The
+  form label stays "Weekly Amount ($)" whatever the recurrence, and `Dividends`
+  defaults to quarterly (`incomeCategories.js`). Pinned today by
+  `offsetSimulation.test.js` ("$300/week -> $1,300/month, only in months 1 and
+  4") and `taxRateSuggestion.test.js`. Needs a decision first: treat a
+  non-monthly income amount as per-occurrence dollars (like personal
+  expenses), or keep weekly and change the label. Touches the simulation.
 
 ---
 

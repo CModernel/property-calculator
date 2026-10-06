@@ -1,4 +1,4 @@
-import { getActiveAmount, getActiveAmountWithGrowth } from './recurringAmount';
+import { getActiveAmount, getActiveAmountWithGrowth, getAveragedAmount, getAveragedAmountWithGrowth } from './recurringAmount';
 import { TAXABLE_INCOME_CATEGORIES } from './incomeCategories';
 
 // TODO-151: reconstructs BEFORE-TAX income, for the two Health Check indicators
@@ -68,4 +68,20 @@ export function getGrossActiveAmountWithGrowth(items, month, annualGrowthRate, e
   if (delta === 0) return getActiveAmountWithGrowth(items, month, annualGrowthRate, 0);
   return getActiveAmountWithGrowth(items, month, annualGrowthRate, 0)
     + delta * getActiveAmountWithGrowth(items.filter(isGrossUppable), month, annualGrowthRate, 0);
+}
+
+// TODO-182: the same delta pattern over the per-month AVERAGE
+// (recurringAmount.js's getAveragedAmount), for the point-in-time readings.
+export function getGrossAveragedAmount(items, month, effectiveTaxRate = 0) {
+  const delta = calculateGrossUpFactor(effectiveTaxRate) - 1;
+  if (delta === 0) return getAveragedAmount(items, month, 0);
+  return getAveragedAmount(items, month, 0)
+    + delta * getAveragedAmount(items.filter(isGrossUppable), month, 0);
+}
+
+export function getGrossAveragedAmountWithGrowth(items, month, annualGrowthRate, effectiveTaxRate = 0) {
+  const delta = calculateGrossUpFactor(effectiveTaxRate) - 1;
+  if (delta === 0) return getAveragedAmountWithGrowth(items, month, annualGrowthRate, 0);
+  return getAveragedAmountWithGrowth(items, month, annualGrowthRate, 0)
+    + delta * getAveragedAmountWithGrowth(items.filter(isGrossUppable), month, annualGrowthRate, 0);
 }

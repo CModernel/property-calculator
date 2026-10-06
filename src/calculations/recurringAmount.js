@@ -47,6 +47,39 @@ export function getActiveAmountWithGrowth(items, month, annualGrowthRate, effect
   );
 }
 
+// TODO-182: the per-month AVERAGE of an item, for the point-in-time figures
+// (Day-1 cards and the Health Check's Day-1 and Stabilized readings). Exact
+// months - getActiveAmount - charge a quarterly/yearly item in full in its
+// firing month and $0 in the others, so a single snapshot month either
+// overstates it 3-12x or drops it entirely depending on alignment. Here a
+// recurring item counts amount / interval in every month it is in force
+// (startMonth..endMonth), the same /4 and /12 the stepped property fields use
+// (loan.js). A one-time item stays exact: it's a lump sum, not a rate. The
+// simulation and the Timeline Explorer keep the exact months.
+// Returns the share of the item's amount that counts in `month` (0 when it
+// isn't in force, or its recurrence is unknown - the same "doesn't count" the
+// exact path gives such an item).
+function getAveragedShare(item, month) {
+  if (item.recurrence === 'none') return isScheduleActive(item, month) ? 1 : 0;
+  if (!(item.recurrence in INTERVAL_MONTHS)) return 0;
+  if (month < item.startMonth || month > item.endMonth) return 0;
+  return 1 / INTERVAL_MONTHS[item.recurrence];
+}
+
+// Items with a zero share are SKIPPED, not multiplied by 0, exactly like
+// getActiveAmount skips inactive ones: `NaN * 0` is NaN, so one malformed
+// amount on an item that isn't even in force would otherwise poison the total.
+export function getAveragedAmount(items, month, effectiveTaxRate = 0) {
+  return items.reduce((sum, item) => {
+    const share = getAveragedShare(item, month);
+    return share === 0 ? sum : sum + getNetAmount(item, effectiveTaxRate) * share;
+  }, 0);
+}
+
+export function getAveragedAmountWithGrowth(items, month, annualGrowthRate, effectiveTaxRate = 0) {
+  return getAveragedAmount(items, month, effectiveTaxRate) * calculateCompoundedValue(1, annualGrowthRate, month);
+}
+
 // How many times a schedule has fired by the given month (inclusive) -
 // used by the Timeline Explorer's cumulative offset history, where a
 // recurring contribution needs a running total instead of a single

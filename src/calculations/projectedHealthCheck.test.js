@@ -346,6 +346,28 @@ describe('resolveProjectedFinancials', () => {
     expect(month13.monthlyPropertyExpenses).toBeCloseTo(200 * multiplier13, 5);
   });
 
+  // TODO-182: a yearly item from month 1 fires at 1, 13, 25, 37, 49, 61 - never
+  // at the default Stabilized month 60 - so an exact-month read dropped it and
+  // the reading looked better than any real month. It now counts its monthly
+  // average, like every other point-in-time figure.
+  it('counts a yearly expense at its monthly average in a month it does not fire', () => {
+    const params = {
+      ...SNAPSHOT_PARAMS, expenseGrowthRate: 0,
+      personalExpenseItems: [{ name: 'Insurance', amount: 1200, startMonth: 1, recurrence: 'yearly', endMonth: 360 }],
+    };
+    expect(resolveProjectedFinancials(60, params).monthlyPersonalExpenses).toBeCloseTo(100, 10);
+  });
+
+  it('counts a quarterly income at its monthly average, before and after tax', () => {
+    const params = {
+      ...SNAPSHOT_PARAMS, salaryGrowthRate: 0, effectiveTaxRate: 20,
+      incomeSources: [{ name: 'Salary/Wages', amount: 1200, startMonth: 1, recurrence: 'quarterly', endMonth: 360, isGross: false }],
+    };
+    const result = resolveProjectedFinancials(60, params);
+    expect(result.monthlyIncome).toBeCloseTo(400 * 52 / 12, 10);
+    expect(result.monthlyIncomeBeforeTax).toBeCloseTo(500 * 52 / 12, 10);
+  });
+
   it('leaves the payment/rate unchanged when no rate change is scheduled', () => {
     const result = resolveProjectedFinancials(60, SNAPSHOT_PARAMS);
     expect(result.monthlyPayment).toBe(SNAPSHOT_PARAMS.monthlyPayment);

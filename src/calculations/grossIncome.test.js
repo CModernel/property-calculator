@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getGrossActiveAmount, getGrossActiveAmountWithGrowth, calculateGrossUpFactor, isGrossUppable } from './grossIncome';
+import { getGrossActiveAmount, getGrossActiveAmountWithGrowth, getGrossAveragedAmount, getGrossAveragedAmountWithGrowth, calculateGrossUpFactor, isGrossUppable } from './grossIncome';
 import { getActiveAmount } from './recurringAmount';
 import { calculateCompoundedValue } from './growthRate';
 
@@ -128,5 +128,23 @@ describe('getGrossActiveAmountWithGrowth', () => {
     const items = [item('Salary/Wages', 812.37), item('Pension', 401.13)];
     expect(getGrossActiveAmountWithGrowth(items, 13, 3, 0)).toBe(getGrossActiveAmountWithGrowth(items, 13, 3, 0));
     expect(getGrossActiveAmountWithGrowth(items, 13, 3, 0)).toBeCloseTo(1213.5 * calculateCompoundedValue(1, 3, 13), 10);
+  });
+});
+
+// TODO-182: averaged twins for the point-in-time readings.
+describe('getGrossAveragedAmount', () => {
+  const quarterly = { startMonth: 1, recurrence: 'quarterly', endMonth: 360 };
+
+  it('grosses up the monthly average of a quarterly taxable item', () => {
+    expect(getGrossAveragedAmount([item('Salary/Wages', 1200, quarterly)], 2, 20)).toBeCloseTo(500, 10);
+  });
+
+  it('is the net average at a 0% rate', () => {
+    expect(getGrossAveragedAmount([item('Salary/Wages', 1200, quarterly)], 2, 0)).toBe(400);
+  });
+
+  it('applies growth on top of the grossed-up average', () => {
+    expect(getGrossAveragedAmountWithGrowth([item('Salary/Wages', 1200, quarterly)], 2, 3, 20))
+      .toBeCloseTo(500 * calculateCompoundedValue(1, 3, 2), 10);
   });
 });
