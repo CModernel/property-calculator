@@ -6282,6 +6282,28 @@ gives `totalInterest` **$645,389.22**.
   Comparison table then needs no `settledAtMonth` flag at all for it. Verify by
   revert.
 
+
+- [ ] **TODO-179: `InfoTooltip` can render partly off-screen when its "?" button sits near a window edge**
+  Found during the manual browser pass over TODO-173 (2026-10-06), not caused
+  by it. `src/components/InfoTooltip.jsx` anchors the popover with `top-full
+  left-1/2 -translate-x-1/2 w-64 max-w-[90vw]` - centred on the button, fixed
+  256px wide, with nothing that keeps it inside the viewport. `max-w-[90vw]`
+  only caps the width; it does not shift the box.
+  *Measured:* the "What is this comparing?" tooltip (`App.jsx`, next to
+  "Compare Offset vs ETF Investing") has its "?" button on its own line flush
+  with the left margin, so on a ~1400px window the tooltip's left edge lands at
+  **-64px** and the first ~64px of every line are cut off. TODO-173 made that
+  tooltip longer, so it is now more noticeable, but the clipping depends only
+  on the button's position.
+  Likely affects any tooltip whose button is near either edge, and narrow
+  (mobile) widths more than desktop - TODO-17 made the page mobile
+  responsive, so check a phone-width viewport too before deciding the fix.
+  Candidate fixes, to decide: measure the popover's rect when it opens and
+  shift it back inside the viewport; or flip which side it anchors to when
+  there is not room; or move that one button next to its label's text instead
+  of on its own line. A render test in jsdom cannot see layout, so
+  verification is a manual pass across the tooltips at a few viewport widths.
+
 ---
 
 ## ⚪ LOW PRIORITY (Deprioritized - excluded from default TODO listings)
