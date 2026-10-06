@@ -48,6 +48,9 @@ export function bufferShortfallAction(liquidSavings) {
 // Arrow prefix for an indicator's "stabilizes to..." annotation - whether the
 // Stabilized reading is better, worse, or the same as Day 1, in that
 // indicator's own direction (higherIsBetter/higherIsWorse).
+// TODO-163: only the literal 'higherIsBetter' is treated as higher-is-better;
+// anything else is read as higher-is-worse. worseOf (projectedHealthCheck.js)
+// defaults the OTHER way - see the note there.
 export function stabilizedArrow(day1Value, stabilizedValue, direction) {
   if (stabilizedValue === day1Value) return '→';
   const improved = direction === 'higherIsBetter' ? stabilizedValue > day1Value : stabilizedValue < day1Value;

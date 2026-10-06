@@ -5,6 +5,7 @@ import {
   worseOf,
   DEFAULT_STABILIZATION_MONTH,
 } from './projectedHealthCheck';
+import { stabilizedArrow } from './healthCheckDisplay';
 import { calculateCompoundedValue } from './growthRate';
 import { calculateVacancyFactor } from './vacancyFactor';
 import { getGrossActiveAmount } from './grossIncome';
@@ -334,5 +335,18 @@ describe('worseOf', () => {
   it('picks the higher value when higher is worse', () => {
     expect(worseOf(30, 45, 'higherIsWorse')).toBe(45);
     expect(worseOf(45, 30, 'higherIsWorse')).toBe(45);
+  });
+
+  // TODO-163: the classification (worseOf) and the arrow (stabilizedArrow) are
+  // computed separately from the same two readings; for every valid direction
+  // the arrow must say "worse" exactly when worseOf picked the Stabilized value.
+  it.each([
+    ['higherIsBetter', 8, 5],
+    ['higherIsBetter', 5, 8],
+    ['higherIsWorse', 30, 45],
+    ['higherIsWorse', 45, 30],
+  ])('agrees with stabilizedArrow on %s (day1 %d, stabilized %d)', (direction, day1, stabilized) => {
+    const stabilizedIsWorse = worseOf(day1, stabilized, direction) === stabilized;
+    expect(stabilizedArrow(day1, stabilized, direction)).toBe(stabilizedIsWorse ? '↘' : '↗');
   });
 });

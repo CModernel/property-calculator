@@ -5428,6 +5428,37 @@ optionally reuse in the commit message when you implement it.
   on the old engine except the no-regression pins. Manual browser pass: main
   screen unchanged (108 months, $173,003, charts end at 9y). Suite 999
   passing, lint and build clean.
+
+- [x] **TODO-163: Pin worseOf's direction, and the Stabilized-worse case, at render level**
+  New `App.worseOfDirection.test.jsx`: 12 render scenarios, one "Stabilized
+  worse" and one "Stabilized better" per indicator (Emergency Buffer, Housing
+  Cost Ratio, Stress Test, Gearing, Vacancy Buffer, Rental Yield), each with the
+  two readings in different bands, asserting the badge symbol (the
+  classification of the winning reading) AND the arrow, plus one test on the
+  action text of a Stabilized deficit. Scenarios are seeded through the saved
+  scenario storage rather than clicked in. Verified by mutation on each
+  `worseOf` call site: inverting the direction fails 2-3 tests per site and
+  deleting `worseOf` fails 1-2 (only the "worse" rows can catch that - in the
+  "better" rows Day 1 already is the worse reading). All 12 mutations fail;
+  the six `stabilizedArrow` directions, mutated the same way, also fail. Before
+  this, only Housing Cost Ratio's and the Stress Test's inversions were caught
+  (by `App.grossHousingCostRatio` and `App.stressTestDeficit`) and nothing
+  caught a deleted `worseOf`.
+  Correction to the original entry: `App.healthCheckStabilized.test.jsx` does
+  NOT pin HCR (it zeroes growth so both readings are equal); only
+  `App.grossHousingCostRatio.test.jsx` does. First rendered `↗`/`↘` coverage
+  in the tree.
+  Opposite defaults (`worseOf` falls to `Math.min` unless 'higherIsWorse';
+  `stabilizedArrow` reads higher-is-worse unless 'higherIsBetter'): decided NOT
+  to make them throw - there is no error boundary, so a throw in render would
+  blank the whole app. Documented in both functions, a unit test checks the two
+  agree for every valid direction, and the render tests above would expose any
+  misspelling that changes behaviour (a typo that happens to fall through to
+  the right branch is harmless and goes uncaught). No behaviour change anywhere.
+  Review: the plan was re-checked by Opus 5.5 against HEAD (line numbers had
+  drifted ~68; found the live Simple-mode badges - for TODO-160 - and the
+  stabilization-month bug logged as TODO-181). Suite 1016 passing, lint and
+  build clean.
 ---
 
 ## 🔴 HIGH PRIORITY (Wrong dollar figures shown to the user)
@@ -6233,20 +6264,6 @@ gives `totalInterest` **$645,389.22**.
 
 
 
-- [ ] **TODO-163: Pin worseOf's direction, and the Stabilized-worse case, at render level**
-  `worseOf` is unit-tested, but at the render level its `direction` argument is
-  unpinned for Emergency Buffer, Vacancy Buffer, Gearing and Rental Yield
-  (`App.jsx:836, 889, 893, 913`). Flipping any of those makes the indicator
-  report the **optimistic** of the two readings - the one failure direction a
-  risk indicator must never have - with no test failing.
-  Related and worse: **no test anywhere exercises Stabilized being WORSE than
-  Day-1.** That is the only direction in which `worseOf` does work that
-  classifying Day-1 alone would not, so deleting `worseOf` from `App.jsx:855`
-  passes the entire suite. The three arrow branches (`→ ↗ ↘`) are equally
-  unexercised: the arrows appear in exactly one place in the tree
-  (`HealthCheckIndicator.test.jsx:58`) and are hard-coded there as a prop.
-
-
 - [ ] **TODO-165: The scenario matrix pins Day-1 classifications the panel never renders**
   `purchaseHealthCheck.scenarios.test.js` (TODO-147) is the broadest regression
   net in the Health Check cluster, but it **imports nothing from
@@ -6322,6 +6339,20 @@ gives `totalInterest` **$645,389.22**.
   grid should compare on a shared horizon, and on which objective (net worth
   instead of ETF balance alone?); (3) whether "Offset only" should mean "never
   invest" or "invest once paid off".
+
+- [ ] **TODO-181: A recurring item that ENDS never shows up in the Stabilized Health Check reading**
+  Found by the Opus review of TODO-163. `lastRecurringChangeMonth`
+  (`projectedHealthCheck.js`) treats an item's `endMonth` as the month things
+  "settle", but `isScheduleActive` still counts the item as active IN its end
+  month (`month > endMonth` is false). So a job, rent or expense that ends at
+  month N is still included in the reading that claims to be "after everything
+  scheduled has happened": the "stabilizes to..." figures describe a world
+  where the ending never occurred. Quarterly/yearly items can additionally
+  flip inactive at month 60 depending on their start month.
+  Likely fix: the stabilization month for an end is `endMonth + 1`. Verify
+  with a render scenario first (salary ending at month 24 should make the
+  Stabilized income drop), then check the Simple-mode and critical-banner
+  paths, since they consume the same classification.
 
 ---
 

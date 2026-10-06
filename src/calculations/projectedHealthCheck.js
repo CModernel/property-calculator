@@ -189,6 +189,15 @@ export function resolveProjectedFinancials(month, {
 // .js's BANDS arrays - some are declared best-first (Emergency Buffer),
 // others worst-first (Housing Cost Ratio) - so it must be resolved on the
 // raw value, in the caller's own known direction, before classifying.
+//
+// TODO-163: `direction` is a bare string and anything other than the literal
+// 'higherIsWorse' falls through to Math.min. stabilizedArrow
+// (healthCheckDisplay.js) has the OPPOSITE fall-through - only the literal
+// 'higherIsBetter' counts as higher-is-better there - so a misspelled
+// direction makes the arrow and the classification disagree, silently. It does
+// not throw on purpose: there is no error boundary, so a throw during render
+// would blank the whole app. App.worseOfDirection.test.jsx pins all six call
+// sites on both functions at render level instead.
 export function worseOf(day1Value, stabilizedValue, direction) {
   return direction === 'higherIsWorse'
     ? Math.max(day1Value, stabilizedValue)
