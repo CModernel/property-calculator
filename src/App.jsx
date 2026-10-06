@@ -124,9 +124,17 @@ const PERSONAL_EXPENSE_CATEGORIES = ['Groceries', 'Transport', 'Bills', 'Health'
 
 // Shared explanation for every monthly figure derived from a weekly amount
 // (calculateMonthlyFromWeekly, src/calculations/loan.js) - answers "why
-// doesn't this match my ×4 mental math?" (TODO-60).
+// doesn't this match my ×4 mental math?" (TODO-60). Rendered on both the
+// static Income card and the Timeline Explorer's Income Context, so the second
+// paragraph (TODO-175) explains why the two can differ by a month of growth:
+// the static cards are today's un-grown snapshot, while the projection's month
+// 1 already carries one month of compounding (calculateCompoundedValue is
+// 1-indexed). Both conventions are correct in their own context.
 const WEEKLY_TO_MONTHLY_TOOLTIP = (
-  <p>Monthly figures convert weekly amounts using the actual number of weeks per year: <strong>52 ÷ 12 ≈ 4.33</strong>, not a flat ×4.</p>
+  <>
+    <p>Monthly figures convert weekly amounts using the actual number of weeks per year: <strong>52 ÷ 12 ≈ 4.33</strong>, not a flat ×4.</p>
+    <p className="mt-2">The cards show today's situation with no growth applied. The projection starts compounding growth from its first month, so month 1 there is slightly higher - about <strong>$17/month</strong> of income on the default scenario.</p>
+  </>
 );
 
 const PropertyInvestmentCalculator = () => {

@@ -5267,6 +5267,25 @@ optionally reuse in the commit message when you implement it.
   it closed saying "the related rate/cap questions are TODO-172" - that's
   TODO-174 (172 is the unrelated `effectiveBalance`/`balance` timing entry).
   Suite 971 passing, lint and build clean.
+- [x] **TODO-175: Growth makes month 1 disagree between the static cards and the Timeline Explorer**
+  Resolved as a disclosure, no calculation change - the resolution the entry
+  itself predicted (TODO-60's 52/12 precedent). `growthRate.js` is 1-indexed on
+  purpose, and both `projectedHealthCheck.test.js` tests (`:129-135`
+  divergence, `:158-211` zero-growth equivalence) stayed green UNTOUCHED, which
+  is the proof the calculation did not move.
+  The existing `WEEKLY_TO_MONTHLY_TOOLTIP` (`App.jsx`) is rendered with the
+  identical label on both the static Income card and the Timeline Explorer's
+  Income Context - the one place both figures are visible - so it got a second
+  paragraph: cards show today with no growth applied, the projection compounds
+  from its first month, about **$17/month** of income on the defaults. The
+  wording keeps both conventions correct in their own context, consistent with
+  the TODO-152 comment on the Timeline panel.
+  Re-measured by arithmetic rather than the app: $6,994.00 x (1 + 3%/12) =
+  $7,011.48, so the $17.48 income gap holds; no commit since the plan's
+  baseline touched the growth call sites. TODO-172/173 had not landed. If 173's
+  strict top-of-loop variant lands later, re-check the $17.
+  New `src/App.monthOneGrowthDisclosure.test.jsx` (1 test, asserts the text at
+  both render sites). Suite 972 passing, lint and build clean.
 ---
 
 ## 🔴 HIGH PRIORITY (Wrong dollar figures shown to the user)
@@ -6167,22 +6186,6 @@ gives `totalInterest` **$645,389.22**.
   `savingsBalance` receives no deposits at all - so "new deposits start earning
   next month" describes an account that never gets one, while the only account
   that DOES get deposits uses the other convention.
-
-- [ ] **TODO-175: Growth makes month 1 disagree between the static cards and the Timeline Explorer**
-  `growthRate.js` applies `Math.pow(1 + rate/12, month)` with `month` 1-indexed,
-  so the engine's month 1 already carries one month of growth while the static
-  Day-1 cards carry none.
-  *Measured on the shipped default:* income **$7,011.48** (engine month 1) vs
-  **$6,994.00** (static card); property expenses $543.63 vs $542.50; personal
-  expenses $681.42 vs $680.00; month-1 net cash flow $2,485.36 vs the card's
-  $2,470.42. Roughly $17/month, on the same page.
-  This is defensible for `propertyValue` (a month really has elapsed) and
-  debatable for the first paycheque. It is ALREADY pinned deliberately in both
-  directions - `projectedHealthCheck.test.js` has both an equivalence test and a
-  divergence test for exactly this - so **do not "fix" it without reading those
-  tests first**; the likely correct outcome is a tooltip explaining the
-  difference rather than a calculation change (same resolution as TODO-60's
-  52/12 weeks-per-month tooltip).
 
 - [ ] **TODO-177: A strategy that pays off early stops being simulated, so every later figure is frozen**
   Found while fixing TODO-168, and the reason that entry's "highest property
