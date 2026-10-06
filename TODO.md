@@ -7,6 +7,36 @@ optionally reuse in the commit message when you implement it.
 
 ## ✅ Completed
 
+- [x] **TODO-185: Quarterly/yearly INCOME is still read as dollars per week**
+  Found while doing TODO-182. Income amounts are always weekly-denominated
+  (`calculateMonthlyFromWeekly`, x52/12), even when the item recurs quarterly
+  or yearly: a yearly $1,200 dividend is paid as $5,200 in its month by the
+  simulation, and averages to ~$433/month on the cards instead of $100. The
+  form label stays "Weekly Amount ($)" whatever the recurrence, and `Dividends`
+  defaults to quarterly (`incomeCategories.js`). Pinned today by
+  `offsetSimulation.test.js` ("$300/week -> $1,300/month, only in months 1 and
+  4") and `taxRateSuggestion.test.js`. Needs a decision first: treat a
+  non-monthly income amount as per-occurrence dollars (like personal
+  expenses), or keep weekly and change the label. Touches the simulation.
+  **Retrospective (PCALC-138):** user decisions - non-monthly income
+  (quarterly, yearly, one-time) is dollars PER PAYMENT, monthly stays per week;
+  saved scenarios are migrated keeping the money. New `incomeDenomination.js`:
+  `toWeeklyEquivalent` (x12/52 on per-payment items, `amountPerPerson` too)
+  applied ONCE at each consumer - offsetSimulation, resolveProjectedFinancials,
+  sumGrossAnnualIncome, App's Day-1 block and the Timeline Explorer - so every
+  weekly-based formula downstream is untouched. Form label/row unit follow the
+  recurrence; per-payment fields get a $1M ceiling (the old $50k/$5k weekly
+  caps clamped a big bonus). Storage: schema 11 and the store's FIRST
+  migration (v10 -> v11 multiplies those amounts by 52/12; any other version
+  mismatch is still discarded). Re-baselined: one-time/quarterly deposits in
+  offsetSimulation.test.js, the bonus/quarterly annual sums in
+  taxRateSuggestion.test.js, the quarterly average in projectedHealthCheck,
+  and the form-label tests. Opus review: no money-flow bug; fixed unrounded
+  migrated amounts on the rows/subtotal, the caps, tooltip/comment wording.
+  Not migrated: a git-ignored `config.local.json` written under the old
+  reading (none exists here). Pre-existing, unchanged: the simulation's tax
+  step annualises a firing month (now amount x12 for a per-payment item).
+
 - [x] **TODO-179: `InfoTooltip` can render partly off-screen when its "?" button sits near a window edge**
   Found during the manual browser pass over TODO-173 (2026-10-06), not caused
   by it. `src/components/InfoTooltip.jsx` anchors the popover with `top-full
@@ -6492,18 +6522,6 @@ gives `totalInterest` **$645,389.22**.
   grid should compare on a shared horizon, and on which objective (net worth
   instead of ETF balance alone?); (3) whether "Offset only" should mean "never
   invest" or "invest once paid off".
-
-- [ ] **TODO-185: Quarterly/yearly INCOME is still read as dollars per week**
-  Found while doing TODO-182. Income amounts are always weekly-denominated
-  (`calculateMonthlyFromWeekly`, x52/12), even when the item recurs quarterly
-  or yearly: a yearly $1,200 dividend is paid as $5,200 in its month by the
-  simulation, and averages to ~$433/month on the cards instead of $100. The
-  form label stays "Weekly Amount ($)" whatever the recurrence, and `Dividends`
-  defaults to quarterly (`incomeCategories.js`). Pinned today by
-  `offsetSimulation.test.js` ("$300/week -> $1,300/month, only in months 1 and
-  4") and `taxRateSuggestion.test.js`. Needs a decision first: treat a
-  non-monthly income amount as per-occurrence dollars (like personal
-  expenses), or keep weekly and change the label. Touches the simulation.
 
 - [ ] **TODO-186: Tooltips inside `overflow-x-auto` table wrappers are still clipped**
   Known limit of TODO-179, found by its Opus review. The viewport clamp can't

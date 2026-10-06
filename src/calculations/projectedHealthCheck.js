@@ -14,6 +14,7 @@ import {
   calculateMonthlyLandTax,
   calculateMonthlyPropertyExpenses,
 } from './loan';
+import { toWeeklyEquivalent } from './incomeDenomination';
 
 // TODO-134: several Health Check indicators only ever look at month 1, so
 // they miss both scheduled income/expense changes AND the growth rates
@@ -91,9 +92,11 @@ export function resolveProjectedFinancials(month, {
   effectiveTaxRate, salaryGrowthRate, rentGrowthRate, expenseGrowthRate, vacancyWeeksPerYear,
   loanAmount, monthlyPayment, interestRate, totalMonths,
 }) {
-  const salarySources = incomeSources.filter((i) => i.name === SALARY_INCOME_CATEGORY);
-  const rentalSources = incomeSources.filter((i) => RENTAL_INCOME_CATEGORIES.includes(i.name));
-  const otherNonRentalSources = incomeSources.filter(
+  // TODO-185: per-payment (non-monthly) amounts converted to weekly once, here.
+  const weeklyIncomeSources = toWeeklyEquivalent(incomeSources);
+  const salarySources = weeklyIncomeSources.filter((i) => i.name === SALARY_INCOME_CATEGORY);
+  const rentalSources = weeklyIncomeSources.filter((i) => RENTAL_INCOME_CATEGORIES.includes(i.name));
+  const otherNonRentalSources = weeklyIncomeSources.filter(
     (i) => i.name !== SALARY_INCOME_CATEGORY && !RENTAL_INCOME_CATEGORIES.includes(i.name)
   );
   const vacancyFactor = calculateVacancyFactor(vacancyWeeksPerYear);

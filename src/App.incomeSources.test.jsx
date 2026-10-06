@@ -51,13 +51,30 @@ describe('Income Name category-conditional rendering (TODO-56)', () => {
     expect(screen.queryByLabelText(/Shared room\?/)).not.toBeInTheDocument();
   });
 
-  it('any non-rental category shows the generic Weekly Amount field', async () => {
+  // TODO-185: the generic field is per week for monthly income and per payment
+  // otherwise - Bonus defaults to one-time, Child Support to monthly.
+  it('any non-rental category shows the generic amount field, per payment when not monthly', async () => {
     const user = userEvent.setup();
     render(<App />);
     await openIncomeForm(user);
     await user.selectOptions(screen.getByDisplayValue('Salary/Wages'), 'Bonus');
+    expect(screen.getByLabelText('Amount per payment ($)')).toBeInTheDocument();
 
+    await user.selectOptions(screen.getByDisplayValue('Bonus'), 'Child Support');
     expect(screen.getByLabelText('Weekly Amount ($)')).toBeInTheDocument();
+  });
+
+  // TODO-185: $50,000 was a generous ceiling for a weekly figure, but a real
+  // limit for a single payment - a one-time Bonus above it was clamped.
+  it('lets a per-payment amount go above the weekly ceiling', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openIncomeForm(user);
+    await user.selectOptions(screen.getByDisplayValue('Salary/Wages'), 'Bonus');
+    const field = screen.getByLabelText('Amount per payment ($)');
+    fireEvent.change(field, { target: { value: '80000' } });
+    fireEvent.blur(field);
+    expect(field.value.replace(/[^0-9]/g, '')).toBe('80000');
   });
 
   it('Other reveals the free-text custom name input', async () => {
@@ -132,8 +149,8 @@ describe('Add Income success + remove', () => {
     render(<App />);
     await openIncomeForm(user);
     await user.selectOptions(screen.getByDisplayValue('Salary/Wages'), 'Bonus');
-    fireEvent.change(screen.getByLabelText('Weekly Amount ($)'), { target: { value: '200' } });
-    fireEvent.blur(screen.getByLabelText('Weekly Amount ($)'));
+    fireEvent.change(screen.getByLabelText('Amount per payment ($)'), { target: { value: '200' } });
+    fireEvent.blur(screen.getByLabelText('Amount per payment ($)'));
     await user.click(screen.getByRole('button', { name: 'Add Income' }));
 
     expect(screen.getByText('Bonus')).toBeInTheDocument();
@@ -147,8 +164,8 @@ describe('Add Income success + remove', () => {
     render(<App />);
     await openIncomeForm(user);
     await user.selectOptions(screen.getByDisplayValue('Salary/Wages'), 'Bonus');
-    fireEvent.change(screen.getByLabelText('Weekly Amount ($)'), { target: { value: '200' } });
-    fireEvent.blur(screen.getByLabelText('Weekly Amount ($)'));
+    fireEvent.change(screen.getByLabelText('Amount per payment ($)'), { target: { value: '200' } });
+    fireEvent.blur(screen.getByLabelText('Amount per payment ($)'));
     await user.click(screen.getByRole('button', { name: 'Add Income' }));
 
     // Two rows now: the default "Salary/Wages" source plus the new "Bonus" one.

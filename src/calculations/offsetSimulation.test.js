@@ -406,8 +406,12 @@ describe('calculateLoanWithOffset', () => {
       maxMonths: 4,
     });
     const offsets = result.monthlyData.map(d => d.offset);
-    // $300/week -> $1,300/month, deposited only in month 3.
-    expect(offsets).toEqual([0, 0, 1300, 1300]);
+    // TODO-185: a one-time amount is per payment, so $300 lands as $300 (it
+    // used to be read as $300/week and deposit $1,300).
+    expect(offsets[0]).toBe(0);
+    expect(offsets[1]).toBe(0);
+    expect(offsets[2]).toBeCloseTo(300, 10);
+    expect(offsets[3]).toBeCloseTo(300, 10);
   });
 
   it('adds an open-ended ("Forever") monthly income source every month', () => {
@@ -456,8 +460,9 @@ describe('calculateLoanWithOffset', () => {
       maxMonths: 4,
     });
     const offsets = result.monthlyData.map(d => d.offset);
-    // $300/week -> $1,300/month, only in months 1 and 4 (every 3rd month from month 1).
-    expect(offsets).toEqual([1300, 1300, 1300, 2600]);
+    // TODO-185: $300 per payment (it used to be read as $300/week -> $1,300),
+    // only in months 1 and 4 (every 3rd month from month 1).
+    [300, 300, 300, 600].forEach((expected, i) => expect(offsets[i]).toBeCloseTo(expected, 10));
   });
 
   it('sums income sources and tenant rent together per month', () => {

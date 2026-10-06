@@ -48,6 +48,7 @@ import { clampToRange } from './calculations/clampToRange';
 import { safePercentage } from './calculations/safePercentage';
 import { calculateVacancyFactor } from './calculations/vacancyFactor';
 import { getGrossAveragedAmount } from './calculations/grossIncome';
+import { toWeeklyEquivalent, isPerPaymentIncome, incomeAmountUnit } from './calculations/incomeDenomination';
 import { estimateLmi } from './calculations/lmi';
 import { sumClosingCosts } from './calculations/closingCosts';
 import { getStateModule } from './calculations/states';
@@ -132,9 +133,13 @@ const PERSONAL_EXPENSE_CATEGORIES = ['Groceries', 'Transport', 'Bills', 'Health'
 // 1-indexed). Both conventions are correct in their own context. The third
 // paragraph (TODO-182) covers the other way the two differ: quarterly/yearly
 // items averaged on the cards, charged in their own month in the projection.
+// TODO-185: a per-payment income (a bonus, a yearly dividend, a one-time gift)
+// can be far larger than any weekly figure, so its field gets its own ceiling.
+const PER_PAYMENT_INCOME_MAX = 1_000_000;
+
 const WEEKLY_TO_MONTHLY_TOOLTIP = (
   <>
-    <p>Monthly figures convert weekly amounts using the actual number of weeks per year: <strong>52 ÷ 12 ≈ 4.33</strong>, not a flat ×4.</p>
+    <p>Monthly figures convert weekly amounts using the actual number of weeks per year: <strong>52 ÷ 12 ≈ 4.33</strong>, not a flat ×4. (Quarterly, yearly and one-time income is entered per payment, so it isn't converted.)</p>
     <p className="mt-2">The cards show today's situation with no growth applied. The projection starts compounding growth from its first month, so month 1 there is slightly higher - about <strong>$17/month</strong> of income on the default scenario.</p>
     <p className="mt-2">The cards spread a quarterly or yearly item evenly across the months it covers. The projection charges it in full in the month it falls, and nothing in between.</p>
   </>
@@ -617,7 +622,10 @@ const PropertyInvestmentCalculator = () => {
   // live inside incomeSources like any other entry - this just partitions
   // the same array into the two subtotals the rest of the app already
   // expects, instead of drawing from two separate arrays.
-  const weeklyIncome = getAveragedAmount(incomeSources.filter(i => !RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
+  // TODO-185: non-monthly income is entered per PAYMENT; this block (like the
+  // engine) works in weekly units, so the list is converted once here.
+  const weeklyIncomeSources = toWeeklyEquivalent(incomeSources);
+  const weeklyIncome = getAveragedAmount(weeklyIncomeSources.filter(i => !RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
   // TODO-150: rental income is haircut by the vacancy assumption here, the same
   // way offsetSimulation.js does it from month 1 and resolveProjectedFinancials
   // does it for the Stabilized reading. Before this, the Day-1 figure was the
@@ -638,7 +646,7 @@ const PropertyInvestmentCalculator = () => {
   // silently hide the indicator and the whole card. Rental Yield's VALUE used
   // to be a third site here; PCALC-100 moved it to the before-tax figure below.
   const vacancyFactor = calculateVacancyFactor(vacancyWeeksPerYear);
-  const weeklyRentalIncomeBeforeVacancy = getAveragedAmount(incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
+  const weeklyRentalIncomeBeforeVacancy = getAveragedAmount(weeklyIncomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
   const weeklyRentalIncome = weeklyRentalIncomeBeforeVacancy * vacancyFactor;
   const hasRentalIncome = weeklyRentalIncomeBeforeVacancy > 0;
   const monthlyIncome = calculateMonthlyFromWeekly(weeklyIncome);
@@ -656,8 +664,8 @@ const PropertyInvestmentCalculator = () => {
   // non-rental one, but it can never matter: TAXABLE_INCOME_CATEGORIES and
   // RENTAL_INCOME_CATEGORIES are disjoint (pinned in incomeCategories.test.js),
   // so rent is always taken at face value here.
-  const weeklyIncomeBeforeTax = getGrossAveragedAmount(incomeSources.filter(i => !RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
-  const weeklyRentalIncomeBeforeTaxAndVacancy = getGrossAveragedAmount(incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
+  const weeklyIncomeBeforeTax = getGrossAveragedAmount(weeklyIncomeSources.filter(i => !RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
+  const weeklyRentalIncomeBeforeTaxAndVacancy = getGrossAveragedAmount(weeklyIncomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, effectiveTaxRate);
   const monthlyIncomeBeforeTax = calculateMonthlyFromWeekly(weeklyIncomeBeforeTax);
   const monthlyRentalIncomeBeforeTax = calculateMonthlyFromWeekly(weeklyRentalIncomeBeforeTaxAndVacancy * vacancyFactor);
 
@@ -2980,7 +2988,7 @@ const PropertyInvestmentCalculator = () => {
               aria-expanded={showIncome}
               className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
             >
-              {showIncome ? '▾' : '▸'} Income breakdown (subtotal: ${weeklyIncome.toLocaleString()}/week)
+              {showIncome ? '▾' : '▸'} Income breakdown (subtotal: ${Math.round(weeklyIncome).toLocaleString()}/week)
             </button>
 
             {showIncome && (
@@ -3048,27 +3056,29 @@ const PropertyInvestmentCalculator = () => {
                         )}
 
                         <NumberSliderField
-                          label={newIncomeIsShared ? 'Weekly Rent per Person' : 'Weekly Rent'}
+                          label={isPerPaymentIncome(incomeSchedule.schedule)
+                            ? (newIncomeIsShared ? 'Rent per Person, per payment' : 'Rent per payment')
+                            : (newIncomeIsShared ? 'Weekly Rent per Person' : 'Weekly Rent')}
                           value={newIncomeAmount}
                           onChange={setNewIncomeAmount}
                           min={0}
-                          max={5000}
+                          max={isPerPaymentIncome(incomeSchedule.schedule) ? PER_PAYMENT_INCOME_MAX : 5000}
                           sliderMin={50}
                           sliderMax={1200}
                           step={10}
                           impact="positive"
                           prefix="$"
                         >
-                          {newIncomeIsShared && `Total: $${(newIncomeAmount * newIncomeNumPeople).toLocaleString()}/week`}
+                          {newIncomeIsShared && `Total: $${(newIncomeAmount * newIncomeNumPeople).toLocaleString()}${incomeAmountUnit(incomeSchedule.schedule)}`}
                         </NumberSliderField>
                       </>
                     ) : newIncomeCategory === 'House Rent' ? (
                       <NumberSliderField
-                        label="Weekly Rent"
+                        label={isPerPaymentIncome(incomeSchedule.schedule) ? 'Rent per payment' : 'Weekly Rent'}
                         value={newIncomeAmount}
                         onChange={setNewIncomeAmount}
                         min={0}
-                        max={5000}
+                        max={isPerPaymentIncome(incomeSchedule.schedule) ? PER_PAYMENT_INCOME_MAX : 5000}
                         sliderMin={50}
                         sliderMax={1200}
                         step={10}
@@ -3076,12 +3086,14 @@ const PropertyInvestmentCalculator = () => {
                         prefix="$"
                       />
                     ) : (
+                      // TODO-185: monthly income is entered per week, anything
+                      // else per payment (see incomeDenomination.js).
                       <NumberSliderField
-                        label="Weekly Amount ($)"
+                        label={isPerPaymentIncome(incomeSchedule.schedule) ? 'Amount per payment ($)' : 'Weekly Amount ($)'}
                         value={newIncomeAmount}
                         onChange={setNewIncomeAmount}
                         min={0}
-                        max={50000}
+                        max={isPerPaymentIncome(incomeSchedule.schedule) ? PER_PAYMENT_INCOME_MAX : 50000}
                         sliderMin={0}
                         sliderMax={5000}
                         step={10}
@@ -3102,7 +3114,7 @@ const PropertyInvestmentCalculator = () => {
                       </label>
                       {newIncomeIsGross && effectiveTaxRate > 0 && (
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          Net at {effectiveTaxRate}% tax: ${Math.round((newIncomeCategory === 'Room Rent' && newIncomeIsShared ? newIncomeAmount * newIncomeNumPeople : newIncomeAmount) * (1 - effectiveTaxRate / 100)).toLocaleString()}/week
+                          Net at {effectiveTaxRate}% tax: ${Math.round((newIncomeCategory === 'Room Rent' && newIncomeIsShared ? newIncomeAmount * newIncomeNumPeople : newIncomeAmount) * (1 - effectiveTaxRate / 100)).toLocaleString()}{incomeAmountUnit(incomeSchedule.schedule)}
                         </p>
                       )}
                     </div>
@@ -3131,8 +3143,8 @@ const PropertyInvestmentCalculator = () => {
                         {income.isShared !== undefined ? (income.isShared ? 'Shared Room' : 'Single Room') : income.name}
                       </p>
                       <p className="text-xs text-gray-600 dark:text-gray-300">
-                        ${income.amount}/week {income.isShared && <span className="text-blue-600 dark:text-blue-400 font-medium">({income.numPeople} × ${income.amountPerPerson} each) </span>}
-                        {income.isGross && <span className="text-purple-600 dark:text-purple-400 font-medium">(Gross{effectiveTaxRate > 0 && ` → net $${Math.round(income.amount * (1 - effectiveTaxRate / 100)).toLocaleString()}/week`}) </span>}
+                        ${Math.round(income.amount).toLocaleString()}{incomeAmountUnit(income)} {income.isShared && <span className="text-blue-600 dark:text-blue-400 font-medium">({income.numPeople} × ${Math.round(income.amountPerPerson).toLocaleString()} each) </span>}
+                        {income.isGross && <span className="text-purple-600 dark:text-purple-400 font-medium">(Gross{effectiveTaxRate > 0 && ` → net $${Math.round(income.amount * (1 - effectiveTaxRate / 100)).toLocaleString()}${incomeAmountUnit(income)}`}) </span>}
                         • {formatScheduleLabel(income)}
                       </p>
                     </div>
@@ -4189,9 +4201,11 @@ const PropertyInvestmentCalculator = () => {
                             // headed "at Month {timelineMonth}", so unlike the Day-1 Health
                             // Check figures (TODO-150), there's no reading under which
                             // un-grown income is correct here.
-                            const salarySourcesHere = incomeSources.filter(i => i.name === SALARY_INCOME_CATEGORY);
-                            const rentalSourcesHere = incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name));
-                            const otherSourcesHere = incomeSources.filter(i => i.name !== SALARY_INCOME_CATEGORY && !RENTAL_INCOME_CATEGORIES.includes(i.name));
+                            // TODO-185: per-payment amounts to weekly, as in the Day-1 block.
+                            const weeklySourcesHere = toWeeklyEquivalent(incomeSources);
+                            const salarySourcesHere = weeklySourcesHere.filter(i => i.name === SALARY_INCOME_CATEGORY);
+                            const rentalSourcesHere = weeklySourcesHere.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name));
+                            const otherSourcesHere = weeklySourcesHere.filter(i => i.name !== SALARY_INCOME_CATEGORY && !RENTAL_INCOME_CATEGORIES.includes(i.name));
                             const rentalIncomeHere = calculateMonthlyFromWeekly(getActiveAmountWithGrowth(rentalSourcesHere, timelineMonth, rentGrowthRate, effectiveTaxRate) * calculateVacancyFactor(vacancyWeeksPerYear));
                             const personalIncomeHere = calculateMonthlyFromWeekly(
                               getActiveAmountWithGrowth(salarySourcesHere, timelineMonth, salaryGrowthRate, effectiveTaxRate)
@@ -4220,7 +4234,7 @@ const PropertyInvestmentCalculator = () => {
                               if (status === 'future') return null;
                               return (
                                 <p key={`income-${inc.id}`} className={`truncate ${status === 'past' ? 'text-gray-400 dark:text-gray-500' : 'text-green-700 dark:text-green-400'}`}>
-                                  • {inc.isShared !== undefined ? `${inc.isShared ? `Shared (${inc.numPeople} × $${inc.amountPerPerson})` : 'Single Room'}` : inc.name}
+                                  • {inc.isShared !== undefined ? `${inc.isShared ? `Shared (${inc.numPeople} × $${Math.round(inc.amountPerPerson).toLocaleString()})` : 'Single Room'}` : inc.name}
                                   {status === 'past' && ' (Done)'}
                                 </p>
                               );

@@ -15,6 +15,7 @@ import { calculateCompoundedValue } from './growthRate';
 import { calculateVacancyFactor } from './vacancyFactor';
 import { calculateIncomeTax, calculateMedicareLevy } from './auTaxBrackets';
 import { getGrossActiveAmount, getGrossActiveAmountWithGrowth } from './grossIncome';
+import { toWeeklyEquivalent } from './incomeDenomination';
 
 export function calculateLoanWithOffset({
   contributions,
@@ -196,12 +197,15 @@ export function calculateLoanWithOffset({
   // iteration. Three-way: Salary/Wages grows at salaryGrowthRate, rental
   // (House Rent/Room Rent) grows at rentGrowthRate independently, and
   // everything else (Dividends, Bonus, etc.) resolves plain as before.
-  const salaryIncomeSources = incomeSources.filter(i => i.name === SALARY_INCOME_CATEGORY);
-  const rentalIncomeSources = incomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name));
+  // TODO-185: per-payment (non-monthly) amounts converted to weekly once,
+  // here, so every weekly-based formula below reads them correctly.
+  const weeklyIncomeSources = toWeeklyEquivalent(incomeSources);
+  const salaryIncomeSources = weeklyIncomeSources.filter(i => i.name === SALARY_INCOME_CATEGORY);
+  const rentalIncomeSources = weeklyIncomeSources.filter(i => RENTAL_INCOME_CATEGORIES.includes(i.name));
   // TODO-95: a flat multiplier for the whole simulation - not a per-month
   // accumulator, just applied to rental income below.
   const vacancyFactor = calculateVacancyFactor(vacancyWeeksPerYear);
-  const otherIncomeSources = incomeSources.filter(
+  const otherIncomeSources = weeklyIncomeSources.filter(
     i => i.name !== SALARY_INCOME_CATEGORY && !RENTAL_INCOME_CATEGORIES.includes(i.name)
   );
 
@@ -544,7 +548,8 @@ export function calculateLoanWithOffset({
         // rather than invented income, same reasoning grossIncome.js already
         // documents for the two Health Check indicators that use it.
         //
-        // Annualized (×52 for the weekly-stored amounts, ×12 for the
+        // Annualized (×52 for the weekly amounts - per-payment income already
+        // converted by toWeeklyEquivalent above - ×12 for the
         // loss) to consult the AU_TAX_BRACKETS table, then divided back to a
         // monthly figure - the same "applied smoothly every month (PAYG-
         // style), not as an annual tax return" simplification already

@@ -42,17 +42,53 @@ const STORAGE_KEY = 'propertyCalculator.scenario';
 // offsetAllocationPct below 100 described a strategy this app can no longer
 // express, and silently reinterpreting it would change the user's projection
 // without telling them.
-const SCHEMA_VERSION = 10;
+// Bumped to 11 in TODO-185: quarterly, yearly and one-time income amounts are
+// now dollars PER PAYMENT instead of dollars per week (monthly income stays
+// per week). Unlike every bump above, this one MIGRATES instead of
+// discarding: the shape didn't change, only what one number means, and the
+// conversion is exact - multiplying those amounts by 52/12 reproduces the
+// money the old reading already deposited, so no saved projection moves. The
+// row simply starts showing the per-payment figure the simulation was using.
+const SCHEMA_VERSION = 11;
+
+const PER_WEEK_TO_PER_MONTH = 52 / 12;
+
+export function migrateV10toV11(data) {
+  if (!Array.isArray(data.incomeSources)) return data;
+  return {
+    ...data,
+    incomeSources: data.incomeSources.map((item) => {
+      if (item.recurrence === 'monthly') return item;
+      const migrated = { ...item, amount: item.amount * PER_WEEK_TO_PER_MONTH };
+      if (item.amountPerPerson != null) migrated.amountPerPerson = item.amountPerPerson * PER_WEEK_TO_PER_MONTH;
+      return migrated;
+    }),
+  };
+}
+
+// Keyed by the version a migration upgrades FROM. Only exact, lossless
+// reinterpretations belong here; a change that drops or reshapes user data
+// still bumps without an entry, and that version keeps being discarded.
+const MIGRATIONS = { 10: migrateV10toV11 };
 
 // A version mismatch means the saved shape no longer matches what this
 // version of the app expects - discard rather than attempt a migration,
-// since a half-migrated state is worse than starting from defaults.
+// since a half-migrated state is worse than starting from defaults. The one
+// exception is an unbroken chain of MIGRATIONS up to the expected version.
 export function parseScenarioPayload(raw, expectedVersion = SCHEMA_VERSION) {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw);
-    if (parsed?.version !== expectedVersion) return null;
-    return parsed.data ?? null;
+    let data = parsed?.data ?? null;
+    if (data === null) return null;
+    let version = parsed.version;
+    while (version !== expectedVersion) {
+      const migrate = typeof version === 'number' && version < expectedVersion ? MIGRATIONS[version] : undefined;
+      if (!migrate) return null;
+      data = migrate(data);
+      version += 1;
+    }
+    return data;
   } catch {
     return null;
   }

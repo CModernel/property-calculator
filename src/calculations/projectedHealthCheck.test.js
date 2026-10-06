@@ -364,8 +364,10 @@ describe('resolveProjectedFinancials', () => {
       incomeSources: [{ name: 'Salary/Wages', amount: 1200, startMonth: 1, recurrence: 'quarterly', endMonth: 360, isGross: false }],
     };
     const result = resolveProjectedFinancials(60, params);
-    expect(result.monthlyIncome).toBeCloseTo(400 * 52 / 12, 10);
-    expect(result.monthlyIncomeBeforeTax).toBeCloseTo(500 * 52 / 12, 10);
+    // TODO-185: $1,200 per quarterly payment is $400 a month ($500 grossed up
+    // at 20%) - no longer read as $1,200/week.
+    expect(result.monthlyIncome).toBeCloseTo(400, 10);
+    expect(result.monthlyIncomeBeforeTax).toBeCloseTo(500, 10);
   });
 
   it('leaves the payment/rate unchanged when no rate change is scheduled', () => {

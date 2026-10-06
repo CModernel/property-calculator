@@ -30,16 +30,16 @@ describe('sumGrossAnnualIncome', () => {
   it('counts a one-time gross bonus once, not 52 times', () => {
     const bonus = { id: 3, name: 'Bonus', amount: 5000, startMonth: 1, recurrence: 'none', isGross: true };
     const annual = sumGrossAnnualIncome([bonus]);
-    expect(annual).toBeCloseTo(5000 * 52 / 12, 5);
-    expect(annual).toBeLessThan(5000 * 52);
+    // TODO-185: one-time income is per payment - $5,000 is $5,000 (it used to
+    // be read as $5,000/week, i.e. ~$21,667).
+    expect(annual).toBeCloseTo(5000, 5);
   });
 
   it('annualises a quarterly gross item to the same figure the simulation implies', () => {
-    // Active in months 1, 4, 7, 10 - four occurrences, each contributing the
-    // weekly amount converted to a month (x52/12), matching getActiveAmount +
-    // calculateMonthlyFromWeekly everywhere else in the app.
+    // Active in months 1, 4, 7, 10 - four payments of $1,200 each (TODO-185:
+    // per payment, no longer read as $1,200/week).
     const quarterly = forever({ recurrence: 'quarterly', amount: 1200 });
-    expect(sumGrossAnnualIncome([quarterly])).toBeCloseTo(4 * 1200 * 52 / 12, 5);
+    expect(sumGrossAnnualIncome([quarterly])).toBeCloseTo(4 * 1200, 5);
   });
 
   it('excludes an item whose schedule has not started within the first year', () => {

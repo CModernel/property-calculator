@@ -2,6 +2,7 @@ import { getActiveAmount } from './recurringAmount';
 import { calculateMonthlyFromWeekly } from './loan';
 import { calculateEffectiveTaxRate, AU_TAX_BRACKETS, calculateMarginalMedicareLevyRate } from './auTaxBrackets';
 import { RENTAL_INCOME_CATEGORIES } from './incomeCategories';
+import { toWeeklyEquivalent } from './incomeDenomination';
 
 // TODO-122: turns the user's own entered income into a suggested Effective Tax
 // Rate. Kept separate from auTaxBrackets.js so that file stays pure ATO data,
@@ -15,7 +16,8 @@ const MONTHS_PER_YEAR = 12;
 // `amount` untouched (getNetAmount converts at read time only), so this figure
 // is exact rather than reverse-engineered.
 export function sumGrossAnnualIncome(incomeSources) {
-  const grossItems = incomeSources.filter((item) => item.isGross);
+  // TODO-185: per-payment (non-monthly) amounts converted to weekly once, here.
+  const grossItems = toWeeklyEquivalent(incomeSources).filter((item) => item.isGross);
 
   // Summing the app's OWN monthly figure across a year, rather than inventing a
   // per-recurrence annualisation rule. This is correct for every recurrence by
