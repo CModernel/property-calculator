@@ -951,6 +951,16 @@ const PropertyInvestmentCalculator = () => {
   const stabilizedNetBalance = calculateMonthlyNetBalance(projected.monthlyIncome, projected.monthlyRentalIncome, projected.monthlyPersonalExpenses, projectedTotalPropertyCost);
   const stabilizedAlreadyInDeficit = stabilizedNetBalance < 0;
 
+  // TODO-160: the "stabilizes to" annotation for the three indicators Simple
+  // mode also shows, composed ONCE so the two modes cannot disagree. The
+  // direction literal must match the one passed to worseOf for the same
+  // indicator above: worseOf and stabilizedArrow default to opposite branches
+  // on a misspelled direction, so the arrow and the badge would silently
+  // disagree (App.worseOfDirection.test.jsx pins both).
+  const emergencyBufferStabilizedNote = `${stabilizedArrow(emergencyBufferMonths, stabilizedEmergencyBufferMonths, 'higherIsBetter')} stabilizes to ${bufferDisplay(stabilizedEmergencyBufferMonths, liquidSavings)}`;
+  const housingCostRatioStabilizedNote = `${stabilizedArrow(housingCostRatio, stabilizedHousingCostRatio, 'higherIsWorse')} stabilizes to ${housingCostRatioDisplay(stabilizedHousingCostRatio)}`;
+  const stressTestStabilizedNote = `${stabilizedArrow(stressTestSurvivedDelta, stabilizedStressTestSurvivedDelta, 'higherIsBetter')} stabilizes to ${stressTestDisplay(stabilizedStressTestSurvivedDelta, stabilizedAlreadyInDeficit)}`;
+
   const upfrontCostRatio = calculateUpfrontCostRatio(totalCashRequired, downPayment, propertyPrice);
   const upfrontCostRatioClass = classifyUpfrontCostRatio(upfrontCostRatio);
 
@@ -1385,9 +1395,10 @@ const PropertyInvestmentCalculator = () => {
           monthlyRentalIncome={monthlyRentalIncome}
           totalPropertyCost={totalPropertyCost}
           monthlyPersonalExpenses={monthlyPersonalExpenses}
-          housingCostRatio={housingCostRatio} housingCostRatioClass={housingCostRatioClass} totalMonthlyIncomeBeforeTax={totalMonthlyIncomeBeforeTax}
-          stressTestSurvivedDelta={stressTestSurvivedDelta} stressTestClass={stressTestClass} alreadyInDeficitAtCurrentRate={alreadyInDeficitAtCurrentRate}
-          emergencyBufferMonths={emergencyBufferMonths} emergencyBufferClass={emergencyBufferClass} liquidSavings={liquidSavings}
+          housingCostRatio={housingCostRatio} housingCostRatioClass={housingCostRatioClass} housingCostRatioStabilizedNote={housingCostRatioStabilizedNote} totalMonthlyIncomeBeforeTax={totalMonthlyIncomeBeforeTax}
+          stressTestSurvivedDelta={stressTestSurvivedDelta} stressTestClass={stressTestClass} stressTestStabilizedNote={stressTestStabilizedNote} alreadyInDeficitAtCurrentRate={alreadyInDeficitAtCurrentRate}
+          emergencyBufferMonths={emergencyBufferMonths} emergencyBufferClass={emergencyBufferClass} emergencyBufferStabilizedNote={emergencyBufferStabilizedNote} liquidSavings={liquidSavings}
+          stabilizationMonth={stabilizationMonth}
           incomeSourceCount={incomeSources.length}
           personalExpenseCount={personalExpenseItems.length}
           offsetContributionCount={offsetContributions.length}
@@ -3612,7 +3623,7 @@ const PropertyInvestmentCalculator = () => {
                   label="Emergency Buffer"
                   tooltipLabel="What is the Emergency Buffer?"
                   valueDisplay={bufferDisplay(emergencyBufferMonths, liquidSavings)}
-                  secondaryValueDisplay={`${stabilizedArrow(emergencyBufferMonths, stabilizedEmergencyBufferMonths, 'higherIsBetter')} stabilizes to ${bufferDisplay(stabilizedEmergencyBufferMonths, liquidSavings)}`}
+                  secondaryValueDisplay={emergencyBufferStabilizedNote}
                   classification={liquidSavings < 0 ? { ...emergencyBufferClass, action: bufferShortfallAction(liquidSavings) } : emergencyBufferClass}
                 >
                   <p>Your savings left after settlement, divided by your total monthly outgoings (property + personal expenses) - how many months you could cover if income stopped entirely.</p>
@@ -3625,7 +3636,7 @@ const PropertyInvestmentCalculator = () => {
                   label="Housing Cost Ratio"
                   tooltipLabel="What is the Housing Cost Ratio?"
                   valueDisplay={housingCostRatioDisplay(housingCostRatio)}
-                  secondaryValueDisplay={`${stabilizedArrow(housingCostRatio, stabilizedHousingCostRatio, 'higherIsWorse')} stabilizes to ${housingCostRatioDisplay(stabilizedHousingCostRatio)}`}
+                  secondaryValueDisplay={housingCostRatioStabilizedNote}
                   classification={housingCostRatioClass}
                 >
                   <p>Total property cost (loan repayment + property expenses) as a share of your total <strong>before-tax</strong> monthly income.</p>
@@ -3642,7 +3653,7 @@ const PropertyInvestmentCalculator = () => {
                   label="Interest Rate Stress Test"
                   tooltipLabel="What is the Interest Rate Stress Test?"
                   valueDisplay={stressTestDisplay(stressTestSurvivedDelta, alreadyInDeficitAtCurrentRate)}
-                  secondaryValueDisplay={`${stabilizedArrow(stressTestSurvivedDelta, stabilizedStressTestSurvivedDelta, 'higherIsBetter')} stabilizes to ${stressTestDisplay(stabilizedStressTestSurvivedDelta, stabilizedAlreadyInDeficit)}`}
+                  secondaryValueDisplay={stressTestStabilizedNote}
                   classification={stressTestClass}
                 >
                   <p>Recalculates your repayment at today's rate plus 1/2/3 percentage points, and reports the largest rise your current cash flow still survives without going into deficit.</p>

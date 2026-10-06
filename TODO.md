@@ -5483,6 +5483,31 @@ optionally reuse in the commit message when you implement it.
   faithful; fixed a fragile `Math.round` pin on two HCR values within 0.05 of
   a .5 boundary (now 2-decimal `toBeCloseTo`), and a house-strata gating
   divergence. Suite 1030 passing, lint and build clean.
+
+- [x] **TODO-160: Simple mode pairs a Day-1 value with a Stabilized-derived classification and explains neither**
+  User decision (taken on the plan): show the "stabilizes to" note in Simple
+  too, as Advanced does. The note for the three shared indicators (Emergency
+  Buffer, Housing Cost Ratio, Stress Test) is now composed ONCE in `App.jsx`
+  (`*StabilizedNote`, same direction literal as the matching `worseOf`) and
+  handed to both modes, so they cannot disagree; Advanced's three inline
+  strings became those constants (no behaviour change). Simple appends
+  `(month N)` itself, because it has no tooltip on these rows to say which
+  month "stabilizes" means. `HealthCheckIndicator` untouched; no figure or
+  band changed. The `SimpleModeView` props comment, which claimed the
+  annotations were already there, is corrected.
+  So the symptom is gone: `🔴 Survives +3%` now reads
+  `↘ stabilizes to Already in deficit (month 300)` beneath it.
+  NOTE for TODO-166: TODO-135's claim that Simple "keeps TODO-134's
+  annotations" is now TRUE - do not "correct" it to the old state; the other
+  eleven corrections are unaffected.
+  Tests: new `App.simpleModeStabilized.test.jsx` (14) - badge + arrow + month
+  for the six shared Stabilized worse/better cases, the ticket's own
+  Survives+3%/deficit symptom, and Simple-vs-Advanced parity per case; the
+  scenario recipes moved to `src/test/healthCheckScenarios.js` and are shared
+  with `App.worseOfDirection.test.jsx`. Revert check: removing the notes from
+  Simple fails all 14; flipping any note's direction literal fails 2-3.
+  Manual browser pass: three grey lines under the badges, hierarchy of the
+  view unchanged.
 ---
 
 ## 🔴 HIGH PRIORITY (Wrong dollar figures shown to the user)
@@ -6272,28 +6297,13 @@ gives `totalInterest` **$645,389.22**.
 
 
 
-- [ ] **TODO-160: Simple mode pairs a Day-1 value with a Stabilized-derived classification and explains neither**
-  Simple receives Day-1 VALUES (`housingCostRatio`, `stressTestSurvivedDelta`,
-  `emergencyBufferMonths`) but `worseOf(Day-1, Stabilized)` CLASSIFICATIONS
-  (`App.jsx:836, 855, 869`), and passes no `secondaryValueDisplay` - grepped,
-  zero occurrences in `SimpleModeView.jsx`. So the number and its own action
-  text can assert opposite things: 🔴 "Survives +3%" above *"Already in deficit
-  today..."*, or 🔴 "32%" where the app's own band table calls 30-40% "Good".
-  Advanced avoids this by always rendering the "stabilizes to" annotation.
-  Note TODO-135's entry claims the opposite - *"TODO-134 annotations intact"* -
-  which is one of the corrections listed in TODO-166.
-  Needs a decision before a fix: show the annotation in Simple (against its
-  simplify-the-view premise), show the Stabilized value instead, or classify
-  Simple on Day-1 alone (which would under-report risk). Analysis first.
-
-
-
 - [ ] **TODO-166: Apply the twelve documented corrections to existing TODO.md entries**
   The Phase 2C audit compared what fifteen Health Check entries CLAIM against
   what shipped, and confirmed twelve false or incomplete claims - each with
   proposed correction text already written, recorded in `TODO-Review-Plan.md`.
   The ones that would actively mislead a reader: TODO-135 claims Simple mode
-  keeps TODO-134's annotations (it renders none); TODO-148 describes its fix
+  keeps TODO-134's annotations (it rendered none until TODO-160 - now true, so
+  leave that claim alone); TODO-148 describes its fix
   without saying it reached only Advanced, while its sibling TODO-149 DOES record
   its Simple-mode half, so the asymmetry reads as "Simple wasn't affected";
   TODO-95 states "default 0 (no vacancy modeled)" when the shipped default is 2

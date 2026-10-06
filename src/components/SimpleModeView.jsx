@@ -44,11 +44,14 @@ const SimpleModeView = ({
   monthlyRentalIncome,
   totalPropertyCost,
   monthlyPersonalExpenses,
-  // Health Check subset (classifications already computed, incl. TODO-134
-  // Day-1/Stabilized annotations)
-  housingCostRatio, housingCostRatioClass, totalMonthlyIncomeBeforeTax,
-  stressTestSurvivedDelta, stressTestClass, alreadyInDeficitAtCurrentRate,
-  emergencyBufferMonths, emergencyBufferClass, liquidSavings,
+  // Health Check subset. Values are Day 1's; the classifications are the worse
+  // of Day 1 and Stabilized (TODO-134), so each indicator also takes the
+  // pre-composed "stabilizes to" note (TODO-160) that explains when the badge
+  // and the number disagree - the very string Advanced renders.
+  housingCostRatio, housingCostRatioClass, housingCostRatioStabilizedNote, totalMonthlyIncomeBeforeTax,
+  stressTestSurvivedDelta, stressTestClass, stressTestStabilizedNote, alreadyInDeficitAtCurrentRate,
+  emergencyBufferMonths, emergencyBufferClass, emergencyBufferStabilizedNote, liquidSavings,
+  stabilizationMonth,
   // Disclosure of what's included but not editable here
   incomeSourceCount,
   personalExpenseCount,
@@ -56,6 +59,9 @@ const SimpleModeView = ({
   activeAdvancedFeatures,
   onSwitchToAdvanced,
 }) => {
+  // Advanced explains "month N" in a tooltip; Simple deliberately has none on
+  // these rows, so the note names its own month instead (TODO-160).
+  const stabilizedNote = (note) => (note ? `${note} (month ${stabilizationMonth})` : undefined);
   const totalMonthlyIncome = monthlyIncome + monthlyRentalIncome;
   const totalMonthlyCosts = totalPropertyCost + monthlyPersonalExpenses;
 
@@ -166,6 +172,7 @@ const SimpleModeView = ({
           label="Housing Cost Ratio"
           tooltipLabel="Why doesn't this match my own arithmetic?"
           valueDisplay={housingCostRatioDisplay(housingCostRatio)}
+          secondaryValueDisplay={stabilizedNote(housingCostRatioStabilizedNote)}
           classification={housingCostRatioClass}
         >
           <p>Measured against your <strong>before-tax</strong> income, not the net figure shown above, because the thresholds are the standard housing-stress benchmark and that benchmark is defined on gross income.</p>
@@ -174,11 +181,13 @@ const SimpleModeView = ({
         <HealthCheckIndicator
           label="Interest Rate Stress Test"
           valueDisplay={stressTestDisplay(stressTestSurvivedDelta, alreadyInDeficitAtCurrentRate)}
+          secondaryValueDisplay={stabilizedNote(stressTestStabilizedNote)}
           classification={stressTestClass}
         />
         <HealthCheckIndicator
           label="Emergency Buffer"
           valueDisplay={bufferDisplay(emergencyBufferMonths, liquidSavings)}
+          secondaryValueDisplay={stabilizedNote(emergencyBufferStabilizedNote)}
           classification={liquidSavings < 0
             ? { ...emergencyBufferClass, action: bufferShortfallAction(liquidSavings) }
             : emergencyBufferClass}
