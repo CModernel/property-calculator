@@ -27,9 +27,12 @@ export const CASES = [
   { name: 'Housing Cost Ratio, Stabilized worse', label: 'Housing Cost Ratio', scenario: { ...ZERO_GROWTH, ...rateChange(8, 2) }, badge: '🔴 44%', arrow: '↘' },
   // Shipped defaults: salary growth outpaces the fixed repayment, so the ratio improves.
   { name: 'Housing Cost Ratio, Stabilized better', label: 'Housing Cost Ratio', scenario: {}, badge: '🟠 44%', arrow: '↗' },
-  // $800k loan at 6%, rising to 8% at month 300 with ~61 months left: Day 1
-  // survives +3 points, Stabilized is already in deficit.
-  { name: 'Stress Test, Stabilized worse', label: 'Interest Rate Stress Test', scenario: { ...ZERO_GROWTH, downPayment: 50000, interestRate: 6, ...rateChange(8, 300), incomeSources: [SALARY, { ...SALARY, id: 2, amount: 1500 }] }, badge: '🔴 Survives +3%', arrow: '↘' },
+  // $800k loan at 6% with a second salary of $450/wk: Day 1 survives +3
+  // points; a jump to 12% at month 24 puts Stabilized in deficit. TODO-184
+  // retired the old "8% at month 300" recipe - it only went into deficit
+  // because the re-amortization spread the ORIGINAL $800k over the last 61
+  // months; on the ~$250k really owed by then, 8% is comfortable.
+  { name: 'Stress Test, Stabilized worse', label: 'Interest Rate Stress Test', scenario: { ...ZERO_GROWTH, downPayment: 50000, interestRate: 6, ...rateChange(12, 24), incomeSources: [SALARY, { ...SALARY, id: 2, amount: 450 }] }, badge: '🔴 Survives +3%', arrow: '↘' },
   // $2,500/mo of personal spending is tight today (survives +1 point only); a cut to 4% at month 2 fixes that.
   { name: 'Stress Test, Stabilized better', label: 'Interest Rate Stress Test', scenario: { ...rateChange(4, 2), personalExpenseItems: [groceries(2500)] }, badge: '🟠 Survives +1%', arrow: '↗' },
   // Rent $950/wk: Day 1 cash-flow positive, then 8% at month 2 flips it negative.

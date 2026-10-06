@@ -7,6 +7,26 @@ optionally reuse in the commit message when you implement it.
 
 ## ✅ Completed
 
+- [x] **TODO-184: Stabilized re-amortization uses the ORIGINAL loan amount, so a late rate change yields an absurd payment**
+  Found by the Opus review of TODO-183. `resolveProjectedFinancials` re-amortizes
+  the original `loanAmount` over `totalMonths - month + 1`, not the balance still
+  owed at that month. A rate change at month 100 of a 120-month loan gives
+  $40,951/month on $800k; capped at month 120 (TODO-183) the remaining term is 1
+  and the payment is the whole loan. Fix idea: amortize the remaining balance
+  (or treat month >= term as "loan finished"). Needs a decision on which balance.
+  **Retrospective (PCALC-133):** user chose the theoretical scheduled balance
+  (no offset). `resolveProjectedFinancials` now walks the rate schedule month
+  by month and re-amortizes the balance still owed at each change (TODO-57
+  timing); it also exposes `amortizedPrincipal`, which the Stabilized Stress
+  Test uses with `remainingMonths`. Also fixed: a rate that rose and came back
+  used to read as "no change". Re-baselined because the old figures depended on
+  the bug: the 'Stress Test, Stabilized worse' recipe (8% at month 300 ->
+  12% at month 24, second salary $450) and its matrix row, the Simple-mode note
+  month, and App.stressTestStabilizedTerm.test.jsx (now 10% at month 240,
+  salary $1,550/wk, seeded). Every month-2 recipe kept its badges. Mutations
+  (original loan in the walk, in the stress principal, full term in the stress)
+  each fail a test. Opus review: logic OK, comment figures corrected.
+
 - [x] **TODO-183: The Stabilized month is not capped at the loan term**
   Found by the Opus review of TODO-181. Schedule sliders run to month 360
   whatever the loan term (1-30 years) and `findStabilizationMonth` never caps
@@ -6409,14 +6429,6 @@ gives `totalInterest` **$645,389.22**.
   items to amount / interval for the point-in-time health readings, or keep
   Day 1 as is and average only the Stabilized reading. Analysis before code;
   check how the monthly-cash-flow cards treat the same items for consistency.
-
-- [ ] **TODO-184: Stabilized re-amortization uses the ORIGINAL loan amount, so a late rate change yields an absurd payment**
-  Found by the Opus review of TODO-183. `resolveProjectedFinancials` re-amortizes
-  the original `loanAmount` over `totalMonths - month + 1`, not the balance still
-  owed at that month. A rate change at month 100 of a 120-month loan gives
-  $40,951/month on $800k; capped at month 120 (TODO-183) the remaining term is 1
-  and the payment is the whole loan. Fix idea: amortize the remaining balance
-  (or treat month >= term as "loan finished"). Needs a decision on which balance.
 
 ---
 

@@ -10,6 +10,7 @@ import { calculateCompoundedValue } from './growthRate';
 import { calculateVacancyFactor } from './vacancyFactor';
 import { getGrossActiveAmount } from './grossIncome';
 import { RENTAL_INCOME_CATEGORIES } from './incomeCategories';
+import { calculateMonthlyPayment, calculateMonthlyRate } from './loan';
 
 // getActiveAmountWithGrowth's multiplier is `(1 + monthlyRate) ** month` -
 // already one month of compounding at month 1, not a no-op (matches
@@ -351,7 +352,7 @@ describe('resolveProjectedFinancials', () => {
     expect(result.interestRate).toBe(SNAPSHOT_PARAMS.interestRate);
   });
 
-  it('re-amortizes on the ORIGINAL loan amount when a scheduled rate change applies by this month', () => {
+  it('re-amortizes on the scheduled balance when a rate change applies by this month', () => {
     const params = {
       ...SNAPSHOT_PARAMS,
       interestRateField: { base: 6, changes: [{ id: 1, amount: 7, startMonth: 12 }] },
@@ -362,6 +363,57 @@ describe('resolveProjectedFinancials', () => {
     expect(after.interestRate).toBe(7);
     expect(after.monthlyPayment).not.toBe(SNAPSHOT_PARAMS.monthlyPayment);
     expect(after.monthlyPayment).toBeGreaterThan(before.monthlyPayment);
+  });
+
+  // TODO-184: a lender re-amortizes what is STILL OWED over the term left, not
+  // the original loan. Balances here come from the closed-form amortization
+  // formula, independent of the month-by-month walk under test.
+  describe('the balance a rate change re-amortizes (TODO-184)', () => {
+    const LOAN = 800_000;
+    const TERM = 120;
+    const r6 = calculateMonthlyRate(6);
+    const DAY1_PAYMENT = calculateMonthlyPayment(LOAN, r6, TERM);
+    const params = (changes) => ({
+      ...SNAPSHOT_PARAMS,
+      loanAmount: LOAN, monthlyPayment: DAY1_PAYMENT, interestRate: 6, totalMonths: TERM,
+      interestRateField: { base: 6, changes },
+    });
+    // Balance owed after `k` installments of `payment` at monthly rate `r`.
+    const balanceAfter = (principal, r, payment, k) =>
+      principal * (1 + r) ** k - payment * ((1 + r) ** k - 1) / r;
+
+    it('uses the balance left at the change, not the original loan', () => {
+      const result = resolveProjectedFinancials(100, params([{ id: 1, amount: 8, startMonth: 100 }]));
+      const owed = balanceAfter(LOAN, r6, DAY1_PAYMENT, 99);
+      expect(result.amortizedPrincipal).toBeCloseTo(owed, 4);
+      expect(result.remainingMonths).toBe(21);
+      expect(result.monthlyPayment).toBeCloseTo(calculateMonthlyPayment(owed, calculateMonthlyRate(8), 21), 4);
+      // The old code put the full $800k into 21 months: ~$40,951.
+      expect(result.monthlyPayment).toBeLessThan(DAY1_PAYMENT * 1.1);
+    });
+
+    it('a change in the last month of the loan costs about one installment, not the loan', () => {
+      const result = resolveProjectedFinancials(120, params([{ id: 1, amount: 8, startMonth: 120 }]));
+      expect(result.remainingMonths).toBe(1);
+      expect(result.monthlyPayment).toBeLessThan(DAY1_PAYMENT * 1.1);
+    });
+
+    it('a rate that rises and then returns still carries the re-amortized payment', () => {
+      const result = resolveProjectedFinancials(110, params([
+        { id: 1, amount: 8, startMonth: 50 },
+        { id: 2, amount: 6, startMonth: 100 },
+      ]));
+      expect(result.interestRate).toBe(6);
+      expect(result.remainingMonths).toBe(21);
+      expect(result.monthlyPayment).not.toBeCloseTo(DAY1_PAYMENT, 2);
+    });
+
+    it('leaves principal and term untouched with no rate schedule', () => {
+      const result = resolveProjectedFinancials(100, { ...params([]), interestRateField: null });
+      expect(result.amortizedPrincipal).toBe(LOAN);
+      expect(result.remainingMonths).toBe(TERM);
+      expect(result.monthlyPayment).toBe(DAY1_PAYMENT);
+    });
   });
 });
 

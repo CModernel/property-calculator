@@ -56,7 +56,7 @@ describe('Simple mode explains the Stabilized reading behind its badges (TODO-16
     await renderSimple(scenario);
 
     expect(badge('Interest Rate Stress Test')).toBe('🔴 Survives +3%');
-    expect(note('Interest Rate Stress Test')).toBe('↘ stabilizes to Already in deficit (month 300)');
+    expect(note('Interest Rate Stress Test')).toBe('↘ stabilizes to Already in deficit (month 24)');
     expect(indicatorRow('Interest Rate Stress Test').textContent).toMatch(/Already in deficit today/);
   });
 

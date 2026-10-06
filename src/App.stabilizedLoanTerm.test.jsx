@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import './test/reactTestSetup';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { seedScenario } from './test/healthCheckScenarios';
 
 // TODO-183: schedule sliders run to month 360 whatever the loan term, so the
@@ -45,5 +45,16 @@ describe('Stabilized month past the loan term (TODO-183)', () => {
     await renderShortTerm();
     const tooltip = row('Housing Cost Ratio').querySelector('[role="tooltip"]');
     expect(tooltip.textContent).toMatch(/reflects month 120 /);
+  });
+
+  // TODO-184: with the reading capped at month 120 and the 8% change active,
+  // the old re-amortization put the whole ORIGINAL loan into the one installment
+  // left and read a comfortable household as deep in deficit. On the balance
+  // really owed it is roughly one ordinary installment.
+  it('re-amortizes what is still owed, so the last month is not a deficit', async () => {
+    await renderShortTerm();
+    const stress = row('Interest Rate Stress Test');
+    expect(within(stress).getByText(/stabilizes to/).textContent).toMatch(/stabilizes to Survives \+3%/);
+    expect(stress.querySelector('span.font-semibold').textContent).toMatch(/^🟢/);
   });
 });

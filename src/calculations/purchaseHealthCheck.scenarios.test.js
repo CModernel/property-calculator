@@ -38,7 +38,7 @@
 // Cross-check against what the panel renders (App.worseOfDirection.test.jsx,
 // same inputs): 'Stabilized worse: expenses grow 10% a year' reads
 // 🟠 6.3 months there; 'the rate jumps to 8% at month 2' reads 🔴 44%; and
-// '$800k at 6%, 8% from month 300' reads 🔴 Survives +3% - the Moderate /
+// '$800k at 6%, 12% from month 24' reads 🔴 Survives +3% - the Moderate /
 // High risk / High risk labels pinned below.
 import { describe, it, expect } from 'vitest';
 import {
@@ -177,7 +177,7 @@ function runScenario(overrides = {}) {
     monthlyIncome, monthlyRentalIncome, monthlyPersonalExpenses,
   });
   const stabilizedStressTestSurvivedDelta = calculateStressTestSurvivedDelta({
-    loanAmount, interestRate: projected.interestRate, totalMonths: projected.remainingMonths, monthlyPropertyExpenses: projected.monthlyPropertyExpenses,
+    loanAmount: projected.amortizedPrincipal, interestRate: projected.interestRate, totalMonths: projected.remainingMonths, monthlyPropertyExpenses: projected.monthlyPropertyExpenses,
     monthlyIncome: projected.monthlyIncome, monthlyRentalIncome: projected.monthlyRentalIncome, monthlyPersonalExpenses: projected.monthlyPersonalExpenses,
   });
   const upfrontCostRatio = calculateUpfrontCostRatio(totalCashRequired, c.downPayment, c.propertyPrice);
@@ -309,13 +309,16 @@ const MATRIX = [
     expect: { EB: [6.3, 'Moderate'], HCR: [44, 'High risk'], HCR0: [55, 'High risk'], ST: [3, 'Excellent'], UCR: [1.7, 'Excellent'], STAB: { EB: 5.5, HCR: 51.81, ST: 3 } },
   },
   {
-    name: 'Stabilized worse: $800k at 6%, 8% from month 300 puts the Stress Test in deficit',
+    // TODO-184: was "8% from month 300" with a $1,500 second salary, which only
+    // reached deficit because the re-amortization used the original $800k
+    // instead of the ~$250k still owed by then.
+    name: 'Stabilized worse: $800k at 6%, 12% from month 24 puts the Stress Test in deficit',
     overrides: {
       salaryGrowthRate: 0, rentGrowthRate: 0, expenseGrowthRate: 0, downPayment: 50000, interestRate: 6,
-      interestRateChanges: [{ id: 1, amount: 8, startMonth: 300 }],
-      incomeSources: [...salaryOnly(1614), { id: 2, name: 'Salary/Wages', amount: 1500, startMonth: 1, recurrence: 'monthly', endMonth: 360 }],
+      interestRateChanges: [{ id: 1, amount: 12, startMonth: 24 }],
+      incomeSources: [...salaryOnly(1614), { id: 2, name: 'Salary/Wages', amount: 450, startMonth: 1, recurrence: 'monthly', endMonth: 360 }],
     },
-    expect: { EB: [47.4, 'Excellent'], HCR: [32, 'High risk'], HCR0: [40, 'Good'], ST: [3, 'High risk'], UCR: [1.7, 'Excellent'], STAB: { EB: 16.6, HCR: 98.1, ST: 0 } },
+    expect: { EB: [47.4, 'Excellent'], HCR: [48, 'High risk'], HCR0: [60, 'High risk'], ST: [3, 'High risk'], UCR: [1.7, 'Excellent'], STAB: { EB: 30.7, HCR: 77.21, ST: 0 } },
   },
   // TODO-165: closes two band gaps the matrix used to have - no row produced
   // Stress Test === 1 ('Moderate') or an Upfront Cost Ratio in [2, 4) ('Normal').
@@ -386,7 +389,7 @@ describe('Purchase Health Check Tier-1 indicators - scenario matrix (TODO-147)',
     });
 
     it('Stress Test: Day 1 is Excellent, Stabilized is in deficit, the panel says High risk', () => {
-      const result = named('Stabilized worse: $800k at 6%, 8% from month 300 puts the Stress Test in deficit');
+      const result = named('Stabilized worse: $800k at 6%, 12% from month 24 puts the Stress Test in deficit');
       expect(result.stressTestDay1Class.label).toBe('Excellent');
       expect(result.stressTestClass.label).toBe('High risk');
     });

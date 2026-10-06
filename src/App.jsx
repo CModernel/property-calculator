@@ -923,10 +923,11 @@ const PropertyInvestmentCalculator = () => {
     loanAmount, interestRate, totalMonths, monthlyPropertyExpenses,
     monthlyIncome, monthlyRentalIncome, monthlyPersonalExpenses,
   });
-  // Same original loanAmount as Day 1 (never the offset-reduced balance -
-  // that's the simulation's concern, kept out of this calculation entirely),
-  // but the rate/payment/term reflect whatever's scheduled by the Stabilized
-  // month.
+  // Re-stresses the SAME principal and term projected.monthlyPayment was
+  // amortized over (TODO-184: the scheduled balance at the last rate change,
+  // never the offset-reduced one - that's the simulation's concern - and
+  // loanAmount/totalMonths when nothing changed), so at +0 the stressed
+  // payment reproduces the baseline exactly.
   //
   // `projected.remainingMonths`, NOT `totalMonths`: this call re-amortizes at
   // rate+1/2/3 and compares the result against projectedTotalPropertyCost,
@@ -934,11 +935,9 @@ const PropertyInvestmentCalculator = () => {
   // payment over a longer term than the baseline made the stressed payment
   // CHEAPER, so the test could report "Survives +3%" for a month the app had
   // already computed as being in deficit at the unstressed rate - the two
-  // figures on the same row contradicting each other. With an $800k loan and
-  // a 6%->8% change scheduled at month 96 or later, the term difference
-  // outweighs a full 1-point rise.
+  // figures on the same row contradicting each other.
   const stabilizedStressTestSurvivedDelta = calculateStressTestSurvivedDelta({
-    loanAmount, interestRate: projected.interestRate, totalMonths: projected.remainingMonths, monthlyPropertyExpenses: projected.monthlyPropertyExpenses,
+    loanAmount: projected.amortizedPrincipal, interestRate: projected.interestRate, totalMonths: projected.remainingMonths, monthlyPropertyExpenses: projected.monthlyPropertyExpenses,
     monthlyIncome: projected.monthlyIncome, monthlyRentalIncome: projected.monthlyRentalIncome, monthlyPersonalExpenses: projected.monthlyPersonalExpenses,
   });
   const stressTestClass = classifyStressTest(worseOf(stressTestSurvivedDelta, stabilizedStressTestSurvivedDelta, 'higherIsBetter'));

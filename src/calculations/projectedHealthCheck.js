@@ -154,31 +154,18 @@ export function resolveProjectedFinancials(month, {
     miscPropertyExpense,
   }) * expenseGrowthMultiplier;
 
-  // Deliberately independent of the loan simulation's own re-amortization:
-  // the ORIGINAL loanAmount, never the offset-reduced balance (that's the
-  // simulation's concern). Only recompute the payment if a genuinely
-  // scheduled rate change applies by this month - same "+1 remaining term
+  // TODO-184: the scheduled balance, never the offset-reduced one (that's the
+  // simulation's concern). Walks the rate schedule month by month the way a
+  // lender would - plain installments, no offset or extra repayments - and on
+  // every month the rate differs from the previous one re-amortizes the
+  // balance STILL OWED over the term left, with the same "+1 remaining term
   // includes this installment" convention offsetSimulation.js's own TODO-57
-  // re-amortization uses.
-  let resolvedInterestRate = interestRate;
-  let resolvedMonthlyPayment = monthlyPayment;
-  // The term `resolvedMonthlyPayment` was amortized over. Exported because any
-  // caller that re-derives a payment from these figures - the Stabilized
-  // Interest Rate Stress Test does exactly that, at a stressed rate - has to
-  // use the SAME term, or it compares two payments computed on different
-  // bases. It stays at the full `totalMonths` when no re-amortization
-  // happened, because a fixed-rate installment doesn't change with time
-  // elapsed: month 60 of a 30-year loan is still paying the original
-  // 360-month figure.
-  let resolvedRemainingMonths = totalMonths;
-  if (interestRateField) {
-    const scheduledRate = getSteppedValue(interestRateField.base, interestRateField.changes, month);
-    if (scheduledRate !== interestRate) {
-      resolvedInterestRate = scheduledRate;
-      resolvedRemainingMonths = totalMonths - month + 1;
-      resolvedMonthlyPayment = calculateMonthlyPayment(loanAmount, calculateMonthlyRate(scheduledRate), resolvedRemainingMonths);
-    }
-  }
+  // re-amortization uses. The old single-shot version spread the ORIGINAL
+  // loanAmount over the remaining term, so a late change produced a payment
+  // many times the real one (the whole loan in one month at the term's end),
+  // and a rate that rose and came back read as if nothing had happened.
+  const { rate: resolvedInterestRate, payment: resolvedMonthlyPayment, principal, term } =
+    walkRateSchedule(month, { loanAmount, monthlyPayment, interestRate, totalMonths, interestRateField });
 
   return {
     monthlyIncome,
@@ -190,8 +177,47 @@ export function resolveProjectedFinancials(month, {
     monthlyPropertyExpenses,
     monthlyPayment: resolvedMonthlyPayment,
     interestRate: resolvedInterestRate,
-    remainingMonths: resolvedRemainingMonths,
+    // The principal and term `monthlyPayment` was amortized over. Exported
+    // because any caller that re-derives a payment from these figures - the
+    // Stabilized Interest Rate Stress Test does exactly that, at a stressed
+    // rate - has to use the SAME basis, or it compares two payments computed
+    // on different ones. With no rate change they stay at loanAmount and the
+    // full totalMonths: a fixed-rate installment doesn't change with time
+    // elapsed, so month 60 of a 30-year loan still pays the original figure.
+    amortizedPrincipal: principal,
+    remainingMonths: term,
   };
+}
+
+// Amortizing payment that tolerates a scheduled change TO 0%
+// (calculateMonthlyPayment divides by zero there). A 0% base can't reach this:
+// the Day-1 payment App passes in would already be NaN.
+function amortizedPayment(principal, annualRate, months) {
+  const r = calculateMonthlyRate(annualRate);
+  return r === 0 ? principal / months : calculateMonthlyPayment(principal, r, months);
+}
+
+// See resolveProjectedFinancials. Returns the rate and installment active in
+// `month`, and the principal/term that installment was amortized over.
+function walkRateSchedule(month, { loanAmount, monthlyPayment, interestRate, totalMonths, interestRateField }) {
+  let rate = interestRate;
+  let payment = monthlyPayment;
+  let principal = loanAmount;
+  let term = totalMonths;
+  if (!interestRateField) return { rate, payment, principal, term };
+
+  let balance = loanAmount;
+  for (let m = 1; m <= month; m++) {
+    const scheduledRate = getSteppedValue(interestRateField.base, interestRateField.changes, m);
+    if (scheduledRate !== rate) {
+      rate = scheduledRate;
+      principal = balance;
+      term = totalMonths - m + 1;
+      payment = amortizedPayment(balance, rate, term);
+    }
+    if (m < month) balance = balance * (1 + calculateMonthlyRate(rate)) - payment;
+  }
+  return { rate, payment, principal, term };
 }
 
 // "Worse" isn't a consistent array-index direction across purchaseHealthCheck
