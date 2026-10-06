@@ -51,6 +51,18 @@ describe('findStabilizationMonth', () => {
     expect(month).toBe(24);
   });
 
+  // TODO-183: schedules can run to month 360 on a shorter loan; the reading
+  // must not land after the last installment.
+  it('caps the month at the loan term when the last change falls after it', () => {
+    const late = { ...BASE_SCHEDULES, incomeSources: [{ name: 'Salary/Wages', amount: 1000, startMonth: 200, recurrence: 'monthly', endMonth: 360 }] };
+    expect(findStabilizationMonth({ ...late, maxMonth: 120 })).toBe(120);
+    expect(findStabilizationMonth({ ...late, maxMonth: 300 })).toBe(200);
+  });
+
+  it('caps the year-5 default for a loan shorter than five years', () => {
+    expect(findStabilizationMonth({ ...BASE_SCHEDULES, maxMonth: 36 })).toBe(36);
+  });
+
   // TODO-181: endMonth is INCLUSIVE (isScheduleActive keeps the item through
   // it), so the first month the item is gone - the one "after it ended" refers
   // to - is endMonth + 1. Reading at endMonth itself still counted the item.

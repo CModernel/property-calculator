@@ -884,7 +884,7 @@ const PropertyInvestmentCalculator = () => {
   // scheduled), with growth applied - computed independently of the loan
   // simulation (see projectedHealthCheck.js for why). Resolved once, shared
   // by every indicator below.
-  const stabilizationMonth = findStabilizationMonth({ incomeSources, personalExpenseItems, expenseFields, interestRateField });
+  const stabilizationMonth = findStabilizationMonth({ incomeSources, personalExpenseItems, expenseFields, interestRateField, maxMonth: totalMonths });
   const projected = resolveProjectedFinancials(stabilizationMonth, {
     incomeSources, personalExpenseItems, expenseFields, interestRateField,
     effectiveTaxRate, salaryGrowthRate, rentGrowthRate, expenseGrowthRate, vacancyWeeksPerYear,
@@ -3629,7 +3629,7 @@ const PropertyInvestmentCalculator = () => {
                   <p>Your savings left after settlement, divided by your total monthly outgoings (property + personal expenses) - how many months you could cover if income stopped entirely.</p>
                   <p className="mt-2">Cash you've scheduled into the offset still counts here: it stays your money and stays available, and the simulation itself draws the offset down first to cover a shortfall, then your remaining savings. That's why this figure is higher than "Cash Remaining" above, which only counts uncommitted cash.</p>
                   <p className="mt-2">≥12 months excellent, 6-12 good, 3-6 moderate, &lt;3 high risk - the standard "3-6 months" rule of thumb.</p>
-                  <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled - with growth rates applied.</p>
+                  <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled (never past the end of the loan) - with growth rates applied.</p>
                 </HealthCheckIndicator>
 
                 <HealthCheckIndicator
@@ -3646,7 +3646,7 @@ const PropertyInvestmentCalculator = () => {
                   <p className="mt-2">Income that has no tax withheld from it is counted exactly as entered, never grossed up - rent (the tenant pays what you entered), government benefits, child support, gifts, tax refunds and pensions. Anything you marked "Gross (pre-tax)" is used as-is.</p>
                   <p className="mt-2">Any rental income in that total is counted after your Vacancy assumption, matching the projection.</p>
                   <p className="mt-2">&lt;30% excellent, 30-40% good, 40-50% caution, ≥50% high risk.</p>
-                  <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled - with growth rates applied.</p>
+                  <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled (never past the end of the loan) - with growth rates applied.</p>
                 </HealthCheckIndicator>
 
                 <HealthCheckIndicator
@@ -3658,7 +3658,7 @@ const PropertyInvestmentCalculator = () => {
                 >
                   <p>Recalculates your repayment at today's rate plus 1/2/3 percentage points, and reports the largest rise your current cash flow still survives without going into deficit.</p>
                   <p className="mt-2">Survives +3% excellent, +2% good, +1% moderate, fails already at +1% high risk.</p>
-                  <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled - with growth rates applied.</p>
+                  <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled (never past the end of the loan) - with growth rates applied.</p>
                 </HealthCheckIndicator>
 
                 <HealthCheckIndicator
@@ -3690,7 +3690,7 @@ const PropertyInvestmentCalculator = () => {
                     >
                       <p>Rental income minus the loan repayment and property expenses. Not itself good or bad - negative gearing (a shortfall) just needs to be affordable from your other income.</p>
                       <p className="mt-2">Rental income here is after your Vacancy assumption, the same haircut the projection applies every month - so this figure and the simulation agree.</p>
-                      <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled - with growth rates applied.</p>
+                      <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled (never past the end of the loan) - with growth rates applied.</p>
                     </HealthCheckIndicator>
 
                     <HealthCheckIndicator
@@ -3702,7 +3702,7 @@ const PropertyInvestmentCalculator = () => {
                     >
                       <p>Your savings left after settlement (including anything scheduled into the offset, which stays yours and stays available) divided by the loan repayment + property expenses - how many months you could cover the property alone with no tenant.</p>
                       <p className="mt-2">≥6 months excellent, 3-6 good, &lt;3 high risk.</p>
-                      <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled - with growth rates applied.</p>
+                      <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled (never past the end of the loan) - with growth rates applied.</p>
                     </HealthCheckIndicator>
 
                     {rentalYieldHasData ? (
@@ -3716,7 +3716,7 @@ const PropertyInvestmentCalculator = () => {
                         <p>Annualized rental income (House Rent/Room Rent) as a share of the property price.</p>
                         <p className="mt-2">Quoted <strong>before tax and before</strong> the Vacancy assumption, unlike the other indicators - the bands below are the standard gross-yield benchmark, so applying either haircut would make them mean something different from what they cite.</p>
                         <p className="mt-2">&lt;3% weak, 3-5% average, ≥5% strong.</p>
-                        <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled - with growth rates applied.</p>
+                        <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled (never past the end of the loan) - with growth rates applied.</p>
                       </HealthCheckIndicator>
                     ) : (
                       <div className="py-2 text-sm text-gray-400 dark:text-gray-500 italic">

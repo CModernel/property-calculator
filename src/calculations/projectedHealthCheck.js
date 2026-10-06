@@ -58,7 +58,13 @@ function lastSteppedChangeMonth(changes) {
 // every schedule-bearing input in the app. Offset Contributions deliberately
 // excluded - they bypass income/expenses entirely (same bypass TODO-129's
 // negative gearing uses), so they don't affect any of these six indicators.
-export function findStabilizationMonth({ incomeSources, personalExpenseItems, expenseFields, interestRateField }) {
+//
+// TODO-183: schedule sliders run to month 360 whatever the loan term, so the
+// last change can fall after the loan is paid off. `maxMonth` (the loan term in
+// months) caps the result: a reading past the last installment, with a
+// rate change active, would re-amortize over zero or negative months.
+// Optional so the unit tests can call it with schedules alone.
+export function findStabilizationMonth({ incomeSources, personalExpenseItems, expenseFields, interestRateField, maxMonth = MAX_MONTH }) {
   let last = Math.max(
     lastRecurringChangeMonth(incomeSources),
     lastRecurringChangeMonth(personalExpenseItems)
@@ -69,7 +75,7 @@ export function findStabilizationMonth({ incomeSources, personalExpenseItems, ex
   if (interestRateField) {
     last = Math.max(last, lastSteppedChangeMonth(interestRateField.changes));
   }
-  return last > 0 ? last : DEFAULT_STABILIZATION_MONTH;
+  return Math.min(last > 0 ? last : DEFAULT_STABILIZATION_MONTH, maxMonth);
 }
 
 // The same figures App.jsx's Day-1 Health Check code computes at month 1

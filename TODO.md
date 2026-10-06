@@ -7,6 +7,23 @@ optionally reuse in the commit message when you implement it.
 
 ## ✅ Completed
 
+- [x] **TODO-183: The Stabilized month is not capped at the loan term**
+  Found by the Opus review of TODO-181. Schedule sliders run to month 360
+  whatever the loan term (1-30 years) and `findStabilizationMonth` never caps
+  at `totalMonths`. Example: a 25-year term, an item ending at month 300 plus
+  any scheduled rate change: the Stabilized month is 301 (300 before TODO-181's
+  `+ 1`... and a later `startMonth` already did this), so `remainingMonths =
+  300 - 301 + 1 = 0` and `calculateMonthlyPayment` returns Infinity (NaN at 0%),
+  which feeds the Stabilized Stress Test. Pre-existing class of bug (a
+  `startMonth` past the term gives negative months). Likely fix: cap the month
+  at `totalMonths` (or treat "after the loan" as not a meaningful Stabilized
+  reading) and add a render test with a short term and a late schedule.
+  **Retrospective (PCALC-132):** `findStabilizationMonth` takes `maxMonth`
+  (App passes `totalMonths`); default year 5 is capped too; tooltip copy says
+  "never past the end of the loan". Review found the cap swaps Infinity for a
+  huge finite payment in one case - logged as TODO-184. Infinity/NaN page check
+  was vacuous, dropped.
+
 - [x] **TODO-1: Add unit tests**
   Added Vitest and extracted the pure financial calculations (loan amount,
   monthly payment, net balance — including the PCALC-6 fix — and the
@@ -6393,17 +6410,13 @@ gives `totalInterest` **$645,389.22**.
   Day 1 as is and average only the Stabilized reading. Analysis before code;
   check how the monthly-cash-flow cards treat the same items for consistency.
 
-- [ ] **TODO-183: The Stabilized month is not capped at the loan term**
-  Found by the Opus review of TODO-181. Schedule sliders run to month 360
-  whatever the loan term (1-30 years) and `findStabilizationMonth` never caps
-  at `totalMonths`. Example: a 25-year term, an item ending at month 300 plus
-  any scheduled rate change: the Stabilized month is 301 (300 before TODO-181's
-  `+ 1`... and a later `startMonth` already did this), so `remainingMonths =
-  300 - 301 + 1 = 0` and `calculateMonthlyPayment` returns Infinity (NaN at 0%),
-  which feeds the Stabilized Stress Test. Pre-existing class of bug (a
-  `startMonth` past the term gives negative months). Likely fix: cap the month
-  at `totalMonths` (or treat "after the loan" as not a meaningful Stabilized
-  reading) and add a render test with a short term and a late schedule.
+- [ ] **TODO-184: Stabilized re-amortization uses the ORIGINAL loan amount, so a late rate change yields an absurd payment**
+  Found by the Opus review of TODO-183. `resolveProjectedFinancials` re-amortizes
+  the original `loanAmount` over `totalMonths - month + 1`, not the balance still
+  owed at that month. A rate change at month 100 of a 120-month loan gives
+  $40,951/month on $800k; capped at month 120 (TODO-183) the remaining term is 1
+  and the payment is the whole loan. Fix idea: amortize the remaining balance
+  (or treat month >= term as "loan finished"). Needs a decision on which balance.
 
 ---
 
