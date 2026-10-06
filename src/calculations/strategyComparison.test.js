@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { calculateLoanWithOffset } from './offsetSimulation';
 import { runStrategyGrid, selectParetoFront, calculateEtfCrashSurvivedPct, classifyEtfCrash, ETF_CRASH_BANDS } from './strategyComparison';
 
 const BASE_PARAMS = {
@@ -245,5 +246,41 @@ describe('calculateEtfCrashSurvivedPct - additional boundary cases', () => {
 
   it('returns 0 for every crash tier when etfBalance is 0 but there was a real extra interest cost', () => {
     expect(calculateEtfCrashSurvivedPct(0, 100)).toBe(0);
+  });
+});
+
+// TODO-177: the engine now simulates past payoff; the grid deliberately keeps
+// reading each cell at its OWN payoff month, as before (user decision - see
+// TODO-180), and caches its last result because App re-runs it every render.
+describe('runStrategyGrid after TODO-177', () => {
+  const PAYS_OFF = {
+    contributions: [],
+    personalExpenseItems: [],
+    monthlyToOffset: 3000,
+    loanAmount: 100_000,
+    monthlyRate: 0.005,
+    monthlyPayment: 1000,
+    expectedEtfReturn: 8,
+    effectiveTaxRate: 30,
+    maxMonths: 360,
+  };
+
+  it('reads every cell at its own payoff month, not the term end', () => {
+    const results = runStrategyGrid(PAYS_OFF);
+    for (const cell of [results[0], results[220], results[440]]) {
+      const sim = calculateLoanWithOffset({ ...PAYS_OFF, switchThresholdPct: cell.switchThresholdPct, etfAllocationPct: cell.etfAllocationPct });
+      expect(sim.months).toBeLessThan(360);
+      const payoffRow = sim.monthlyData[sim.months - 1];
+      expect(cell.etfBalance).toBe(payoffRow.etf);
+      expect(cell.offsetBalance).toBe(payoffRow.offset);
+    }
+  });
+
+  it('returns the cached result for identical params and recomputes when they change', () => {
+    const first = runStrategyGrid(PAYS_OFF);
+    expect(runStrategyGrid({ ...PAYS_OFF })).toBe(first);
+    const changed = runStrategyGrid({ ...PAYS_OFF, monthlyToOffset: 2000 });
+    expect(changed).not.toBe(first);
+    expect(changed[0].totalInterestPaid).not.toBe(first[0].totalInterestPaid);
   });
 });

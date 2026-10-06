@@ -5382,6 +5382,52 @@ optionally reuse in the commit message when you implement it.
   A "half-month" convention would be more faithful still, but would change the
   ETF and the TODO-50/96/145 conventions too - left as a possible refinement.
   Suite 989 passing, lint and build clean.
+- [x] **TODO-177: A strategy that pays off early stops being simulated, so every later figure is frozen**
+  `offsetSimulation.js` no longer `break`s at payoff: the loop runs to the
+  full term, with no installment (the existing `initialMonthlyPayment -
+  currentMonthlyPayment` term hands it back to the surplus), no interest, no
+  re-amortization, and the SAME Offset/ETF split; the offset/balance ratio gate
+  counts as reached once nothing is owed, start-month and reserve gates still
+  apply. A `balance <= 0.01` residual snaps to 0 (the old loop condition), and
+  a loan that starts at <= 1 cent still simulates nothing (months 0, no rows).
+  User decisions (2026-10-06, after an Opus 5.5 review of the plan): `months`
+  stays the payoff month and the six returned totals freeze there (they are
+  shown next to "Time to pay off"); Timeline slider unchanged; charts sliced to
+  payoff; comparison cells past a payoff show the real figure PLUS
+  `✓ paid off mN`. Measured against HEAD on 5 scenarios: `months` and every
+  total identical; an independent Opus review re-ran 13 (never-paid-off,
+  sentinel, rate changes, investment properties, deficit...) - every row up to
+  payoff byte-identical.
+  `summariseStrategy` takes a horizon; App passes `getComparisonHorizon(runs)`
+  (the slowest payoff) so each table compares all strategies on ONE date - it
+  used to read each at its own payoff. On the default with ETF on, "All to
+  ETF" never pays off, so the side-by-side now compares all three at year 30;
+  property equity is identical across them, as it should be.
+  **Review blocker, resolved by user decision:** the 441-cell grid read
+  `monthlyData.at(-1)`, which became the term end - valuing ETF balances 20+
+  years past payoff while idle offset cash earns 0%, turning the Pareto front
+  into "pay off, then invest everything" (every row risk 99-100). The grid now
+  reads each cell at its own payoff month, as before - verified identical to
+  HEAD on all 441 cells. Rethinking it is TODO-180.
+  Performance: `runStrategyGrid` went ~11 -> ~62 ms per call (360 months per
+  cell); added a single-entry cache keyed on the serialized params (pure
+  function, App re-runs it every render). Measured in the browser (dev build,
+  ETF panels open, per Timeline-slider render): HEAD ~326 ms, this change
+  ~195 ms - faster than before.
+  Tests: 16 failed on the spike, all within the plan's predicted families,
+  plus `App.projectionAssumptions`' Timeline cross-check (now compares at
+  month 12, which both panels show). Inverted with rewritten titles: the frozen
+  plateau (now strictly growing), "crash after payoff never fires" (now hits
+  the ETF), the 796,562 vs 1,588,483 property-equity premise, `etfBreakEven`'s
+  frozen-property-value test. New: post-payoff rows live, installment returned
+  to surplus, totals frozen (incl. a $5M post-payoff expense), same split,
+  late start-month gate, shared-horizon summaries, grid at own payoff + cache,
+  zero loan. Copy fixed: comparison legend (also discloses the 0% idle cash
+  and that interest/shortfall count to each payoff), ETF Balance tooltip,
+  crash-month help and stress-test tooltip. Revert check: every new test fails
+  on the old engine except the no-regression pins. Manual browser pass: main
+  screen unchanged (108 months, $173,003, charts end at 9y). Suite 999
+  passing, lint and build clean.
 ---
 
 ## 🔴 HIGH PRIORITY (Wrong dollar figures shown to the user)
@@ -6238,51 +6284,6 @@ gives `totalInterest` **$645,389.22**.
   turned out to be real CODE defects hiding as documentation drift (shipped here
   as TODO-154 and TODO-155) - stale entries are how the next one hides.
 
-- [ ] **TODO-177: A strategy that pays off early stops being simulated, so every later figure is frozen**
-  Found while fixing TODO-168, and the reason that entry's "highest property
-  equity" verification could not be met.
-  `offsetSimulation.js` breaks out of the loop the month the loan is retired.
-  `getTimelineSnapshot` then clamps any later month to that final row, so a
-  finished strategy's `offset`, `etf`, `savings`, `netWorth`, `accessibleCash`
-  **and `propertyValue`** are all stuck at its payoff month while every still-
-  running strategy keeps compounding to the horizon.
-  *Measured on `strategyScenarios.test.js`'s `BASE_PARAMS` (5%/yr property
-  growth):* with the balance now correctly at 0, the fast strategy's property
-  equity at the final month is **$796,562** against the slow one's
-  **$1,588,483** - and the gap is almost entirely frozen property growth, not a
-  real difference. In reality the fast strategy is strictly better off: no
-  installment to pay, so its surplus compounds faster than any other arm's.
-  **Mitigated, not fixed.** TODO-168 made `buildComparisonRows` flag those cells
-  (`settledAtMonth`) so the table prints `✓ paid off mN` rather than a stale
-  figure. That stops the table lying, but the underlying figures still do not
-  exist.
-  **The real fix is a core-loop change, which is why it was deferred.** The loop
-  would go from "while there is a balance" to "while there are months", with the
-  payoff month tracked separately:
-  - `months` must keep meaning "time to pay off" - it feeds "Time to pay off",
-    the Timeline slider's `max`, `calculateTimeRemaining`, `payoffMonths`,
-    `etfBreakEven`'s horizon and `getComparisonMonths`. It must NOT become a row
-    count.
-  - that breaks the `months === monthlyData.length` invariant, which
-    `LoanBalanceChart.jsx` and `PrincipalInterestChart.jsx` both rely on via
-    `getYearTickMonths(monthlyData.length)` while the slider beside them uses
-    `loanSimulation.months`.
-  - the ETF gate `(offsetBalance / balance) * 100 >= switchThresholdPct` would
-    divide by a zero balance.
-  - six `toHaveLength` assertions in `offsetSimulation.test.js` pin
-    `monthlyData.length` for runs that pay off early.
-  - and the Timeline slider's semantics would need deciding: does "End" stay at
-    the payoff month, or extend to the full term?
-  The freed-up surplus needs no new decision - it goes where every other month's
-  does, the offset/ETF split, and the existing
-  `(initialMonthlyPayment - currentMonthlyPayment)` rate-change term already
-  adds a retired installment back.
-  **Verification.** That a strategy which pays off at month N still reports
-  growing `offset`/`propertyValue` at month N+12, and that the Strategy
-  Comparison table then needs no `settledAtMonth` flag at all for it. Verify by
-  revert.
-
-
 - [ ] **TODO-179: `InfoTooltip` can render partly off-screen when its "?" button sits near a window edge**
   Found during the manual browser pass over TODO-173 (2026-10-06), not caused
   by it. `src/components/InfoTooltip.jsx` anchors the popover with `top-full
@@ -6303,6 +6304,24 @@ gives `totalInterest` **$645,389.22**.
   there is not room; or move that one button next to its label's text instead
   of on its own line. A render test in jsdom cannot see layout, so
   verification is a manual pass across the tooltips at a few viewport widths.
+
+- [ ] **TODO-180: Rethink the strategy grid and the "idle cash earns 0%" assumption now that the engine runs past payoff**
+  Deferred from TODO-177 by user decision. Since TODO-177 the engine keeps
+  simulating after payoff, but the 441-cell grid (`strategyComparison.js`,
+  Pareto front + Crash Test) still reads each cell at its OWN payoff month,
+  so cells are compared at different dates and a fast payer gets no credit
+  for what it does with the freed-up repayment.
+  Reading the term end instead (tried in TODO-177, reverted) turned the front
+  into "pay off, then invest everything" (every row risk 99-100), because the
+  objective ignores cash left in the offset and that cash earns 0% once there
+  is no loan. The side-by-side table already compares on a shared date and
+  discloses the 0% - on the default with ETF on, "Offset only" ends year 30
+  with ~$2.7M idle.
+  Questions to decide: (1) what idle post-payoff cash should earn (0%, the
+  savings rate - which defaults to 0 - or something else); (2) whether the
+  grid should compare on a shared horizon, and on which objective (net worth
+  instead of ETF balance alone?); (3) whether "Offset only" should mean "never
+  invest" or "invest once paid off".
 
 ---
 

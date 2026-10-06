@@ -78,27 +78,25 @@ describe('findBreakEvenEtfReturn', () => {
     expect(result.horizon).toBe(offsetOnly.months);
   });
 
-  // The trap this design avoids. Past its payoff a run has no more monthlyData,
-  // so a snapshot clamps to its final row - freezing its PROPERTY VALUE along
-  // with everything else, even though the property appreciates regardless of
-  // which strategy you picked. Comparing at the later month would credit the
-  // still-running arm with growth the finished arm silently forfeits.
-  it('would be distorted by a frozen property value if it compared at the later month', () => {
+  // The trap this design used to avoid: past its payoff a run had no more
+  // monthlyData, so a snapshot clamped to its final row and froze its PROPERTY
+  // VALUE - comparing at the later month credited the still-running arm with
+  // growth the finished arm silently forfeited (a ~168k phantom gap).
+  // TODO-177 keeps simulating past payoff, so the artifact is gone: same
+  // property, same date, same growth rate -> same value. The solver still
+  // compares at the earlier month because that is the question it answers.
+  it('no longer sees a frozen property value at the later month (TODO-177)', () => {
     const offsetOnly = calculateLoanWithOffset({ ...BASE_PARAMS, etfAllocationPct: 0 });
     const diverted = calculateLoanWithOffset({ ...BASE_PARAMS, etfAllocationPct: 50, expectedEtfReturn: 0 });
     const later = diverted.months;
+    expect(offsetOnly.months).toBeLessThan(later);
 
-    const frozenPropertyValue = getTimelineSnapshot(
-      later, offsetOnly.monthlyData, SNAPSHOT_CONTEXT.loanAmount, SNAPSHOT_CONTEXT.monthZeroInterest,
-      SNAPSHOT_CONTEXT.initialSavingsBalance, SNAPSHOT_CONTEXT.initialPropertyValue
-    ).propertyValue;
-    const livePropertyValue = getTimelineSnapshot(
-      later, diverted.monthlyData, SNAPSHOT_CONTEXT.loanAmount, SNAPSHOT_CONTEXT.monthZeroInterest,
+    const propertyValueAt = (simulation) => getTimelineSnapshot(
+      later, simulation.monthlyData, SNAPSHOT_CONTEXT.loanAmount, SNAPSHOT_CONTEXT.monthZeroInterest,
       SNAPSHOT_CONTEXT.initialSavingsBalance, SNAPSHOT_CONTEXT.initialPropertyValue
     ).propertyValue;
 
-    // Same property, same date, same growth rate - the gap is pure artifact.
-    expect(livePropertyValue).toBeGreaterThan(frozenPropertyValue);
+    expect(propertyValueAt(offsetOnly)).toBe(propertyValueAt(diverted));
   });
 
   // Why bisection is sound at all: a different expected return moves the ETF

@@ -59,18 +59,21 @@ describe('The Strategy Comparison table marks a finished strategy (TODO-168)', (
     return screen.getByText(COMPARISON_HEADING).closest('div').parentElement;
   }
 
-  it('says a strategy paid off instead of printing its frozen figure', async () => {
+  it('marks a strategy that paid off, next to its real (still-growing) figure', async () => {
     const user = userEvent.setup();
     render(<App />);
     await openComparison(user);
 
     // The axis runs to the SLOWEST strategy's payoff, so "Offset only" - which
-    // finishes first - is past its own end in the later rows. It used to print
-    // a stale dollar amount there, which read as a live one and made the
-    // fastest-paying strategy look like the most indebted.
+    // finishes first - is past its own payoff in the later rows. TODO-168
+    // printed the marker INSTEAD of a frozen figure; since TODO-177 the engine
+    // keeps simulating, so the cell shows the real figure AND the marker.
     const section = comparisonSection();
     const settled = within(section).getAllByText(/paid off m\d+/);
     expect(settled.length).toBeGreaterThan(0);
+    settled.forEach((marker) => {
+      expect(marker.closest('td').textContent).toMatch(/^\$[\d,]+✓ paid off m\d+$/);
+    });
   });
 
   it('still prints real figures for a strategy that is still running', async () => {

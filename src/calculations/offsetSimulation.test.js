@@ -48,7 +48,8 @@ describe('calculateLoanWithOffset', () => {
       monthlyPayment: 100,
     });
     expect(result.months).toBe(1);
-    expect(result.monthlyData).toHaveLength(1);
+    // TODO-177: rows keep going past payoff, to the full term; `months` is still the payoff month.
+    expect(result.monthlyData).toHaveLength(360);
     expect(result.totalInterest).toBe(0);
     // TODO-167: the normal path's own half of the flag - a shape change that
     // set it on only one of the two returns would leave this false.
@@ -66,7 +67,8 @@ describe('calculateLoanWithOffset', () => {
     });
     expect(result.months).toBe(12);
     expect(result.totalInterest).toBe(0);
-    expect(result.monthlyData).toHaveLength(12);
+    // TODO-177: rows keep going past payoff, to the full term; `months` is still the payoff month.
+    expect(result.monthlyData).toHaveLength(360);
     expect(result.monthlyData[11].balance).toBe(0);
   });
 
@@ -80,7 +82,8 @@ describe('calculateLoanWithOffset', () => {
       monthlyPayment: 1000,
     });
     expect(result.months).toBe(1);
-    expect(result.monthlyData).toHaveLength(1);
+    // TODO-177: rows keep going past payoff, to the full term; `months` is still the payoff month.
+    expect(result.monthlyData).toHaveLength(360);
     // TODO-168: this used to assert balance 99000 / offset 100000, on the
     // grounds that "the snapshot is pushed BEFORE the post-break balance=0
     // override". That described the mechanism, not a contract - and the
@@ -239,7 +242,7 @@ describe('calculateLoanWithOffset', () => {
     const surplusOnly = calculateLoanWithOffset({ ...base, contributions: [] });
 
     expect(withRecurring.months).toBe(163);
-    expect(withRecurring.monthlyData).toHaveLength(163);
+    expect(withRecurring.monthlyData[162].balance).toBe(0);
     expect(Math.round(withRecurring.totalInterest)).toBe(231233);
     expect(surplusOnly.months).toBe(197);
     expect(Math.round(surplusOnly.totalInterest)).toBe(286934);
@@ -2060,6 +2063,9 @@ describe('cash shortfall on deficit months (TODO-136)', () => {
 // Comparison table, which clamps a finished strategy to that row, told the
 // user the fastest-paying strategy owed the most at year 30.
 describe('the payoff month reports the loan retired (TODO-168)', () => {
+  // TODO-177: the payoff row is no longer the last one - rows continue to the
+  // full term - so it is read by the returned payoff month.
+  const payoffRow = (result) => result.monthlyData[result.months - 1];
   // A big contribution in month 1 lets the offset cover what the installment
   // leaves behind, so the loan retires in month 1 rather than at term.
   const retiresEarly = {
@@ -2073,7 +2079,7 @@ describe('the payoff month reports the loan retired (TODO-168)', () => {
   };
 
   it('zeroes the balance and the effective balance in that month\'s own row', () => {
-    const last = calculateLoanWithOffset(retiresEarly).monthlyData.at(-1);
+    const last = payoffRow(calculateLoanWithOffset(retiresEarly));
     expect(last.balance).toBe(0);
     expect(last.effectiveBalance).toBe(0);
     // The whole loan is paid at that point, by definition.
@@ -2081,7 +2087,7 @@ describe('the payoff month reports the loan retired (TODO-168)', () => {
   });
 
   it('spends the offset money that discharged the loan', () => {
-    const last = calculateLoanWithOffset(retiresEarly).monthlyData.at(-1);
+    const last = payoffRow(calculateLoanWithOffset(retiresEarly));
     // 200000 contributed, 1000 of the installment went to principal, so 99000
     // was outstanding and the offset covered exactly that.
     expect(last.offset).toBe(101000);
@@ -2092,15 +2098,14 @@ describe('the payoff month reports the loan retired (TODO-168)', () => {
   // guard rail - a fix that zeroed the balance without spending the offset
   // would pass the first two and inflate this one by the retired balance.
   it('reports balance, property equity and net worth consistently', () => {
-    const last = calculateLoanWithOffset(retiresEarly).monthlyData.at(-1);
+    const last = payoffRow(calculateLoanWithOffset(retiresEarly));
     expect(last.balance).toBe(0);
     expect(last.propertyValue - last.balance).toBe(500000);
     expect(last.propertyValue - last.balance + last.offset + last.savings + last.etf).toBe(601000);
   });
 
   // An ordinary payoff never involved the offset, so `balance` and `offset`
-  // there are untouched and NO row is added - which is what keeps the six
-  // length-pinning tests above green. `effectiveBalance` does move, from the
+  // there are untouched. `effectiveBalance` does move, from the
   // pre-payment interest basis to 0: that field is the progress bar's input
   // (calculateEffectiveProgress), and at the month the loan is retired the bar
   // has to read 100%, not 92.7%.
@@ -2115,11 +2120,10 @@ describe('the payoff month reports the loan retired (TODO-168)', () => {
     };
     const result = calculateLoanWithOffset(amortized);
     expect(result.months).toBe(12);
-    expect(result.monthlyData).toHaveLength(12);
-    expect(result.monthlyData.at(-1).balance).toBe(0);
-    // 1/mo into the offset for 12 months, capped at the pre-payment balance.
-    expect(result.monthlyData.at(-1).offset).toBe(12);
-    expect(result.monthlyData.at(-1).effectiveBalance).toBe(0);
+    expect(payoffRow(result).balance).toBe(0);
+    // 1/mo into the offset for 12 months (end-of-month cash since TODO-172).
+    expect(payoffRow(result).offset).toBe(12);
+    expect(payoffRow(result).effectiveBalance).toBe(0);
   });
 
   // TODO-176: the invariant that makes App.jsx's baseline-bundle fix safe, and
@@ -2545,7 +2549,7 @@ describe('monthlyData rows reconcile (TODO-172)', () => {
     // convention: +$2,288.88 (1.2%) of interest, same payoff month.
     const result = calculateLoanWithOffset(shipped);
     expect(result.months).toBe(129);
-    expect(result.monthlyData).toHaveLength(129);
+    expect(result.monthlyData[128].balance).toBe(0);
     expect(result.totalInterest).toBeCloseTo(199032.21, 2);
     // End-of-month row: 542,473 - 2,470 = 540,003. Month 1's interest is the
     // full no-offset figure, since the surplus only saves from month 2.
@@ -2606,6 +2610,114 @@ describe('offset and ETF share one deposit convention (TODO-173)', () => {
       monthlyToOffset: 0,
     });
     expect(months).toBe(3);
-    expect(monthlyData.at(-1)).toMatchObject({ month: 3, balance: 0 });
+    expect(monthlyData[months - 1]).toMatchObject({ month: 3, balance: 0 });
+  });
+});
+
+// TODO-177: the loop used to `break` the month the loan was retired, freezing
+// every later figure of a strategy that paid off early. It now runs to the
+// full term: no installment, no interest, and the surplus keeps the same
+// Offset/ETF split. `months` and the six returned totals still stop at payoff.
+describe('simulation continues after payoff (TODO-177)', () => {
+  const rate = calculateMonthlyRate(6.13);
+  const shippedLike = {
+    personalExpenseItems: [],
+    contributions: [],
+    loanAmount: 543_000,
+    monthlyRate: rate,
+    monthlyPayment: calculateMonthlyPayment(543_000, rate, 360),
+    maxMonths: 360,
+    monthlyToOffset: 2470.42,
+    savingsInterestRate: 4,
+    initialSavingsBalance: 28_453,
+    expectedEtfReturn: 8,
+    effectiveTaxRate: 30,
+    propertyPrice: 850_000,
+    propertyGrowthRate: 5,
+  };
+
+  it('keeps every post-payoff row live: balance 0, no interest, cash and property still growing', () => {
+    const { months, monthlyData } = calculateLoanWithOffset(shippedLike);
+    expect(months).toBe(129);
+    expect(monthlyData).toHaveLength(360);
+    const atPayoff = monthlyData[months - 1];
+    const yearLater = monthlyData[months - 1 + 12];
+    expect(yearLater.offset).toBeGreaterThan(atPayoff.offset);
+    expect(yearLater.savings).toBeGreaterThan(atPayoff.savings);
+    expect(yearLater.propertyValue).toBeGreaterThan(atPayoff.propertyValue);
+    monthlyData.slice(months).forEach((row) => {
+      expect(row.balance).toBe(0);
+      expect(row.effectiveBalance).toBe(0);
+      expect(row.monthlyInterestPaid).toBe(0);
+    });
+  });
+
+  it('hands the whole installment back to the surplus once there is nothing to repay', () => {
+    const { months, monthlyData } = calculateLoanWithOffset(shippedLike);
+    const growth = monthlyData[months + 1].offset - monthlyData[months].offset;
+    // Surplus + the installment no longer paid (no tax/ETF/growth effects on
+    // the offset in this fixture).
+    expect(growth).toBeCloseTo(2470.42 + shippedLike.monthlyPayment, -1);
+  });
+
+  // Measured on HEAD before the change: the loop changing shape must not move
+  // any figure that is reported "until the loan is paid".
+  it('freezes months and every returned total at the payoff month', () => {
+    const result = calculateLoanWithOffset(shippedLike);
+    expect(result.months).toBe(129);
+    expect(result.totalInterest).toBeCloseTo(199032.21, 2);
+    expect(result.totalSavingsInterest).toBeCloseTo(15255.32, 2);
+
+    const lump = calculateLoanWithOffset({ ...shippedLike, contributions: [{ startMonth: 3, recurrence: 'none', amount: 150_000 }] });
+    expect(lump.months).toBe(85);
+    expect(lump.totalInterest).toBeCloseTo(93540.04, 2);
+    expect(lump.totalSavingsInterest).toBeCloseTo(9301.92, 2);
+  });
+
+  it('keeps a post-payoff expense out of the returned totals, while its row still shows it', () => {
+    const plain = calculateLoanWithOffset(shippedLike);
+    const withLateExpense = calculateLoanWithOffset({
+      ...shippedLike,
+      personalExpenseItems: [{ startMonth: 200, recurrence: 'none', amount: 5_000_000 }],
+    });
+    for (const key of ['months', 'totalInterest', 'totalSavingsInterest', 'totalNegativeGearingBenefit', 'totalCashShortfall', 'monthsWithShortfall', 'totalDrawnFromSavings']) {
+      expect(withLateExpense[key]).toBe(plain[key]);
+    }
+    expect(withLateExpense.monthlyData[199].cashShortfall).toBeGreaterThan(0);
+  });
+
+  it('keeps the same Offset/ETF split after payoff', () => {
+    const split = calculateLoanWithOffset({ ...shippedLike, etfAllocationPct: 30, expectedEtfReturn: 0 });
+    const m = split.months;
+    const rows = split.monthlyData;
+    const etfIn = rows[m + 1].etf - rows[m].etf;
+    const offsetIn = rows[m + 1].offset - rows[m].offset;
+    expect(etfIn / (etfIn + offsetIn)).toBeCloseTo(0.3, 2);
+
+    const none = calculateLoanWithOffset({ ...shippedLike, etfAllocationPct: 0 });
+    expect(none.monthlyData.at(-1).etf).toBe(0);
+  });
+
+  it('still waits for a start-month gate that falls after the payoff', () => {
+    const gated = calculateLoanWithOffset({ ...shippedLike, etfAllocationPct: 50, etfStartMonth: 200 });
+    expect(gated.months).toBeLessThan(200);
+    expect(gated.monthlyData[198].etf).toBe(0);
+    expect(gated.monthlyData[199].etf).toBeGreaterThan(0);
+  });
+});
+
+describe('a loan with nothing to repay (TODO-177 review)', () => {
+  it('still reports months 0 and no rows, as before the loop ran past payoff', () => {
+    const result = calculateLoanWithOffset({
+      contributions: [],
+      personalExpenseItems: [],
+      monthlyToOffset: 500,
+      loanAmount: 0,
+      monthlyRate: 0.005,
+      monthlyPayment: 0,
+    });
+    expect(result.months).toBe(0);
+    expect(result.monthlyData).toHaveLength(0);
+    expect(result.totalInterest).toBe(0);
   });
 });

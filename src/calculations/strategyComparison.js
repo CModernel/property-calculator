@@ -13,12 +13,27 @@ const GRID_VALUES = Array.from({ length: 100 / GRID_STEP + 1 }, (_, i) => i * GR
 // grid cell, holding every other input (baseParams) fixed. Only the last
 // monthlyData entry and totalInterest are kept per cell - no need to retain
 // 441 full monthlyData arrays just to read their final values.
+// TODO-177: App.jsx re-runs this on every render while the panel is open
+// (e.g. every Timeline slider step), and each cell now simulates the full
+// term. The function is pure, so a single-entry cache on the serialized
+// params skips the 441 runs whenever the inputs haven't changed. Callers must
+// treat the returned array as read-only (they do: filter/find/copy-then-sort).
+let cachedGridKey = null;
+let cachedGridResults = null;
+
 export function runStrategyGrid(baseParams) {
+  const key = JSON.stringify(baseParams);
+  if (key === cachedGridKey) return cachedGridResults;
   const results = [];
   for (const switchThresholdPct of GRID_VALUES) {
     for (const etfAllocationPct of GRID_VALUES) {
       const result = calculateLoanWithOffset({ ...baseParams, switchThresholdPct, etfAllocationPct });
-      const last = result.monthlyData[result.monthlyData.length - 1];
+      // TODO-177: each cell is read at its OWN payoff month (or the term end),
+      // as before - the engine now keeps simulating past payoff, but reading
+      // the last row would value ETF balances at the term end while idle
+      // offset cash earns nothing, turning the Pareto front into "pay off, then
+      // invest everything" (user decision; see TODO-180).
+      const last = result.monthlyData[result.months - 1];
       const etfBalance = last ? last.etf : 0;
       const offsetBalance = last ? last.offset : 0;
       results.push({
@@ -46,6 +61,8 @@ export function runStrategyGrid(baseParams) {
       });
     }
   }
+  cachedGridKey = key;
+  cachedGridResults = results;
   return results;
 }
 

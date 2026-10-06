@@ -161,10 +161,14 @@ export function hasUsableData(runs) {
 // End-state figures, one column per strategy. Reuses the same expressions the
 // Timeline Explorer renders (net worth, property equity) so the two panels
 // cannot drift apart.
-export function summariseStrategy(run, { loanAmount, monthZeroInterest, initialSavingsBalance, initialPropertyValue }) {
+// TODO-177: snapshotted at `horizonMonth` - pass getComparisonHorizon(runs) so
+// every strategy in a table is read on the SAME date. It used to read each one
+// at its own payoff month, so the fastest strategy was compared years earlier
+// than the slowest. `payoffMonths` stays per strategy.
+export function summariseStrategy(run, { loanAmount, monthZeroInterest, initialSavingsBalance, initialPropertyValue }, horizonMonth = run.simulation.months) {
   const { simulation } = run;
   const last = getTimelineSnapshot(
-    simulation.months, simulation.monthlyData, loanAmount, monthZeroInterest, initialSavingsBalance, initialPropertyValue
+    horizonMonth, simulation.monthlyData, loanAmount, monthZeroInterest, initialSavingsBalance, initialPropertyValue
   );
   return {
     key: run.key,
@@ -184,20 +188,19 @@ export function summariseStrategy(run, { loanAmount, monthZeroInterest, initialS
   };
 }
 
-// The month axis is driven by the LONGEST-running strategy: diverting surplus
-// to an ETF slows the payoff, so the strategies finish at different times and
-// a shared axis has to cover the slowest.
-//
-// TODO-168 corrected what this comment used to claim - that a clamped strategy
-// "stopped changing because the loan was gone". It was wrong twice over. The
-// loan was not gone in that snapshot (the engine retired it only after the row
-// was pushed, now fixed), and even retired, a finished strategy's balances do
-// not stop changing in reality - with no installment left its surplus would
-// compound faster than any other arm's. They are FROZEN because the loop broke,
-// which is not the same thing. buildComparisonRows marks those cells rather
-// than printing a frozen figure that reads as real.
+// The month the strategies are compared at: the slowest one's payoff, i.e. the
+// first date on which every strategy is debt-free. Diverting surplus to an ETF
+// slows the payoff, so the strategies finish at different times.
+export function getComparisonHorizon(runs) {
+  return Math.max(...runs.map((r) => r.simulation.months));
+}
+
+// The month axis runs to getComparisonHorizon. TODO-177: a strategy that paid
+// off earlier is still simulated past its payoff (it used to be FROZEN there,
+// because the engine's loop broke - TODO-168's comment here explained why that
+// was not the same as "the loan is gone"), so its cells are real figures.
 export function getComparisonMonths(runs) {
-  const maxMonths = Math.max(...runs.map((r) => r.simulation.months));
+  const maxMonths = getComparisonHorizon(runs);
   if (maxMonths <= 0) return [];
   const step = maxMonths <= YEARLY_STEP_MIN_MONTHS ? 1 : 12;
   const months = [];
@@ -217,12 +220,9 @@ export function buildComparisonRows(runs, metricKey, snapshotContext) {
       const snapshot = getTimelineSnapshot(
         month, run.simulation.monthlyData, loanAmount, monthZeroInterest, initialSavingsBalance, initialPropertyValue
       );
-      // TODO-168: past its own payoff this run is not being simulated any more,
-      // so every figure here is its payoff month's, frozen. Reported for EVERY
-      // metric rather than only the misleading ones: `balance` and
-      // `totalInterestPaid` really are still correct frozen, but a per-metric
-      // truth table would drift, and "we stopped simulating this strategy at
-      // month N" is honest about all of them.
+      // TODO-168/177: past its own payoff the value is real (the engine keeps
+      // simulating) - settledAtMonth is now only an annotation shown NEXT to
+      // it, so the reader knows this strategy is already debt-free.
       const settledAtMonth = month > run.simulation.months ? run.simulation.months : null;
       return { key: run.key, value: Math.round(metric.from(snapshot)), settledAtMonth };
     }),

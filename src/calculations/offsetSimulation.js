@@ -228,6 +228,14 @@ export function calculateLoanWithOffset({
   let totalCashShortfall = 0;
   let monthsWithShortfall = 0;
   let months = 0;
+  // TODO-177: the month the loan was retired. The loop no longer stops there -
+  // a paid-off household keeps living, and its surplus keeps building - so
+  // `months` (rows simulated) and the payoff month are now different things.
+  // The returned `months` is still the payoff month; `returnedTotals` freezes
+  // the six totals at that same month, since every one of them is shown next
+  // to "Time to pay off" and reads as "until the loan is paid".
+  let payoffMonth = null;
+  let returnedTotals = null;
   const monthlyData = [];
   const savingsMonthlyRate = calculateMonthlyRate(savingsInterestRate);
   // TODO-96/131: taxed before being applied - see the param comment above
@@ -251,10 +259,16 @@ export function calculateLoanWithOffset({
   let currentMonthlyRate = monthlyRate;
   let currentMonthlyPayment = monthlyPayment;
 
-  while (balance > 0.01 && months < maxMonths) {
+  // TODO-177: a loan that starts at (or under) a cent has nothing to simulate -
+  // the old `while (balance > 0.01 ...)` never entered, giving months 0 and no
+  // rows, and the extended loop must not turn that into "paid off in month 1".
+  const monthsToSimulate = balance > 0.01 ? maxMonths : 0;
+  while (months < monthsToSimulate) {
     months++;
 
-    if (interestRateField) {
+    // No re-amortization once there is nothing left to amortize - and
+    // currentMonthlyPayment stays at the 0 set on retirement below.
+    if (interestRateField && payoffMonth === null) {
       const annualRateThisMonth = getSteppedValue(interestRateField.base, interestRateField.changes, months);
       if (annualRateThisMonth !== currentAnnualRate) {
         currentAnnualRate = annualRateThisMonth;
@@ -411,7 +425,9 @@ export function calculateLoanWithOffset({
     // if your offset drops back below the reserve you wanted banked, pausing
     // new ETF contributions until it recovers is the behaviour you'd want, not
     // a bug. Existing behaviour is unchanged - only the reasoning was wrong.
-    const etfRatioReached = (offsetBalance / balance) * 100 >= switchThresholdPct;
+    // TODO-177: with no loan the ratio is meaningless (and would divide by 0),
+    // so it counts as reached; the start-month and reserve gates still apply.
+    const etfRatioReached = balance > 0 ? (offsetBalance / balance) * 100 >= switchThresholdPct : true;
     const etfStartMonthReached = months >= etfStartMonth;
     // Same composition as the Emergency Buffer indicator's denominator, and
     // built from the loop's own per-month figures rather than from
@@ -593,6 +609,10 @@ export function calculateLoanWithOffset({
       offsetBalance -= balance;
       balance = 0;
     }
+    // TODO-177: a floating-point residual counts as paid - the old loop
+    // condition (`balance > 0.01`) already stopped here. Without the snap the
+    // extended loop would keep charging a full installment on a loan of cents.
+    if (balance <= 0.01) balance = 0;
     // Also true on an ordinary fully-amortized payoff, where the installment
     // itself took the balance to 0 and no offset was involved.
     const loanIsRetired = balance <= 0;
@@ -624,22 +644,31 @@ export function calculateLoanWithOffset({
       cashShortfall: Math.round(cashShortfallThisMonth)
     });
 
-    // Equivalent to the old `effectiveOffset >= balance` case by case: an
-    // already-zero balance (normal payoff) satisfied both; a positive balance
-    // the offset covers is now zeroed above; a balance it cannot cover breaks
-    // out of neither.
-    if (loanIsRetired) break;
+    // TODO-177: this used to `break`, freezing every later figure of a strategy
+    // that paid off early. Now the month is recorded and the loop carries on:
+    // no installment from here (the `initialMonthlyPayment -
+    // currentMonthlyPayment` term above hands the whole installment back to the
+    // surplus), no interest (the balance is 0), and the surplus keeps the same
+    // Offset/ETF split as before.
+    if (loanIsRetired && payoffMonth === null) {
+      payoffMonth = months;
+      currentMonthlyPayment = 0;
+      returnedTotals = {
+        totalInterest, totalSavingsInterest, totalNegativeGearingBenefit,
+        totalCashShortfall, monthsWithShortfall, totalDrawnFromSavings,
+      };
+    }
   }
 
+  const totals = returnedTotals ?? {
+    totalInterest, totalSavingsInterest, totalNegativeGearingBenefit,
+    totalCashShortfall, monthsWithShortfall, totalDrawnFromSavings,
+  };
+  const monthsToPayoff = payoffMonth ?? months;
   return {
-    years: months / 12,
-    months: months,
-    totalInterest: totalInterest,
-    totalSavingsInterest: totalSavingsInterest,
-    totalNegativeGearingBenefit: totalNegativeGearingBenefit,
-    totalCashShortfall: totalCashShortfall,
-    monthsWithShortfall: monthsWithShortfall,
-    totalDrawnFromSavings: totalDrawnFromSavings,
+    years: monthsToPayoff / 12,
+    months: monthsToPayoff,
+    ...totals,
     monthlyData: monthlyData,
     // TODO-167: these figures came out of the real loop, so they are real
     // money. Note this says nothing about monthlyData being non-empty -

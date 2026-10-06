@@ -4,6 +4,7 @@ import {
   runReturnScenarios,
   summariseStrategy,
   getComparisonMonths,
+  getComparisonHorizon,
   buildComparisonRows,
   getComparisonMetric,
   hasUsableData,
@@ -68,9 +69,14 @@ describe('runStrategyScenarios', () => {
 
   it('honours switchThresholdPct from baseParams rather than assuming 0', () => {
     const gated = runStrategyScenarios({ ...BASE_PARAMS, switchThresholdPct: 100 }, 100);
-    // A threshold the offset can never reach keeps every dollar in the offset,
-    // making even the "All to ETF" run identical to offset-only.
-    expect(gated[2].simulation.monthlyData.at(-1).etf).toBe(0);
+    const { months, monthlyData } = gated[2].simulation;
+    // While the loan runs, a 100% threshold is never reached (an offset that
+    // covered the whole loan would retire it), so every dollar stays in the
+    // offset, even in the "All to ETF" run.
+    expect(monthlyData[months - 1].etf).toBe(0);
+    // TODO-177: once it is paid off nothing is owed, so the condition holds
+    // and the split resumes - with no loan the ratio gate counts as reached.
+    expect(monthlyData.at(-1).etf).toBeGreaterThan(0);
   });
 });
 
@@ -93,7 +99,8 @@ describe('summariseStrategy', () => {
   it('reports accessible cash as offset + savings, deliberately excluding the ETF balance', () => {
     const runs = runStrategyScenarios(BASE_PARAMS, 50);
     const summary = summariseStrategy(runs[1], SNAPSHOT_CONTEXT);
-    const last = runs[1].simulation.monthlyData.at(-1);
+    // With no horizon passed it reads the strategy's own payoff month.
+    const last = runs[1].simulation.monthlyData[runs[1].simulation.months - 1];
 
     expect(summary.accessibleCash).toBe(last.offset + last.savings);
     expect(last.etf).toBeGreaterThan(0);
@@ -103,10 +110,28 @@ describe('summariseStrategy', () => {
   it('uses the same net worth and equity expressions as the Timeline Explorer', () => {
     const runs = runStrategyScenarios(BASE_PARAMS, 50);
     const summary = summariseStrategy(runs[1], SNAPSHOT_CONTEXT);
-    const l = runs[1].simulation.monthlyData.at(-1);
+    const l = runs[1].simulation.monthlyData[runs[1].simulation.months - 1];
 
     expect(summary.netWorth).toBe(l.propertyValue - l.balance + l.offset + l.savings + l.etf);
     expect(summary.propertyEquity).toBe(l.propertyValue - l.balance);
+  });
+
+  // TODO-177: a table passes getComparisonHorizon(runs) so every strategy is
+  // read on the same date - the slowest payoff, when all of them are
+  // debt-free - instead of each at its own payoff.
+  it('reads every strategy at the shared horizon when one is passed', () => {
+    const runs = runStrategyScenarios(BASE_PARAMS, 50);
+    const horizon = getComparisonHorizon(runs);
+    expect(runs[0].simulation.months).toBeLessThan(horizon);
+
+    const summaries = runs.map((run) => summariseStrategy(run, SNAPSHOT_CONTEXT, horizon));
+    summaries.forEach((summary, i) => {
+      const row = runs[i].simulation.monthlyData[horizon - 1];
+      expect(summary.netWorth).toBe(row.propertyValue - row.balance + row.offset + row.savings + row.etf);
+      expect(summary.payoffMonths).toBe(runs[i].simulation.months);
+    });
+    // Same date, same property: equity is identical once all are debt-free.
+    expect(new Set(summaries.map(s => s.propertyEquity)).size).toBe(1);
   });
 
   it('carries the cash-shortfall signal through', () => {
@@ -153,31 +178,22 @@ describe('buildComparisonRows', () => {
     });
   });
 
-  it('clamps a strategy that already paid off to its final state instead of dropping it', () => {
+  it('keeps simulating a strategy that already paid off (TODO-177)', () => {
     const runs = runStrategyScenarios(BASE_PARAMS, 100);
     const rows = buildComparisonRows(runs, 'offset', SNAPSHOT_CONTEXT);
     const offsetOnlyPayoff = runs[0].simulation.months;
     const longest = Math.max(...runs.map(r => r.simulation.months));
     expect(offsetOnlyPayoff).toBeLessThan(longest);
 
-    // Every row at or past the offset-only run's payoff month reports the same
-    // frozen figure, because getTimelineSnapshot clamps to its final row rather
-    // than returning undefined.
-    //
-    // TODO-168 rewrote what this comment used to claim. It said the figure
-    // "stopped changing because its loan was covered" and that "a loan is 'paid
-    // off' once the offset covers the balance, so that final figure is the
-    // offset's size, not zero" - a rationalisation of two separate defects. The
-    // engine now retires the loan inside that month's own row, and being frozen
-    // is a limit of the simulation (the loop broke), not a fact about the
-    // strategy: with no installment left its surplus would really keep growing.
-    // buildComparisonRows therefore flags these cells so the table can say so
-    // instead of printing a stale figure.
+    // This used to assert the opposite: every row past the offset-only run's
+    // payoff showed ONE frozen figure, because the engine's loop broke there
+    // (TODO-168 already called that a limit of the simulation, not a fact).
+    // Now it keeps running: no installment left, so its whole surplus lands in
+    // the offset and the figure keeps growing, as it really would.
     const settled = rows.filter(r => r.month >= offsetOnlyPayoff)
       .map(r => r.values.find(v => v.key === OFFSET_ONLY).value);
     expect(settled.length).toBeGreaterThan(1);
-    expect(new Set(settled).size).toBe(1);
-    expect(settled[0]).toBe(runs[0].simulation.monthlyData.at(-1).offset);
+    settled.slice(1).forEach((value, i) => expect(value).toBeGreaterThan(settled[i]));
   });
 
   // TODO-168: the defect this entry is named for. The offset-only strategy pays
@@ -200,25 +216,23 @@ describe('buildComparisonRows', () => {
     });
 
     // TODO-168's verification asked for the fastest strategy to also show the
-    // HIGHEST property equity here. It cannot, and the reason is worth writing
-    // down: propertyEquity is `propertyValue - balance`, and the clamp freezes
-    // BOTH terms. Zeroing the balance removes the phantom debt, but the fast
-    // strategy's propertyValue is still stuck at its payoff month while the
-    // slow one's keeps compounding at 5%/yr to the horizon - which dominates.
-    // Measured on this fixture: 796,562 vs 1,588,483. Cross-strategy
-    // comparison past a payoff is not meaningful at all, which is exactly what
-    // the settledAtMonth flag exists to say.
-    it('credits it with its full property value, no phantom debt subtracted', () => {
+    // highest property equity here, and could not get it: the engine stopped
+    // at payoff, so the fast strategy's propertyValue was frozen there while
+    // the slow one's kept compounding (measured 796,562 vs 1,588,483 on this
+    // fixture). TODO-177 keeps simulating, so at the final month both are
+    // debt-free on the same property, on the same date - equal equity.
+    it('credits it with its full, still-growing property value', () => {
       const runs = runStrategyScenarios(BASE_PARAMS, 100);
       const rows = buildComparisonRows(runs, 'propertyEquity', SNAPSHOT_CONTEXT);
-      const fastestFinalRow = runs[0].simulation.monthlyData.at(-1);
-      const fastest = rows.at(-1).values.find(v => v.key === OFFSET_ONLY).value;
+      const finalMonth = rows.at(-1).month;
+      const fastestRow = runs[0].simulation.monthlyData[finalMonth - 1];
+      const final = rows.at(-1).values;
+      const fastest = final.find(v => v.key === OFFSET_ONLY).value;
 
-      // Equity is the whole property value now: nothing is still owed against
-      // it. Before the fix this was short by the balance the offset had
-      // already extinguished.
-      expect(fastestFinalRow.balance).toBe(0);
-      expect(fastest).toBe(fastestFinalRow.propertyValue);
+      expect(runs[0].simulation.months).toBeLessThan(finalMonth);
+      expect(fastestRow.balance).toBe(0);
+      expect(fastest).toBe(fastestRow.propertyValue);
+      expect(fastest).toBe(final.find(v => v.key === ALL_ETF).value);
     });
 
     it('flags a finished strategy\'s cells with the month it settled, and leaves a live one unflagged', () => {
@@ -355,13 +369,17 @@ describe('runCrashScenarios (TODO-145)', () => {
     expect(mid).toBeLessThan(early);
   });
 
-  it('a crash after the loan is paid off never fires - the projection has already ended', () => {
+  // TODO-177 inverted this. It used to assert that a crash after payoff never
+  // fires, because "the projection has already ended" - the engine's loop
+  // broke at payoff. A paid-off household still holds its ETF, so a crash
+  // after payoff now hits it like any other.
+  it('a crash after the loan is paid off still hits the ETF', () => {
     const runs = runCrashScenarios(BASE_PARAMS, 50, 300);
     const payoffMonths = runs[0].simulation.months;
     expect(payoffMonths).toBeLessThan(300);
     const baselineEtf = runs[0].simulation.monthlyData.at(-1).etf;
     for (const run of runs.slice(1)) {
-      expect(run.simulation.monthlyData.at(-1).etf).toBe(baselineEtf);
+      expect(run.simulation.monthlyData.at(-1).etf).toBeLessThan(baselineEtf);
     }
   });
 

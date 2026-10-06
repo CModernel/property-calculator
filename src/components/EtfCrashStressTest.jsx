@@ -31,7 +31,7 @@ const EtfCrashStressTest = ({ summaries, crashMonth }) => {
         <InfoTooltip label="How should I read this stress test?">
           <p>One single, one-off fall in your ETF balance at month {crashMonth}, then the balance carries on compounding at your same assumed return. Not a forecast, and not a model of how markets actually behave - a deliberately simple "what would this cost me" check.</p>
           <p className="mt-2">A LATER crash generally costs more, not less: your balance keeps growing from ongoing contributions, so a later drop takes a percentage of a much bigger number, and that outweighs the compounding the earlier loss would have missed out on. Move the crash month to see it for your own figures.</p>
-          <p className="mt-2">A crash after your loan is paid off shows no effect at all, because this projection stops there.</p>
+          <p className="mt-2">A crash after your loan is paid off shows no effect at all, because these results are read at the month your loan is paid off.</p>
         </InfoTooltip>
       </div>
 

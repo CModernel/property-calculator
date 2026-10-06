@@ -265,7 +265,7 @@ describe('Offset vs ETF side-by-side comparison', () => {
 
   // The panel and the Timeline Explorer read the same simulation through the
   // same helpers; if they ever diverge, one of them is lying to the user.
-  it('agrees with the Timeline Explorer on the final offset balance for the chosen split', async () => {
+  it('agrees with the Timeline Explorer on the offset balance for the chosen split', async () => {
     const user = userEvent.setup();
     render(<App />);
     await openComparison(user);
@@ -273,22 +273,18 @@ describe('Offset vs ETF side-by-side comparison', () => {
     await user.selectOptions(screen.getByLabelText('Track over time:'), 'offset');
     const section = comparisonSection();
 
-    // TODO-168: this used to read the year-by-year table's LAST row. That row
-    // sits at the slowest strategy's payoff month, by which point "Your split"
-    // has finished - so its cell now reads "✓ paid off mN" rather than a frozen
-    // dollar figure, and there is deliberately no number there to compare.
-    // The summary table above is the right counterpart: it reports each
-    // strategy at its OWN final month, which is exactly the month the Timeline
-    // Explorer's slider maxes out at.
-    // "Offset balance" is also one of the metric <option>s, so pick the cell.
-    const offsetLabelCell = within(section).getAllByText('Offset balance').find((n) => n.tagName === 'TD');
-    const offsetRow = offsetLabelCell.closest('tr');
-    // Columns are [label, Offset only, Your split, All to ETF].
-    const yourSplitFinal = within(offsetRow).getAllByRole('cell')[2].textContent;
+    // TODO-177: this used to compare the summary table with the Timeline at
+    // the slider's max (the split's own payoff). The summary now reads every
+    // strategy at the SHARED horizon - the slowest payoff - which the Timeline
+    // slider deliberately doesn't reach, so compare at a month both show: the
+    // year-by-year table's year-1 row (month 12).
+    // Columns are [year, Offset only, Your split, All to ETF].
+    const yearOneRow = within(section).getAllByRole('row')
+      .find((row) => within(row).queryAllByRole('cell')[0]?.textContent === '1');
+    const yourSplitYearOne = within(yearOneRow).getAllByRole('cell')[2].textContent;
 
-    const monthSlider = screen.getByLabelText('Viewing month');
-    fireEvent.change(monthSlider, { target: { value: monthSlider.max } });
-    expect(screen.getByText(new RegExp(`💰 Offset: \\${yourSplitFinal}`))).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Viewing month'), { target: { value: '12' } });
+    expect(screen.getByText(new RegExp(`💰 Offset: \\${yourSplitYearOne}$`))).toBeInTheDocument();
   });
 });
 

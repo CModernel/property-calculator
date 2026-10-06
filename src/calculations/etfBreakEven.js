@@ -48,6 +48,10 @@ export const BREAK_EVEN_ALREADY_AHEAD = 'alreadyAhead';
 // property appreciates identically either way. That artifact alone was enough
 // to report "no return needed at all", which is nonsense.
 //
+// (Historical since TODO-177: the engine now keeps simulating past payoff, so
+// that freeze no longer happens. The earlier month is kept because the
+// question below is still the one this answers.)
+//
 // At the earlier month both arms are genuinely live and mid-flight: the
 // diverted one still owes money, and its net worth subtracts that. Nothing is
 // frozen or invented. The question it answers is crisp: at the moment the

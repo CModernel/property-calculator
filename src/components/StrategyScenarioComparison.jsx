@@ -39,7 +39,7 @@ const StrategyScenarioComparison = ({ summaries, rows, metricKey, onMetricChange
         </InfoTooltip>
       </div>
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-        Strategies finish at different times, so the table runs to whichever takes longest. One that already finished stops changing.
+        Strategies finish at different times, so the table runs to whichever takes longest. One that already finished keeps going - with no repayment left, its whole surplus keeps building, and whatever stays in the offset earns nothing once there is no loan to save on. Balances are read on that shared date; interest and shortfall are counted until each strategy pays off.
       </p>
 
       <div className="overflow-x-auto mb-4">
@@ -146,16 +146,15 @@ const StrategyScenarioComparison = ({ summaries, rows, metricKey, onMetricChange
               <tr key={row.month}>
                 <td className={TD}>{monthlyStepping ? row.month : (row.month / 12).toFixed(row.month % 12 === 0 ? 0 : 1)}</td>
                 {row.values.map((v) => (
-                  <td
-                    key={v.key}
-                    className={v.settledAtMonth ? 'pr-2 py-1 whitespace-nowrap text-gray-400 dark:text-gray-500 italic' : TD}
-                  >
-                    {/* TODO-168: a finished strategy is not simulated past its
-                        payoff, so its figures are frozen at that month. Saying
-                        so beats printing a stale dollar amount that reads as a
-                        live one - which is how the fastest-paying strategy came
-                        to look like the worst at year 30. */}
-                    {v.settledAtMonth ? `✓ paid off m${v.settledAtMonth}` : money(v.value)}
+                  <td key={v.key} className={TD}>
+                    {/* TODO-177: past its payoff a strategy is still simulated,
+                        so the figure is real; the marker only says it is
+                        already debt-free (TODO-168 used to print the marker
+                        INSTEAD of a frozen figure). */}
+                    {money(v.value)}
+                    {v.settledAtMonth && (
+                      <span className="ml-1 text-gray-400 dark:text-gray-500 italic">✓ paid off m{v.settledAtMonth}</span>
+                    )}
                   </td>
                 ))}
               </tr>

@@ -36,7 +36,7 @@ import {
 } from './calculations/loan';
 import { calculateLoanWithOffset } from './calculations/offsetSimulation';
 import { runStrategyGrid, selectParetoFront, calculateEtfCrashSurvivedPct, classifyEtfCrash } from './calculations/strategyComparison';
-import { runStrategyScenarios, runReturnScenarios, runCrashScenarios, summariseStrategy, buildComparisonRows, getComparisonMonths, hasUsableData, YEARLY_STEP_MIN_MONTHS } from './calculations/strategyScenarios';
+import { runStrategyScenarios, runReturnScenarios, runCrashScenarios, summariseStrategy, buildComparisonRows, getComparisonMonths, getComparisonHorizon, hasUsableData, YEARLY_STEP_MIN_MONTHS } from './calculations/strategyScenarios';
 import { findBreakEvenEtfReturn } from './calculations/etfBreakEven';
 import StrategyScenarioComparison from './components/StrategyScenarioComparison';
 import EtfReturnSensitivity from './components/EtfReturnSensitivity';
@@ -2245,7 +2245,7 @@ const PropertyInvestmentCalculator = () => {
                               <span className="flex items-center gap-1">
                                 ETF Balance
                                 <InfoTooltip label="Why isn't this perfectly fair?">
-                                  <p>Measured at whichever month THIS strategy's own simulation stops (loan payoff, or the end of your loan term). Strategies that pay off faster aren't credited for investing the freed-up repayment afterward, so this slightly understates low-risk strategies' true long-run wealth.</p>
+                                  <p>Measured at THIS strategy's own payoff month (or the end of your loan term if it never pays off). Strategies that pay off faster aren't credited for investing the freed-up repayment afterward, so this slightly understates low-risk strategies' true long-run wealth.</p>
                                   <p className="mt-2">Total Interest Paid isn't affected by this and is always a fair comparison.</p>
                                 </InfoTooltip>
                               </span>
@@ -2353,7 +2353,8 @@ const PropertyInvestmentCalculator = () => {
                   initialSavingsBalance: cashRemaining,
                   initialPropertyValue: propertyPrice,
                 };
-                const summaries = runs.map((run) => summariseStrategy(run, snapshotContext));
+                const horizon = getComparisonHorizon(runs);
+                const summaries = runs.map((run) => summariseStrategy(run, snapshotContext, horizon));
                 const rows = buildComparisonRows(runs, comparisonMetric, snapshotContext);
                 const monthlyStepping = getComparisonMonths(runs).length > 0
                   && Math.max(...runs.map(r => r.simulation.months)) <= YEARLY_STEP_MIN_MONTHS;
@@ -2422,11 +2423,12 @@ const PropertyInvestmentCalculator = () => {
                 // rather than hand-rolling a fourth base-params bundle.
                 const offsetOnlyRun = runStrategyScenarios(sensitivityBaseParams, 0)[0];
                 if (!hasUsableData([offsetOnlyRun])) return null;
+                const returnHorizon = getComparisonHorizon([...returnRuns, offsetOnlyRun]);
 
                 return (
                   <EtfReturnSensitivity
-                    summaries={returnRuns.map((run) => summariseStrategy(run, snapshotContext))}
-                    offsetOnlySummary={summariseStrategy(offsetOnlyRun, snapshotContext)}
+                    summaries={returnRuns.map((run) => summariseStrategy(run, snapshotContext, returnHorizon))}
+                    offsetOnlySummary={summariseStrategy(offsetOnlyRun, snapshotContext, returnHorizon)}
                     breakEven={findBreakEvenEtfReturn(sensitivityBaseParams, etfAllocationPct, snapshotContext)}
                     allocationPct={etfAllocationPct}
                   />
@@ -2449,7 +2451,7 @@ const PropertyInvestmentCalculator = () => {
                     step={1}
                     impact="neutral"
                   >
-                    Which month the stress test below drops your ETF balance in. A stress-test input, so it has no better or worse direction of its own - though a later crash generally costs more, since your balance is bigger by then. A crash after the loan is paid off has no effect, because the projection ends there.
+                    Which month the stress test below drops your ETF balance in. A stress-test input, so it has no better or worse direction of its own - though a later crash generally costs more, since your balance is bigger by then. A crash after the loan is paid off shows no effect, because these results are read at the month the loan is paid off.
                   </NumberSliderField>
 
                   {(() => {
@@ -2490,7 +2492,7 @@ const PropertyInvestmentCalculator = () => {
                     };
                     return (
                       <EtfCrashStressTest
-                        summaries={crashRuns.map((run) => summariseStrategy(run, snapshotContext))}
+                        summaries={crashRuns.map((run) => summariseStrategy(run, snapshotContext, getComparisonHorizon(crashRuns)))}
                         crashMonth={etfCrashMonth}
                       />
                     );
@@ -4280,11 +4282,12 @@ const PropertyInvestmentCalculator = () => {
             <div className="space-y-6 mt-4">
               <div>
                 <p className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-2">Loan Balance vs. Offset vs. Effective Balance</p>
-                <LoanBalanceChart monthlyData={loanSimulation.monthlyData} isDarkMode={isDarkMode} />
+                {/* TODO-177: rows now run past payoff; the charts stop at it. */}
+                <LoanBalanceChart monthlyData={loanSimulation.monthlyData.slice(0, loanSimulation.months)} isDarkMode={isDarkMode} />
               </div>
               <div>
                 <p className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-2">Principal vs. Interest (per month)</p>
-                <PrincipalInterestChart monthlyData={loanSimulation.monthlyData} isDarkMode={isDarkMode} />
+                <PrincipalInterestChart monthlyData={loanSimulation.monthlyData.slice(0, loanSimulation.months)} isDarkMode={isDarkMode} />
               </div>
             </div>
             </Suspense>
