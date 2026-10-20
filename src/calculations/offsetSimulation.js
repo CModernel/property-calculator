@@ -242,6 +242,14 @@ export function calculateLoanWithOffset({
   let returnedTotals = null;
   const monthlyData = [];
   const savingsMonthlyRate = calculateMonthlyRate(savingsInterestRate);
+  // TODO-180: once the loan is paid off the offset is just a bank account, so
+  // its cash earns the savings rate - AFTER tax at effectiveTaxRate, since bank
+  // interest is ordinary income (the ETF's return is taxed too, below, so
+  // leaving this untaxed would tilt every cash-vs-ETF comparison toward cash).
+  // The initial savings balance above still compounds untaxed: a pre-existing
+  // simplification this does not change. Not fed into the negative-gearing
+  // bracket income either (a small post-payoff overstatement of that relief).
+  const idleCashMonthlyRate = calculateMonthlyRate(savingsInterestRate * (1 - effectiveTaxRate / 100));
   // TODO-96/131: taxed before being applied - see the param comment above
   // for why this isn't just expectedEtfReturn as-is. Uses HALF of
   // effectiveTaxRate, not the full rate: AU capital gains held >12 months
@@ -404,6 +412,15 @@ export function calculateLoanWithOffset({
     // TODO-96: same "grows on last month's balance before this month's
     // deposit" convention as savings above - a no-op at the 0% default.
     etfBalance += etfBalance * etfMonthlyRate;
+    // TODO-180: idle offset cash earns from the month AFTER the payoff month
+    // (payoffMonth is set at the bottom of that month's iteration). Before
+    // payoff the offset already "earns" by cutting the loan's interest. Base is
+    // offsetAtMonthStart - the offset's own TODO-173 rule, which includes this
+    // month's one-off contributions - and it lands before this month's surplus
+    // or deficit, so it can help cover a deficit. A no-op at the 0% default.
+    if (payoffMonth !== null) {
+      offsetBalance += offsetAtMonthStart * idleCashMonthlyRate;
+    }
 
     // TODO-145: the crash lands here on purpose - after this month's growth,
     // BEFORE this month's contribution (below). Same "before the deposit"

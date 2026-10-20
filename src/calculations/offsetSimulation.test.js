@@ -2698,7 +2698,9 @@ describe('simulation continues after payoff (TODO-177)', () => {
   });
 
   it('hands the whole installment back to the surplus once there is nothing to repay', () => {
-    const { months, monthlyData } = calculateLoanWithOffset(shippedLike);
+    // TODO-180: savings rate 0 so idle offset cash earns nothing here and the
+    // growth is the surplus plus the installment alone (see the TODO-180 block).
+    const { months, monthlyData } = calculateLoanWithOffset({ ...shippedLike, savingsInterestRate: 0 });
     const growth = monthlyData[months + 1].offset - monthlyData[months].offset;
     // Surplus + the installment no longer paid (no tax/ETF/growth effects on
     // the offset in this fixture).
@@ -2748,6 +2750,63 @@ describe('simulation continues after payoff (TODO-177)', () => {
     expect(gated.months).toBeLessThan(200);
     expect(gated.monthlyData[198].etf).toBe(0);
     expect(gated.monthlyData[199].etf).toBeGreaterThan(0);
+  });
+});
+
+// TODO-180: once the loan is gone the offset is just a bank account, so its
+// cash earns the user's savings rate, after tax at effectiveTaxRate (bank
+// interest is ordinary income). Before payoff nothing changes - the offset
+// "earns" by cutting the loan's interest.
+describe('idle offset cash earns the savings rate after payoff (TODO-180)', () => {
+  const rate = calculateMonthlyRate(6.13);
+  const fixture = {
+    personalExpenseItems: [],
+    contributions: [],
+    loanAmount: 543_000,
+    monthlyRate: rate,
+    monthlyPayment: calculateMonthlyPayment(543_000, rate, 360),
+    maxMonths: 360,
+    monthlyToOffset: 2470.42,
+    savingsInterestRate: 4,
+    effectiveTaxRate: 30,
+  };
+
+  it('grows the offset by its start-of-month balance at the net savings rate', () => {
+    const { months, monthlyData } = calculateLoanWithOffset(fixture);
+    const netRate = calculateMonthlyRate(4 * (1 - 30 / 100));
+    // rows[months] is the first month after the payoff month: it starts
+    // with the payoff month's closing offset.
+    for (const i of [months, months + 1, months + 60]) {
+      const start = monthlyData[i - 1].offset;
+      const expected = start + 2470.42 + fixture.monthlyPayment + start * netRate;
+      // Rows are rounded to the dollar, so the start balance is +-0.5 off.
+      expect(Math.abs(monthlyData[i].offset - expected)).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('leaves every row up to and including payoff, and the returned totals, unchanged', () => {
+    const earning = calculateLoanWithOffset(fixture);
+    const idle = calculateLoanWithOffset({ ...fixture, savingsInterestRate: 0 });
+    expect(earning.months).toBe(idle.months);
+    expect(earning.totalInterest).toBe(idle.totalInterest);
+    const offsets = (r) => r.monthlyData.map((row) => row.offset);
+    expect(offsets(earning).slice(0, earning.months)).toEqual(offsets(idle).slice(0, idle.months));
+    expect(earning.monthlyData.at(-1).offset).toBeGreaterThan(idle.monthlyData.at(-1).offset);
+  });
+
+  it('taxes the interest: a higher tax rate leaves less cash at the term end', () => {
+    const untaxed = calculateLoanWithOffset({ ...fixture, effectiveTaxRate: 0 });
+    const taxed = calculateLoanWithOffset(fixture);
+    // Same months either way: the tax rate doesn't touch this loan's payoff.
+    expect(taxed.months).toBe(untaxed.months);
+    const gain = (r) => r.monthlyData.at(-1).offset - r.monthlyData[r.months - 1].offset;
+    expect(gain(taxed)).toBeLessThan(gain(untaxed));
+  });
+
+  it('pays nothing at a 0% savings rate - the shipped default', () => {
+    const { months, monthlyData } = calculateLoanWithOffset({ ...fixture, savingsInterestRate: 0 });
+    const growth = monthlyData[months + 1].offset - monthlyData[months].offset;
+    expect(Math.abs(growth - (2470.42 + fixture.monthlyPayment))).toBeLessThanOrEqual(1);
   });
 });
 

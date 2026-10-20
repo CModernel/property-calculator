@@ -1776,7 +1776,7 @@ const PropertyInvestmentCalculator = () => {
                 color="green"
                 suffix="% p.a."
               >
-                Annual interest earned on your Remaining Savings - the cash left over after settlement. Your monthly surplus doesn't come here; it goes to the offset (and to ETF investing, if you enable it). 0% (default) means no interest is modeled.
+                Annual interest earned on your Remaining Savings - the cash left over after settlement. Your monthly surplus doesn't come here; it goes to the offset (and to ETF investing, if you enable it). Once the loan is paid off, cash left in the offset earns this rate too, after tax. 0% (default) means no interest is modeled.
               </NumberSliderField>
 
               <div>
@@ -2235,22 +2235,25 @@ const PropertyInvestmentCalculator = () => {
                 // TODO-167: the only one of the five extra engine consumers
                 // that had no sentinel guard - it rendered "Interest Paid
                 // $999,999" plus a falsely reassuring "🟢 50% (Very
-                // resilient)", because the crash scorer is handed
-                // 999999 - 999999 = 0 and 0 >= 0 scores as maximum
-                // resilience. Same `return null` as the four siblings below.
+                // resilient)" off a meaningless all-zero sentinel row. Same
+                // `return null` as the four siblings below.
                 if (!gridResults.every((r) => r.hasUsableProjection)) return null;
                 const paretoFront = selectParetoFront(gridResults);
+                // TODO-180: the crash test measures each row's lead over
+                // Offset only (the allocation-0 cell) in net worth at the
+                // term end - the same date and objective as the front itself.
                 const baselineRow = gridResults.find((r) => r.etfAllocationPct === 0);
-                const baselineInterest = baselineRow ? baselineRow.totalInterestPaid : 0;
+                const baselineNetWorth = baselineRow ? baselineRow.netWorth : 0;
+                const termYears = Math.round(totalMonths / 12);
 
                 return (
                   <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-sm space-y-3">
                     <p className="font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-2">
                       🔍 Strategy Comparison
                       <InfoTooltip label="What is this searching?">
-                        <p>Searches 441 combinations of when to start investing (Switch Trigger) and how much to divert (ETF Allocation) once switched on, in 5% steps - holding everything else the same. Shows the non-dominated (Pareto-optimal) strategies below: for each, no other strategy has both a lower total interest paid AND a higher ETF balance.</p>
+                        <p>Searches 441 combinations of when to start investing (Switch Trigger) and how much to divert (ETF Allocation) once switched on, in 5% steps - holding everything else the same. Every strategy is measured on the same date, the end of your loan term, by net worth. Shows the non-dominated (Pareto-optimal) strategies below: for each, no other strategy has both a higher net worth AND a lower Risk.</p>
                         <p className="mt-2">There's no single "best" - which one to pick depends on how you personally weigh certainty (offset) against expected but risky growth (ETF). "Apply" sets the sliders above to that row's values.</p>
-                        <p className="mt-2">A row flagged with a cash shortfall only reached these numbers by running out of money in some months - its interest/ETF figures assume income it didn't actually have, not a free win over the others.</p>
+                        <p className="mt-2">A row flagged with a cash shortfall ran out of money in some months; the unfunded amount is already taken off its net worth.</p>
                       </InfoTooltip>
                     </p>
                     {/* TODO-144 fix: this grid searches the loan-% axis, so it
@@ -2262,23 +2265,37 @@ const PropertyInvestmentCalculator = () => {
                       Explores the "% of the loan" criterion for when to start investing.
                       {etfStartTrigger !== 'loanRatio' && ' You currently start on a different criterion, so applying a row will switch you to that criterion.'}
                     </p>
+                    {/* TODO-180 review: the ETF panels compare on different
+                        dates, so a row here can read "ahead of Offset only"
+                        while the side-by-side table, read earlier, does not. */}
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Compared at the end of your loan term (year {termYears}). The side-by-side table below compares at the slowest strategy's payoff instead, and counts shortfalls only until each strategy pays off without taking them off net worth, so the two can differ.
+                    </p>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left border-collapse text-xs">
                         <thead>
                           <tr className="text-gray-500 dark:text-gray-400">
                             <th className="pr-2 pb-1 font-medium whitespace-nowrap">Switch</th>
                             <th className="pr-2 pb-1 font-medium whitespace-nowrap">Allocation</th>
-                            <th className="pr-2 pb-1 font-medium whitespace-nowrap">Interest Paid</th>
                             <th className="pr-2 pb-1 font-medium whitespace-nowrap">
                               <span className="flex items-center gap-1">
-                                ETF Balance
-                                <InfoTooltip label="Why isn't this perfectly fair?">
-                                  <p>Measured at THIS strategy's own payoff month (or the end of your loan term if it never pays off). Strategies that pay off faster aren't credited for investing the freed-up repayment afterward, so this slightly understates low-risk strategies' true long-run wealth.</p>
-                                  <p className="mt-2">Total Interest Paid isn't affected by this and is always a fair comparison.</p>
+                                <span>Net Worth (year {termYears})</span>
+                                <InfoTooltip label="What does Net Worth include?">
+                                  <p>Property value minus what's still owed, plus the offset, your savings and the ETF - at the end of your loan term, for every strategy alike. A strategy that pays off early keeps going: its whole surplus keeps building, and the cash left in the offset earns your Savings Interest Rate (currently {savingsInterestRate}%) after tax, since there is no loan left to save interest on.</p>
+                                  <p className="mt-2">At the 0% default that cash earns nothing, which understates Offset only - set your Savings Interest Rate for a fair comparison.</p>
+                                  <p className="mt-2">Any cash shortfall is subtracted. The ETF is valued after the app's simplified capital-gains tax on its growth.</p>
                                 </InfoTooltip>
                               </span>
                             </th>
-                            <th className="pr-2 pb-1 font-medium whitespace-nowrap">Risk</th>
+                            <th className="pr-2 pb-1 font-medium whitespace-nowrap">
+                              <span className="flex items-center gap-1">
+                                <span>Risk</span>
+                                <InfoTooltip label="What does Risk measure?">
+                                  <p>The share of your cash and investments held in the ETF at the end of your loan term: 0 is all offset and savings, 100 is all ETF. Large Remaining Savings lower it, since they are cash too.</p>
+                                </InfoTooltip>
+                              </span>
+                            </th>
+                            <th className="pr-2 pb-1 font-medium whitespace-nowrap">Interest Paid</th>
                             <th className="pr-2 pb-1 font-medium whitespace-nowrap">Crash Test</th>
                             <th className="pr-2 pb-1 font-medium whitespace-nowrap">Cash Shortfall</th>
                             <th className="pb-1 font-medium" />
@@ -2287,16 +2304,22 @@ const PropertyInvestmentCalculator = () => {
                         <tbody>
                           {paretoFront.map((row) => {
                             const isApplied = row.switchThresholdPct === switchThresholdPct && row.etfAllocationPct === etfAllocationPct;
-                            const crashSurvived = calculateEtfCrashSurvivedPct(row.etfBalance, row.totalInterestPaid - baselineInterest);
-                            const crashClass = classifyEtfCrash(crashSurvived);
+                            const crashSurvived = calculateEtfCrashSurvivedPct(row.etfBalance, row.netWorth - baselineNetWorth);
+                            // null: no ETF to crash (Offset only). 0: ahead, but
+                            // under a 10% crash's worth. -1: already behind.
+                            const crashClass = crashSurvived === null ? null : classifyEtfCrash(crashSurvived);
+                            const crashText = crashSurvived === null ? 'n/a'
+                              : crashSurvived < 0 ? `${crashClass.symbol} Behind`
+                                : crashSurvived === 0 ? `${crashClass.symbol} <10%`
+                                  : `${crashClass.symbol} ${crashSurvived}%`;
                             return (
                               <tr key={`${row.switchThresholdPct}-${row.etfAllocationPct}`} className={isApplied ? 'bg-gray-100 dark:bg-gray-800' : undefined}>
                                 <td className="pr-2 py-1 whitespace-nowrap text-gray-700 dark:text-gray-200">{row.switchThresholdPct}%</td>
                                 <td className="pr-2 py-1 whitespace-nowrap text-gray-700 dark:text-gray-200">{row.etfAllocationPct}%</td>
-                                <td className="pr-2 py-1 whitespace-nowrap text-gray-700 dark:text-gray-200">${row.totalInterestPaid.toLocaleString()}</td>
-                                <td className="pr-2 py-1 whitespace-nowrap text-gray-700 dark:text-gray-200">${row.etfBalance.toLocaleString()}</td>
+                                <td className="pr-2 py-1 whitespace-nowrap text-gray-700 dark:text-gray-200">{row.netWorth < 0 ? '-' : ''}${Math.abs(row.netWorth).toLocaleString()}</td>
                                 <td className="pr-2 py-1 whitespace-nowrap text-gray-700 dark:text-gray-200">{row.riskScore}</td>
-                                <td className={`pr-2 py-1 whitespace-nowrap font-medium ${crashClass.textClass}`}>{crashClass.symbol} {crashSurvived}%</td>
+                                <td className="pr-2 py-1 whitespace-nowrap text-gray-700 dark:text-gray-200">${row.totalInterestPaid.toLocaleString()}</td>
+                                <td className={`pr-2 py-1 whitespace-nowrap font-medium ${crashClass ? crashClass.textClass : 'text-gray-500 dark:text-gray-400'}`}>{crashText}</td>
                                 <td
                                   className={row.totalCashShortfall > 0
                                     ? 'pr-2 py-1 whitespace-nowrap font-medium text-red-600 dark:text-red-400'

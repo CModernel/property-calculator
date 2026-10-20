@@ -7,6 +7,59 @@ optionally reuse in the commit message when you implement it.
 
 ## ✅ Completed
 
+- [x] **TODO-180: Rethink the strategy grid and the "idle cash earns 0%" assumption now that the engine runs past payoff**
+  Deferred from TODO-177 by user decision. Since TODO-177 the engine keeps
+  simulating after payoff, but the 441-cell grid (`strategyComparison.js`,
+  Pareto front + Crash Test) still reads each cell at its OWN payoff month,
+  so cells are compared at different dates and a fast payer gets no credit
+  for what it does with the freed-up repayment.
+  Reading the term end instead (tried in TODO-177, reverted) turned the front
+  into "pay off, then invest everything" (every row risk 99-100), because the
+  objective ignores cash left in the offset and that cash earns 0% once there
+  is no loan. The side-by-side table already compares on a shared date and
+  discloses the 0% - on the default with ETF on, "Offset only" ends year 30
+  with ~$2.7M idle.
+  Questions to decide: (1) what idle post-payoff cash should earn (0%, the
+  savings rate - which defaults to 0 - or something else); (2) whether the
+  grid should compare on a shared horizon, and on which objective (net worth
+  instead of ETF balance alone?); (3) whether "Offset only" should mean "never
+  invest" or "invest once paid off".
+  **Retrospective (PCALC-142):** user decisions 2026-10-20 - (1) idle cash
+  after payoff earns the savings rate, taxed at effectiveTaxRate; (2) the grid
+  compares every cell at the TERM END by net worth, Pareto front net worth
+  (higher) vs risk (lower), interest paid kept as an info column; (3) "Offset
+  only" never invests. Engine: from the month after payoff the offset earns
+  `offsetAtMonthStart x` the net savings rate (no-op at the 0% default; rows up
+  to payoff and the frozen totals unchanged). Grid: `netWorth` reuses
+  COMPARISON_METRICS' expression minus the cash shortfall RECOUNTED to the term
+  end (the returned totals freeze at payoff, so a deficit after a cell's payoff
+  was invisible - Opus plan review measured a 50% cell overstated by $326k);
+  `risk` is the unrounded ETF share of offset+savings+ETF, `riskScore` its
+  display copy. Crash Test: net worth with the ETF cut by X% vs Offset only's;
+  "ahead but under 10%" now reads Fragile (it used to say "Already behind",
+  which was false), Offset only reads n/a. UI: Net Worth (year N) column with
+  a tooltip naming the current savings rate, rewritten search tooltip, a line
+  saying the side-by-side table compares on a different date, Savings
+  Interest Rate help and "earns nothing" copy updated. On the shipped default
+  the front now spans real risk levels (pinned by a render test). Mutations
+  (interest before payoff, untaxed, payoff-month reading, old Pareto axes, old
+  crash formula, no shortfall deduction, rounded risk) all fail tests.
+  Noted, not changed: the initial savings balance still compounds untaxed;
+  idle-cash interest isn't added to negative gearing's bracket income; the ETF
+  is taxed only through the app's half-rate proxy on its growth; the
+  side-by-side table's shortfall still freezes at each payoff.
+  Opus diff review: nothing serious. Fixed: a render test now pins the crash
+  lead's wiring (every non-baseline front row shows a 🟢/🟠 percentage - a
+  backwards or interest-based lead fails it); Risk got a tooltip (savings count
+  as cash); the Net Worth tooltip states the 0%-default caveat and no longer
+  claims the ETF is pre-tax; the caption names both reasons the side-by-side
+  table can differ (date and shortfall treatment); savings in the risk
+  denominator pinned. Not a bug: its "zero loan shows Net Worth $0" finding -
+  `hasUsableProjection` already requires rows, so the grid is hidden (now
+  pinned by a test). Accepted: the shortfall is deducted in nominal dollars
+  (its forgone ETF growth isn't), and the recount sums per-row rounded
+  shortfalls, so a month under $0.50 isn't counted.
+
 - [x] **TODO-189: The scenario matrix's copy of App's wiring had fallen behind TODO-182/183/185**
   From the calculation audit (2026-10-20). `purchaseHealthCheck.scenarios.test.js`
   re-wires App.jsx's Day-1 and Stabilized figures by hand and its header says
@@ -6565,24 +6618,6 @@ gives `totalInterest` **$645,389.22**.
   Suite 874 passing, lint and build clean.
 
 
-
-- [ ] **TODO-180: Rethink the strategy grid and the "idle cash earns 0%" assumption now that the engine runs past payoff**
-  Deferred from TODO-177 by user decision. Since TODO-177 the engine keeps
-  simulating after payoff, but the 441-cell grid (`strategyComparison.js`,
-  Pareto front + Crash Test) still reads each cell at its OWN payoff month,
-  so cells are compared at different dates and a fast payer gets no credit
-  for what it does with the freed-up repayment.
-  Reading the term end instead (tried in TODO-177, reverted) turned the front
-  into "pay off, then invest everything" (every row risk 99-100), because the
-  objective ignores cash left in the offset and that cash earns 0% once there
-  is no loan. The side-by-side table already compares on a shared date and
-  discloses the 0% - on the default with ETF on, "Offset only" ends year 30
-  with ~$2.7M idle.
-  Questions to decide: (1) what idle post-payoff cash should earn (0%, the
-  savings rate - which defaults to 0 - or something else); (2) whether the
-  grid should compare on a shared horizon, and on which objective (net worth
-  instead of ETF balance alone?); (3) whether "Offset only" should mean "never
-  invest" or "invest once paid off".
 
 - [ ] **TODO-186: Tooltips inside `overflow-x-auto` table wrappers are still clipped**
   Known limit of TODO-179, found by its Opus review. The viewport clamp can't

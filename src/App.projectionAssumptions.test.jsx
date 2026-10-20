@@ -165,12 +165,46 @@ describe('Invest in ETFs / Strategy Comparison', () => {
     await user.click(screen.getByRole('checkbox', INVEST_IN_ETFS_CHECKBOX));
 
     expect(screen.getByText('🔍 Strategy Comparison')).toBeInTheDocument();
-    // "ETF Balance" is skipped here - it nests its own InfoTooltip inside the
-    // <th>, same accessible-name gotcha as the checkboxes above.
+    // "Net Worth (year N)" and "Risk" nest their own InfoTooltip inside the
+    // <th> (an exact-text match still finds Risk's inner span).
     for (const header of ['Switch', 'Allocation', 'Interest Paid', 'Risk', 'Crash Test', 'Cash Shortfall']) {
       expect(screen.getByText(header)).toBeInTheDocument();
     }
     expect(screen.getAllByRole('button', { name: /^(Apply|Applied)$/ }).length).toBeGreaterThan(0);
+  });
+
+  // TODO-180: every row is net worth at the END of the term, against risk.
+  // On the shipped default the TODO-177 attempt at a term-end reading put
+  // every front row at risk 99-100; the net-worth objective must keep a real
+  // spread, anchored by Offset only (no ETF, so no crash to test).
+  it('compares strategies by net worth at the term end, with a real spread of risk', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openEtfSection(user);
+    await user.click(screen.getByRole('checkbox', INVEST_IN_ETFS_CHECKBOX));
+
+    const strategySection = screen.getByText('🔍 Strategy Comparison').closest('div');
+    expect(within(strategySection).getByText(/^Net Worth \(year 30\)$/)).toBeInTheDocument();
+
+    const headers = within(strategySection).getAllByRole('columnheader').map((th) => th.textContent);
+    const col = (name) => headers.findIndex((h) => h.startsWith(name));
+    const rows = within(strategySection).getAllByRole('row').slice(1).map((tr) => [...tr.querySelectorAll('td')].map((td) => td.textContent));
+
+    const offsetOnly = rows.find((cells) => cells[col('Allocation')] === '0%');
+    expect(offsetOnly[col('Risk')]).toBe('0');
+    expect(offsetOnly[col('Crash Test')]).toBe('n/a');
+
+    const risks = rows.map((cells) => Number(cells[col('Risk')]));
+    expect(risks.some((r) => r > 0 && r < 99)).toBe(true);
+
+    // Every other front row is strictly ahead of Offset only (a row with ETF
+    // and no lead is dominated by it), so its crash label is a percentage -
+    // a lead computed backwards or from interest would read "Behind".
+    const others = rows.filter((cells) => cells !== offsetOnly);
+    expect(others.length).toBeGreaterThan(0);
+    for (const cells of others) {
+      expect(cells[col('Crash Test')]).toMatch(/^(🟢|🟠) (\d+%|<10%)$/);
+    }
   });
 
   // TODO-143: the default scenario has no deficit month anywhere, so every

@@ -1,6 +1,11 @@
 import { calculateLoanWithOffset } from './offsetSimulation';
 import { hasUsableProjection } from './usableProjection';
 import { classifyByBands } from './purchaseHealthCheck';
+import { getComparisonMetric } from './strategyScenarios';
+
+// TODO-180: every cell is compared on ONE date, the term end, by net worth -
+// the same expression the side-by-side table and Timeline use.
+const netWorthOf = getComparisonMetric('netWorth').from;
 
 // TODO-98: the grid this session's own analysis settled on - 5% steps
 // (21 values each way = 441 combinations), not the ~2,100 a second
@@ -28,14 +33,36 @@ export function runStrategyGrid(baseParams) {
   for (const switchThresholdPct of GRID_VALUES) {
     for (const etfAllocationPct of GRID_VALUES) {
       const result = calculateLoanWithOffset({ ...baseParams, switchThresholdPct, etfAllocationPct });
-      // TODO-177: each cell is read at its OWN payoff month (or the term end),
-      // as before - the engine now keeps simulating past payoff, but reading
-      // the last row would value ETF balances at the term end while idle
-      // offset cash earns nothing, turning the Pareto front into "pay off, then
-      // invest everything" (user decision; see TODO-180).
-      const last = result.monthlyData[result.months - 1];
+      // TODO-180: every cell is read at the TERM END (it used to be its own
+      // payoff month, so cells were compared on different dates and a fast
+      // payer got no credit for what it did with the freed-up repayment).
+      // That reading collapsed the front in TODO-177 because idle offset cash
+      // earned 0% and the objective ignored it; now that cash earns the savings
+      // rate after tax (offsetSimulation.js) and the objective is net worth.
+      // Empty monthlyData (sentinel, or a loan of a cent) reads as all zeros.
+      const last = result.monthlyData.at(-1);
       const etfBalance = last ? last.etf : 0;
       const offsetBalance = last ? last.offset : 0;
+      const savingsBalance = last ? last.savings : 0;
+      // The returned shortfall totals freeze at payoff (TODO-177), so they
+      // would miss a deficit after it - recounted here to the term end, the
+      // same window net worth is read on.
+      let totalCashShortfall = 0;
+      let monthsWithShortfall = 0;
+      for (const row of result.monthlyData) {
+        if (row.cashShortfall > 0) {
+          totalCashShortfall += row.cashShortfall;
+          monthsWithShortfall++;
+        }
+      }
+      // A shortfall is money the plan never had - the deficit was simply not
+      // paid. Deducted so a cell that ran short (keeping its ETF intact, since
+      // the ETF never covers a deficit) can't out-rank one that stayed funded.
+      const netWorth = last ? netWorthOf(last) - totalCashShortfall : 0;
+      const liquidWealth = etfBalance + offsetBalance + savingsBalance;
+      // ETF share of liquid wealth at the term end. Unrounded for dominance
+      // and ordering; riskScore is the rounded copy for display.
+      const risk = liquidWealth > 0 ? (100 * etfBalance) / liquidWealth : 0;
       results.push({
         switchThresholdPct,
         etfAllocationPct,
@@ -48,16 +75,19 @@ export function runStrategyGrid(baseParams) {
         totalInterestPaid: Math.round(result.totalInterest),
         etfBalance,
         offsetBalance,
-        // Purely descriptive 0-100 read of realized exposure
-        // (Offset=0/ETF=100) - never fed back into the search itself.
-        riskScore: etfBalance + offsetBalance === 0 ? 0 : Math.round((100 * etfBalance) / (etfBalance + offsetBalance)),
+        netWorth,
+        // 0-100 read of realized exposure (cash = 0, ETF = 100), one of the
+        // two Pareto axes (TODO-180).
+        risk,
+        riskScore: Math.round(risk),
         // TODO-143: since TODO-136, a deficit month can drain the offset
         // instead of being silently floored to zero - so a low offsetBalance
         // (and therefore a high riskScore above) doesn't necessarily mean a
         // deliberate high ETF allocation. Surfacing these lets the UI flag a
         // cell that only looks attractive because it ran out of cash.
-        totalCashShortfall: Math.round(result.totalCashShortfall),
-        monthsWithShortfall: result.monthsWithShortfall,
+        // TODO-180: to the term end (see above), not the frozen payoff totals.
+        totalCashShortfall,
+        monthsWithShortfall,
       });
     }
   }
@@ -66,9 +96,10 @@ export function runStrategyGrid(baseParams) {
   return results;
 }
 
-// A strategy is non-dominated if no other strategy has both a lower (or
-// equal) totalInterestPaid AND a higher (or equal) etfBalance, with at
-// least one strictly better - the classic Pareto-front definition.
+// A strategy is non-dominated if no other strategy has both a higher (or
+// equal) net worth AND a lower (or equal) risk, with at least one strictly
+// better - the classic Pareto-front definition. TODO-180: these axes replaced
+// interest paid vs ETF balance; interest paid is already inside net worth.
 // Explicitly no weighted "Overall Score" and no single "best" - two
 // independent second opinions and this session's own analysis all
 // rejected that (see TODO-52's write-up).
@@ -76,8 +107,8 @@ export function selectParetoFront(results) {
   const nonDominated = results.filter((row) =>
     !results.some((other) => {
       if (other === row) return false;
-      const notWorse = other.totalInterestPaid <= row.totalInterestPaid && other.etfBalance >= row.etfBalance;
-      const strictlyBetter = other.totalInterestPaid < row.totalInterestPaid || other.etfBalance > row.etfBalance;
+      const notWorse = other.netWorth >= row.netWorth && other.risk <= row.risk;
+      const strictlyBetter = other.netWorth > row.netWorth || other.risk < row.risk;
       return notWorse && strictlyBetter;
     })
   );
@@ -95,15 +126,15 @@ export function selectParetoFront(results) {
     (a, b) => a.switchThresholdPct - b.switchThresholdPct || a.etfAllocationPct - b.etfAllocationPct
   );
   for (const row of sorted) {
-    const key = `${row.totalInterestPaid}-${row.etfBalance}-${row.totalCashShortfall > 0}`;
+    const key = `${row.netWorth}-${row.risk}-${row.totalCashShortfall > 0}`;
     if (!seen.has(key)) seen.set(key, row);
   }
-  const deduped = [...seen.values()].sort((a, b) => a.etfBalance - b.etfBalance);
+  const deduped = [...seen.values()].sort((a, b) => a.risk - b.risk);
 
   if (deduped.length <= 5) return deduped;
 
   // Show the spread, not a "winner" - 5 evenly-spaced points across the
-  // front by risk (etfBalance), from lowest-risk to highest-risk.
+  // front by risk, from lowest-risk to highest-risk.
   const sampleCount = 5;
   const indices = Array.from({ length: sampleCount }, (_, i) =>
     Math.round((i * (deduped.length - 1)) / (sampleCount - 1))
@@ -113,20 +144,28 @@ export function selectParetoFront(results) {
 
 // TODO-98: "what if ETFs fall 30%?" - mirrors purchaseHealthCheck.js's own
 // Interest Rate Stress Test pattern exactly (descending-severity ladder,
-// classifyByBands). "Survived" means this strategy's ETF balance, even
-// after the crash, still covers the extra interest it cost to divert
-// money away from the offset in the first place - i.e. did it still beat
-// the offset-only baseline.
+// classifyByBands). TODO-180: "survived" means this strategy's net worth at
+// the term end, with its ETF cut by the crash, is still at or above Offset
+// only's - it used to compare the ETF balance against the extra interest paid,
+// on each strategy's own payoff date.
 export const ETF_CRASH_BANDS = [
-  { min: 50, label: 'Very resilient', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: 'Still ahead of the offset-only baseline even after a 50% crash.' },
-  { min: 30, label: 'Resilient', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: 'Still ahead of the offset-only baseline after a 30% crash.' },
-  { min: 10, label: 'Fragile', symbol: '🟠', textClass: 'text-orange-600 dark:text-orange-400', critical: false, action: 'A larger crash would put you behind where the offset-only baseline would have left you.' },
-  { min: -Infinity, label: 'Already behind', symbol: '🔴', textClass: 'text-red-600 dark:text-red-400', critical: true, action: 'Even without a crash, this strategy is behind the offset-only baseline.' },
+  { min: 50, label: 'Very resilient', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: 'Still ahead of Offset only even after a 50% crash.' },
+  { min: 30, label: 'Resilient', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: 'Still ahead of Offset only after a 30% crash.' },
+  // TODO-180: from 0, not 10 - a strategy that is ahead but would fall behind
+  // after a 10% crash is fragile, not "already behind" as it used to read.
+  { min: 0, label: 'Fragile', symbol: '🟠', textClass: 'text-orange-600 dark:text-orange-400', critical: false, action: 'A larger crash would leave you behind where Offset only would have left you.' },
+  { min: -Infinity, label: 'Already behind', symbol: '🔴', textClass: 'text-red-600 dark:text-red-400', critical: true, action: 'Even without a crash, this strategy ends behind Offset only.' },
 ];
 
-export function calculateEtfCrashSurvivedPct(etfBalance, extraInterestPaidForEtf) {
+// netWorthLead = this strategy's term-end net worth minus Offset only's.
+// Returns the largest crash survived (50/30/10), 0 when ahead but a 10% crash
+// would put it behind, -1 when already behind, and null with no ETF at all
+// (nothing to crash - Offset only itself).
+export function calculateEtfCrashSurvivedPct(etfBalance, netWorthLead) {
+  if (!(etfBalance > 0)) return null;
+  if (netWorthLead < 0) return -1;
   for (const crash of [50, 30, 10]) {
-    if (etfBalance * (1 - crash / 100) >= extraInterestPaidForEtf) return crash;
+    if (etfBalance * (crash / 100) <= netWorthLead) return crash;
   }
   return 0;
 }

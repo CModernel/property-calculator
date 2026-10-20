@@ -70,7 +70,8 @@ export function runStrategyScenarios(baseParams, customEtfAllocationPct) {
       key: OFFSET_ONLY,
       label: 'Offset only',
       etfAllocationPct: 0,
-      description: 'Every surplus dollar reduces the loan. The predictable reference.',
+      // TODO-180: never invests, before or after payoff.
+      description: 'Every surplus dollar reduces the loan, and once it is paid off stays as cash earning your savings rate. Never invests. The predictable reference.',
       simulation: run(0),
     },
     {

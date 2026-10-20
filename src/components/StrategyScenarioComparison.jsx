@@ -39,7 +39,7 @@ const StrategyScenarioComparison = ({ summaries, rows, metricKey, onMetricChange
         </InfoTooltip>
       </div>
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-        Strategies finish at different times, so the table runs to whichever takes longest. One that already finished keeps going - with no repayment left, its whole surplus keeps building, and whatever stays in the offset earns nothing once there is no loan to save on. Balances are read on that shared date; interest and shortfall are counted until each strategy pays off.
+        Strategies finish at different times, so the table runs to whichever takes longest. One that already finished keeps going - with no repayment left, its whole surplus keeps building, and whatever stays in the offset earns your Savings Interest Rate after tax once there is no loan to save on (nothing at the 0% default). Balances are read on that shared date; interest and shortfall are counted until each strategy pays off.
       </p>
 
       <div className="overflow-x-auto mb-4">
