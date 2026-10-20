@@ -54,6 +54,15 @@ describe('page background (TODO-191)', () => {
     expect(light['background-attachment']).toBe('fixed');
   });
 
+  // TODO-194: without color-scheme the browser's own UI (an opened <select>
+  // list, scrollbars, number spinners) stays light in dark mode - on Chrome for
+  // Windows/Linux an opened select showed the inherited light text on white.
+  it('declares the colour scheme per theme so native controls follow it', async () => {
+    const root = await compile();
+    expect(declarationsFor(root, 'html')['color-scheme']).toBe('light');
+    expect(declarationsFor(root, 'html.dark')['color-scheme']).toBe('dark');
+  });
+
   it('leaves <body> transparent so the one gradient shows through', async () => {
     const body = declarationsFor(await compile(), 'body');
     expect(body['background-color']).toBeUndefined();

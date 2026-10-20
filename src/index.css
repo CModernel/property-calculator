@@ -15,6 +15,8 @@
 html {
   @apply bg-gradient-to-br from-slate-50 to-blue-50 text-gray-900;
   background-attachment: fixed;
+  /* TODO-194: native UI (select lists, scrollbars, spinners) follows the theme. */
+  color-scheme: light;
 }
 
 /* TODO-192: a base text colour for each theme. Text with no colour class of its
@@ -23,6 +25,7 @@ html {
    labels, ...). */
 html.dark {
   @apply from-slate-900 to-blue-950 text-gray-200;
+  color-scheme: dark;
 }
 
 /* TODO-128: the ETF slider's left side represents money staying offset-bound,

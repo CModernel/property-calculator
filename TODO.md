@@ -7,6 +7,19 @@ optionally reuse in the commit message when you implement it.
 
 ## ✅ Completed
 
+- [x] **TODO-194: Native controls (select lists, scrollbars, spinners) stayed light in dark mode**
+  Found by the Opus review of PCALC-143/144/145 (2026-10-20); those three were
+  otherwise judged correct. No `color-scheme` was declared, so the browser's own
+  UI ignored the dark theme: on Chrome for Windows/Linux an opened `<select>`
+  (5 in the app) lists the inherited light-grey text on a white popup, and the
+  `overflow-y-auto` lists keep light scrollbars. macOS's native menus hide it,
+  and the TODO-192 audit measured DOM text only, so neither caught it.
+  **Retrospective (PCALC-146):** `html { color-scheme: light }` and
+  `html.dark { color-scheme: dark }` in index.css; pinned in
+  `pageBackground.test.js` against the compiled CSS (removing the dark one fails
+  it); Chrome reports `dark`/`light` on the root in each theme. Not checked on a
+  Windows/Linux Chrome, where the symptom shows.
+
 - [x] **TODO-192: Text unreadable in dark mode (black or too-dim text on the dark cards)**
   Reported by the user: the Financial Events Log's Income Context rows
   ("Personal Income:", "$0/mo", ...) showed black on dark green. Cause: no base
