@@ -7,6 +7,31 @@ optionally reuse in the commit message when you implement it.
 
 ## ✅ Completed
 
+- [x] **TODO-191: Dark mode showed a white strip when overscrolling and below the page**
+  Reported by the user. In dark mode the page canvas was light: `html, body {
+  @apply dark:bg-slate-900 }` compiles `dark:` to `.dark html`, which needs a
+  `.dark` ANCESTOR, but the class sits on `<html>` itself - measured in Chrome,
+  html was `rgb(248,250,252)` while body was `rgb(15,23,42)`. The canvas takes
+  html's background, so scrolling past the top (rubber band) and the area below
+  the body were white. That area is real, not just overscroll: a hidden tooltip
+  popover near the end of the page (`visibility: hidden` still counts as
+  scrollable overflow) stretched the document 78px past the content (3602 vs
+  3524px). The page gradient also lived on the max-w-7xl root div, so wide
+  screens saw a gradient column with flat sides.
+  **Retrospective (PCALC-144):** the gradient moved to `<html>` (`html` light,
+  `html.dark` dark, `background-attachment: fixed` so it covers the viewport
+  however far the page overscrolls or overflows); body and the root div are
+  transparent. Verified in Chrome in both themes: the bottom of the page now
+  continues the gradient. `pageBackground.test.js` compiles the real
+  index.css with the project's Tailwind config (jsdom loads no stylesheets) and
+  pins `html.dark`, the gradient and `fixed` on html, and a transparent body;
+  the broken `.dark html` form, dropping `fixed`, and a body background each
+  fail it. Not fixed: that 78px of extra blank scroll below the content still
+  exists (it now matches the background); removing it means a hidden popover
+  must stop counting as overflow, which clipping the root would do at the
+  cost of cutting off tooltips at the very end of the page. Same hidden-popover
+  family as TODO-186.
+
 - [x] **TODO-190: The header row overflowed a phone, so the whole page scrolled sideways**
   Found by the Chrome review of the Simple version (2026-10-20), shipped with
   PCALC-99's mode button. The title block and the shrink-0 button group

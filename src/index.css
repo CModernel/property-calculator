@@ -3,11 +3,22 @@
 @tailwind utilities;
 
 /* The page content is capped at max-w-7xl and centered (src/App.jsx), so on
-   wider viewports/aspect ratios there's empty space outside it - html/body
-   need their own themed background (TODO-47) or that space stays the
-   browser's default white regardless of dark mode. */html,
-body {
-  @apply bg-slate-50 dark:bg-slate-900;
+   wider viewports/aspect ratios there's empty space outside it - the page
+   background has to be themed on <html> itself (TODO-47) or that space stays
+   the browser's default white regardless of dark mode.
+   TODO-191: it lives on <html>, not <body>, and the dark theme is `html.dark`:
+   the `dark:` variant compiles to `.dark html`, which can never match the
+   element that carries the class, so html stayed light in dark mode and the
+   canvas (overscroll, and any scroll overflow past the body) showed it. The
+   gradient is `fixed` so it covers the whole viewport however far the page
+   overscrolls or overflows. */
+html {
+  @apply bg-gradient-to-br from-slate-50 to-blue-50;
+  background-attachment: fixed;
+}
+
+html.dark {
+  @apply from-slate-900 to-blue-950;
 }
 
 /* TODO-128: the ETF slider's left side represents money staying offset-bound,

@@ -1309,7 +1309,7 @@ const PropertyInvestmentCalculator = () => {
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto p-4 bg-gradient-to-br from-slate-50 dark:from-slate-900 to-blue-50 dark:to-blue-950">
+    <div className="w-full max-w-7xl mx-auto p-4">
       {/* TODO-190: stacked below sm. Side by side, the shrink-0 button group
           plus the title's minimum width overflowed a phone (the page scrolled
           sideways at 390px and under). */}
