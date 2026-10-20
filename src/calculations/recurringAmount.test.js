@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { calculateCompoundedValue } from './growthRate';
-import { getActiveAmount, getActiveAmountWithGrowth, getAveragedAmount, getAveragedAmountWithGrowth, isScheduleActive, countOccurrencesUpTo, classifyScheduleStatus, formatScheduleLabel, MAX_MONTH } from './recurringAmount';
+import { getActiveAmount, getActiveAmountWithGrowth, getAveragedAmount, getAveragedAmountWithGrowth, getAnnualisedAmount, getAnnualisedAmountWithGrowth, isScheduleActive, countOccurrencesUpTo, classifyScheduleStatus, formatScheduleLabel, MAX_MONTH } from './recurringAmount';
 
 describe('isScheduleActive', () => {
   it('is active only on its exact month when recurrence is "none"', () => {
@@ -289,5 +289,59 @@ describe('getAveragedAmount', () => {
 
   it('counts nothing for an end before the start', () => {
     expect(getAveragedAmount([sched('quarterly', { startMonth: 10, endMonth: 5 })], 10)).toBe(0);
+  });
+});
+
+// TODO-187: the simulation's tax step reads x12 of this as the item's annual income.
+describe('getAnnualisedAmount', () => {
+  const at = (recurrence, extra = {}) => ({ amount: 1200, startMonth: 3, recurrence, endMonth: MAX_MONTH, ...extra });
+
+  it('averages recurring items like getAveragedAmount while they run open-ended', () => {
+    for (const r of ['monthly', 'quarterly', 'yearly']) {
+      for (const m of [1, 3, 4, 14]) {
+        expect(getAnnualisedAmount([at(r)], m)).toBe(getAveragedAmount([at(r)], m));
+      }
+    }
+  });
+
+  it('spreads a one-time item over the 12 months from the month it lands', () => {
+    const once = [at('none')];
+    expect(getAnnualisedAmount(once, 2)).toBe(0);
+    expect(getAnnualisedAmount(once, 3)).toBe(100);
+    expect(getAnnualisedAmount(once, 14)).toBe(100);
+    expect(getAnnualisedAmount(once, 15)).toBe(0);
+    let year = 0;
+    for (let m = 1; m <= 30; m++) year += getAnnualisedAmount(once, m);
+    expect(year).toBeCloseTo(1200, 10);
+  });
+
+  // Each payment covers its own interval even when endMonth falls inside it:
+  // a yearly item paid once (endMonth 3) is a whole year's income, and a
+  // quarterly one paid 4 times (endMonth 12, last paid month 12) is four
+  // quarters' - not the months up to endMonth only.
+  it.each([
+    ['yearly paid once', at('yearly', { endMonth: 3 }), 1200],
+    ['yearly paid twice', at('yearly', { endMonth: 15 }), 2400],
+    ['quarterly paid 4 times', at('quarterly', { endMonth: 12 }), 4800],
+    ['monthly to month 10', at('monthly', { endMonth: 10 }), 8 * 1200],
+  ])('counts every payment in full: %s', (_, item, total) => {
+    let sum = 0;
+    for (let m = 1; m <= 60; m++) sum += getAnnualisedAmount([item], m);
+    expect(sum).toBeCloseTo(total, 8);
+  });
+
+  it('counts nothing for an end before the start or an unknown recurrence', () => {
+    expect(getAnnualisedAmount([at('quarterly', { endMonth: 2 })], 3)).toBe(0);
+    expect(getAnnualisedAmount([at('weekly')], 3)).toBe(0);
+  });
+
+  it('nets a gross item and applies growth on top', () => {
+    const gross = [at('none', { isGross: true })];
+    expect(getAnnualisedAmount(gross, 3, 25)).toBe(75);
+    expect(getAnnualisedAmountWithGrowth(gross, 3, 3, 25)).toBeCloseTo(75 * calculateCompoundedValue(1, 3, 3), 10);
+  });
+
+  it('skips a malformed item that is not in force', () => {
+    expect(getAnnualisedAmount([at('none', { amount: NaN }), at('monthly')], 20)).toBe(1200);
   });
 });

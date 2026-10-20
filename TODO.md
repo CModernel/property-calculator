@@ -7,6 +7,33 @@ optionally reuse in the commit message when you implement it.
 
 ## ✅ Completed
 
+- [x] **TODO-187: The negative-gearing tax step reads a non-monthly payment's firing month as a whole year**
+  Logged from TODO-185's retrospective. On an investment property the
+  simulation annualises "other income" x52 every month to find the tax
+  bracket the loss comes off. It read each item's EXACT month, so a yearly
+  $80k sat in the $960k bracket in its firing month and at $0 in the other
+  eleven; quarterly items were overstated in their months. Measured on an
+  $80k/yr salary against a $1,000/month loss: relief $470 (yearly or one-time)
+  or $4,700 (quarterly) instead of the $3,840 a weekly-paid $80k gets.
+  **Retrospective (PCALC-139):** new `getAnnualisedAmount(WithGrowth)` in
+  `recurringAmount.js` (recurring items: amount / interval while in force,
+  same as TODO-182's average; one-time: amount / 12 across the 12 months from
+  the month it lands, the same "one year" `sumGrossAnnualIncome` uses) plus
+  gross twins in `grossIncome.js`, used only by the tax step. Cash flow keeps
+  exact months. Tests: the three recurrences give the weekly $3,840, a
+  one-time payment stops counting after its year, and unit tests for the
+  helpers. Mutations (exact month, one-time left exact, 13-month window) all
+  fail tests. Nothing re-baselined: no existing test had non-monthly income
+  on an investment property.
+  Opus review: no serious finding. Fixed: an `endMonth` inside a period
+  under-counted the last payment (a yearly $80k paid once gave $320 relief) -
+  each payment is now spread over its own whole interval, pinned by unit and
+  simulation tests, plus a net-entered yearly case. Kept on purpose:
+  `getGrossActiveAmount(WithGrowth)` no longer has a production caller but is
+  the oracle in projectedHealthCheck.test.js. Accepted: growth is applied per
+  smoothed month, so a smoothed yearly salary drifts by under a year of growth
+  (inside the existing PAYG-smoothing simplification).
+
 - [x] **TODO-185: Quarterly/yearly INCOME is still read as dollars per week**
   Found while doing TODO-182. Income amounts are always weekly-denominated
   (`calculateMonthlyFromWeekly`, x52/12), even when the item recurs quarterly

@@ -69,15 +69,47 @@ function getAveragedShare(item, month) {
 // Items with a zero share are SKIPPED, not multiplied by 0, exactly like
 // getActiveAmount skips inactive ones: `NaN * 0` is NaN, so one malformed
 // amount on an item that isn't even in force would otherwise poison the total.
-export function getAveragedAmount(items, month, effectiveTaxRate = 0) {
+function sumByShare(items, month, effectiveTaxRate, shareOf) {
   return items.reduce((sum, item) => {
-    const share = getAveragedShare(item, month);
+    const share = shareOf(item, month);
     return share === 0 ? sum : sum + getNetAmount(item, effectiveTaxRate) * share;
   }, 0);
 }
 
+export function getAveragedAmount(items, month, effectiveTaxRate = 0) {
+  return sumByShare(items, month, effectiveTaxRate, getAveragedShare);
+}
+
 export function getAveragedAmountWithGrowth(items, month, annualGrowthRate, effectiveTaxRate = 0) {
   return getAveragedAmount(items, month, effectiveTaxRate) * calculateCompoundedValue(1, annualGrowthRate, month);
+}
+
+// TODO-187: the per-month figure whose x12 is the item's ANNUAL income, for
+// the simulation's tax step - it reads the AU brackets off "this month's
+// income, annualised", so an exact month (getActiveAmount) put a yearly item at
+// 12x its value in its firing month and $0 in the rest. Recurring items average
+// as amount / interval, but each PAYMENT is spread over its own interval, so
+// an endMonth inside a period still counts the last payment in full (a yearly
+// item paid once is a whole year's income, not endMonth - startMonth + 1
+// twelfths of one). A one-time item is likewise a year's income: amount / 12
+// across the 12 months from the month it lands (sumGrossAnnualIncome's "one
+// year"), not left exact as getAveragedAmount leaves it.
+function getAnnualisedShare(item, month) {
+  const interval = item.recurrence === 'none' ? 12 : INTERVAL_MONTHS[item.recurrence];
+  if (!interval || month < item.startMonth) return 0;
+  const lastPayment = item.recurrence === 'none'
+    ? item.startMonth
+    : item.startMonth + Math.floor((item.endMonth - item.startMonth) / interval) * interval;
+  if (lastPayment < item.startMonth) return 0;
+  return month < lastPayment + interval ? 1 / interval : 0;
+}
+
+export function getAnnualisedAmount(items, month, effectiveTaxRate = 0) {
+  return sumByShare(items, month, effectiveTaxRate, getAnnualisedShare);
+}
+
+export function getAnnualisedAmountWithGrowth(items, month, annualGrowthRate, effectiveTaxRate = 0) {
+  return getAnnualisedAmount(items, month, effectiveTaxRate) * calculateCompoundedValue(1, annualGrowthRate, month);
 }
 
 // How many times a schedule has fired by the given month (inclusive) -

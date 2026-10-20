@@ -1969,6 +1969,46 @@ describe('negative gearing tax benefit (isInvestmentProperty, TODO-129/174)', ()
     expect(higher.totalNegativeGearingBenefit).toBeGreaterThan(lower.totalNegativeGearingBenefit);
   });
 
+  // TODO-187: the tax step annualises THIS month's income to read the bracket
+  // table. A per-payment item fires in one month only, so reading it exactly
+  // (x52 of its weekly equivalent) put a yearly $80k at $960k/yr in its firing
+  // month and $0 in the other eleven - the wrong bracket every single month.
+  // Each recurrence must reach the brackets as its real annual figure, so the
+  // same $80k a year gets the same relief however it is paid.
+  describe('non-monthly other income reaches the brackets at its real annual figure (TODO-187)', () => {
+    function withIncome(item) {
+      return {
+        ...marginalRateFixture(0),
+        incomeSources: [{ id: 1, name: 'Salary/Wages', startMonth: 1, endMonth: MAX_MONTH, isGross: true, ...item }],
+        ...(item.effectiveTaxRate !== undefined && { effectiveTaxRate: item.effectiveTaxRate }),
+      };
+    }
+
+    it.each([
+      ['quarterly', { amount: 20_000, recurrence: 'quarterly' }],
+      ['yearly', { amount: 80_000, recurrence: 'yearly' }],
+      // A one-time payment is that year's income: spread over the 12 months
+      // from the month it lands, the same "one year" sumGrossAnnualIncome uses.
+      ['one-time', { amount: 80_000, recurrence: 'none' }],
+      // Ending inside a period still counts the last payment's whole period.
+      ['yearly paid once (endMonth 1)', { amount: 80_000, recurrence: 'yearly', endMonth: 1 }],
+      ['quarterly paid 4 times (endMonth 10)', { amount: 20_000, recurrence: 'quarterly', endMonth: 10 }],
+      // Net-entered: $64k after 20% is the same $80k gross.
+      ['yearly net-entered', { amount: 64_000, recurrence: 'yearly', isGross: false, effectiveTaxRate: 20 }],
+    ])('gives a %s $80k/yr the same relief as a weekly one', (_, item) => {
+      const result = calculateLoanWithOffset(withIncome(item));
+      // Same hand figure as the 80k case above: 16,120 - 12,280 = 3,840/yr.
+      expect(result.totalNegativeGearingBenefit).toBeCloseTo(3840, -1);
+    });
+
+    it('stops counting a one-time payment once its year is over', () => {
+      // 24 months: the bonus funds relief in year 1 only, so year 2 adds
+      // nothing - the total stays at one year's 3,840.
+      const result = calculateLoanWithOffset({ ...withIncome({ amount: 80_000, recurrence: 'none' }), maxMonths: 24 });
+      expect(result.totalNegativeGearingBenefit).toBeCloseTo(3840, -1);
+    });
+  });
+
   // TODO-174(c): an unabsorbed loss carries forward instead of vanishing.
   // Modest income relative to a much larger loss means only part of the loss
   // is used against this year's income each period - the invariant from the

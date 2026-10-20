@@ -14,7 +14,7 @@ import {
 import { calculateCompoundedValue } from './growthRate';
 import { calculateVacancyFactor } from './vacancyFactor';
 import { calculateIncomeTax, calculateMedicareLevy } from './auTaxBrackets';
-import { getGrossActiveAmount, getGrossActiveAmountWithGrowth } from './grossIncome';
+import { getGrossAnnualisedAmount, getGrossAnnualisedAmountWithGrowth } from './grossIncome';
 import { toWeeklyEquivalent } from './incomeDenomination';
 
 export function calculateLoanWithOffset({
@@ -540,7 +540,7 @@ export function calculateLoanWithOffset({
         //
         // TODO-90/91 convention: salary grows at salaryGrowthRate, everything
         // else in "other income" resolves plain - same split
-        // monthlyIncomeThisMonth uses. getGrossActiveAmount(WithGrowth)
+        // monthlyIncomeThisMonth uses. getGrossAnnualisedAmount(WithGrowth)
         // reconstructs the PRE-TAX figure for both gross-marked items (taken
         // at face value) and net-entered ones in a taxable category (grossed
         // up by effectiveTaxRate) - see grossIncome.js. A non-taxable
@@ -551,15 +551,20 @@ export function calculateLoanWithOffset({
         // Annualized (×52 for the weekly amounts - per-payment income already
         // converted by toWeeklyEquivalent above - ×12 for the
         // loss) to consult the AU_TAX_BRACKETS table, then divided back to a
-        // monthly figure - the same "applied smoothly every month (PAYG-
-        // style), not as an annual tax return" simplification already
+        // monthly figure. TODO-187: the income side reads each item's
+        // ANNUALISED share (getGrossAnnualisedAmount), not its exact month -
+        // ×52 of a quarterly/yearly/one-time payment's firing month put it in
+        // the wrong bracket every month (12x a yearly item when it fired, $0
+        // otherwise); the exact months still drive the cash flow above. The
+        // same "applied smoothly every month (PAYG-style), not as an annual
+        // tax return" simplification already
         // disclosed to the user for effectiveTaxRate itself (App.jsx). This
         // full annualize-then-divide round trip re-runs every month rather
         // than being cached, since salary growth and one-off items can change
         // it from one month to the next.
         const annualOtherIncome = (
-          getGrossActiveAmountWithGrowth(salaryIncomeSources, months, salaryGrowthRate, effectiveTaxRate)
-          + getGrossActiveAmount(otherIncomeSources, months, effectiveTaxRate)
+          getGrossAnnualisedAmountWithGrowth(salaryIncomeSources, months, salaryGrowthRate, effectiveTaxRate)
+          + getGrossAnnualisedAmount(otherIncomeSources, months, effectiveTaxRate)
         ) * 52;
         const annualDeductibleLoss = deductibleLossThisMonth * 12;
         const annualIncomeAfterLoss = Math.max(0, annualOtherIncome - annualDeductibleLoss);

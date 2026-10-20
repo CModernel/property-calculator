@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getGrossActiveAmount, getGrossActiveAmountWithGrowth, getGrossAveragedAmount, getGrossAveragedAmountWithGrowth, calculateGrossUpFactor, isGrossUppable } from './grossIncome';
+import { getGrossActiveAmount, getGrossActiveAmountWithGrowth, getGrossAveragedAmount, getGrossAveragedAmountWithGrowth, getGrossAnnualisedAmount, getGrossAnnualisedAmountWithGrowth, calculateGrossUpFactor, isGrossUppable } from './grossIncome';
 import { getActiveAmount } from './recurringAmount';
 import { calculateCompoundedValue } from './growthRate';
 
@@ -146,5 +146,23 @@ describe('getGrossAveragedAmount', () => {
   it('applies growth on top of the grossed-up average', () => {
     expect(getGrossAveragedAmountWithGrowth([item('Salary/Wages', 1200, quarterly)], 2, 3, 20))
       .toBeCloseTo(500 * calculateCompoundedValue(1, 3, 2), 10);
+  });
+});
+
+// TODO-187
+describe('getGrossAnnualisedAmount', () => {
+  const once = { startMonth: 1, recurrence: 'none', endMonth: 1 };
+
+  it('grosses up a one-time taxable item spread over its year', () => {
+    expect(getGrossAnnualisedAmount([item('Salary/Wages', 1200, once)], 6, 20)).toBeCloseTo(125, 10);
+  });
+
+  it('is the net annualised share at a 0% rate', () => {
+    expect(getGrossAnnualisedAmount([item('Salary/Wages', 1200, once)], 6, 0)).toBe(100);
+  });
+
+  it('applies growth on top of the grossed-up share', () => {
+    expect(getGrossAnnualisedAmountWithGrowth([item('Salary/Wages', 1200, once)], 6, 3, 20))
+      .toBeCloseTo(125 * calculateCompoundedValue(1, 3, 6), 10);
   });
 });

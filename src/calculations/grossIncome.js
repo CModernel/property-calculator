@@ -1,4 +1,7 @@
-import { getActiveAmount, getActiveAmountWithGrowth, getAveragedAmount, getAveragedAmountWithGrowth } from './recurringAmount';
+import {
+  getActiveAmount, getActiveAmountWithGrowth, getAveragedAmount, getAveragedAmountWithGrowth,
+  getAnnualisedAmount, getAnnualisedAmountWithGrowth,
+} from './recurringAmount';
 import { TAXABLE_INCOME_CATEGORIES } from './incomeCategories';
 
 // TODO-151: reconstructs BEFORE-TAX income, for the two Health Check indicators
@@ -84,4 +87,20 @@ export function getGrossAveragedAmountWithGrowth(items, month, annualGrowthRate,
   if (delta === 0) return getAveragedAmountWithGrowth(items, month, annualGrowthRate, 0);
   return getAveragedAmountWithGrowth(items, month, annualGrowthRate, 0)
     + delta * getAveragedAmountWithGrowth(items.filter(isGrossUppable), month, annualGrowthRate, 0);
+}
+
+// TODO-187: the same delta pattern over the annualised share, for the
+// simulation's tax step (recurringAmount.js's getAnnualisedAmount).
+export function getGrossAnnualisedAmount(items, month, effectiveTaxRate = 0) {
+  const delta = calculateGrossUpFactor(effectiveTaxRate) - 1;
+  if (delta === 0) return getAnnualisedAmount(items, month, 0);
+  return getAnnualisedAmount(items, month, 0)
+    + delta * getAnnualisedAmount(items.filter(isGrossUppable), month, 0);
+}
+
+export function getGrossAnnualisedAmountWithGrowth(items, month, annualGrowthRate, effectiveTaxRate = 0) {
+  const delta = calculateGrossUpFactor(effectiveTaxRate) - 1;
+  if (delta === 0) return getAnnualisedAmountWithGrowth(items, month, annualGrowthRate, 0);
+  return getAnnualisedAmountWithGrowth(items, month, annualGrowthRate, 0)
+    + delta * getAnnualisedAmountWithGrowth(items.filter(isGrossUppable), month, annualGrowthRate, 0);
 }
