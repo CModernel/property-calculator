@@ -39,7 +39,7 @@ const EtfCrashStressTest = ({ summaries, crashMonth }) => {
         <table className="w-full text-left border-collapse text-xs">
           <caption className="sr-only">Outcome after a one-off ETF market drop at month {crashMonth}</caption>
           <thead>
-            <tr className="text-gray-500 dark:text-gray-400">
+            <tr className="text-gray-600 dark:text-gray-400">
               <th className={TH}>If the ETF falls</th>
               {summaries.map((s) => <th key={s.key} className={TH}>{s.label}</th>)}
             </tr>
@@ -69,8 +69,8 @@ const EtfCrashStressTest = ({ summaries, crashMonth }) => {
                   <td
                     key={s.key}
                     className={gap >= 0
-                      ? 'pr-2 py-1 whitespace-nowrap font-medium text-green-600 dark:text-green-400'
-                      : 'pr-2 py-1 whitespace-nowrap font-medium text-red-600 dark:text-red-400'}
+                      ? 'pr-2 py-1 whitespace-nowrap font-medium text-green-700 dark:text-green-400'
+                      : 'pr-2 py-1 whitespace-nowrap font-medium text-red-700 dark:text-red-400'}
                   >
                     {signedMoney(gap)}
                   </td>
@@ -81,7 +81,7 @@ const EtfCrashStressTest = ({ summaries, crashMonth }) => {
         </table>
       </div>
 
-      <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+      <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
         Time to pay off and total interest are identical in every column: this model never sells ETF units to service the mortgage, so a crash cannot change the loan itself. That is worth knowing on its own - the ETF balance is not an emergency buffer.
       </p>
     </div>

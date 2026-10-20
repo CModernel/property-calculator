@@ -1,7 +1,7 @@
 export function getBalanceColor(value) {
-  if (value >= 300) return 'text-green-600 dark:text-green-400';
-  if (value >= 0) return 'text-yellow-600 dark:text-yellow-400';
-  return 'text-red-600 dark:text-red-400';
+  if (value >= 300) return 'text-green-700 dark:text-green-400';
+  if (value >= 0) return 'text-yellow-700 dark:text-yellow-400';
+  return 'text-red-700 dark:text-red-400';
 }
 
 export function getBalanceBgColor(value) {

@@ -74,7 +74,7 @@ const SimpleModeView = ({
           {affordability.symbol} {affordability.label}
         </p>
         <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{affordability.headline}</p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+        <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
           A summary of the figures below, not a lending decision - a lender assesses your full circumstances and applies its own buffers.
         </p>
       </div>
@@ -101,16 +101,16 @@ const SimpleModeView = ({
           <div className="flex justify-between gap-3">
             <dt className="text-gray-700 dark:text-gray-200">
               Total cash required
-              <span className="block text-xs text-gray-500 dark:text-gray-400">Deposit + stamp duty + closing costs (+ LMI if paid upfront)</span>
+              <span className="block text-xs text-gray-600 dark:text-gray-400">Deposit + stamp duty + closing costs (+ LMI if paid upfront)</span>
             </dt>
             <dd className="font-semibold text-gray-800 dark:text-gray-100 whitespace-nowrap">{money(totalCashRequired)}</dd>
           </div>
           <div className="flex justify-between gap-3">
             <dt className="text-gray-700 dark:text-gray-200">
               Cash remaining
-              <span className="block text-xs text-gray-500 dark:text-gray-400">What's left in the bank after settlement, uncommitted</span>
+              <span className="block text-xs text-gray-600 dark:text-gray-400">What's left in the bank after settlement, uncommitted</span>
             </dt>
-            <dd className={`font-semibold whitespace-nowrap ${cashRemaining < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+            <dd className={`font-semibold whitespace-nowrap ${cashRemaining < 0 ? 'text-red-700 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
               {money(cashRemaining)}
             </dd>
           </div>
@@ -123,31 +123,31 @@ const SimpleModeView = ({
         <dl className="space-y-2 text-sm">
           <div className="flex justify-between gap-3">
             <dt className="text-gray-700 dark:text-gray-200">Income in</dt>
-            <dd className="font-semibold text-green-600 dark:text-green-400 whitespace-nowrap">{signedMoney(totalMonthlyIncome)}</dd>
+            <dd className="font-semibold text-green-700 dark:text-green-400 whitespace-nowrap">{signedMoney(totalMonthlyIncome)}</dd>
           </div>
           <div className="flex justify-between gap-3">
             <dt className="text-gray-700 dark:text-gray-200">
               Loan repayment
-              <span className="block text-xs text-gray-500 dark:text-gray-400">Included in property costs below</span>
+              <span className="block text-xs text-gray-600 dark:text-gray-400">Included in property costs below</span>
             </dt>
             <dd className="font-semibold text-gray-800 dark:text-gray-100 whitespace-nowrap">{money(monthlyPayment)}</dd>
           </div>
           <div className="flex justify-between gap-3">
             <dt className="text-gray-700 dark:text-gray-200">Property costs (repayment + expenses)</dt>
-            <dd className="font-semibold text-red-600 dark:text-red-400 whitespace-nowrap">-{money(totalPropertyCost)}</dd>
+            <dd className="font-semibold text-red-700 dark:text-red-400 whitespace-nowrap">-{money(totalPropertyCost)}</dd>
           </div>
           <div className="flex justify-between gap-3">
             <dt className="text-gray-700 dark:text-gray-200">Personal expenses</dt>
-            <dd className="font-semibold text-red-600 dark:text-red-400 whitespace-nowrap">-{money(monthlyPersonalExpenses)}</dd>
+            <dd className="font-semibold text-red-700 dark:text-red-400 whitespace-nowrap">-{money(monthlyPersonalExpenses)}</dd>
           </div>
           <div className="flex justify-between gap-3 border-t border-gray-200 dark:border-gray-700 pt-2">
             <dt className="font-bold text-gray-700 dark:text-gray-200">
               Left over
-              <span className="block text-xs font-normal text-gray-500 dark:text-gray-400">
+              <span className="block text-xs font-normal text-gray-600 dark:text-gray-400">
                 {money(totalMonthlyIncome)} in, {money(totalMonthlyCosts)} out - this goes to your offset
               </span>
             </dt>
-            <dd className={`font-bold whitespace-nowrap ${monthlyNetBalance < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+            <dd className={`font-bold whitespace-nowrap ${monthlyNetBalance < 0 ? 'text-red-700 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
               {signedMoney(monthlyNetBalance)}
             </dd>
           </div>
@@ -157,7 +157,7 @@ const SimpleModeView = ({
       {/* The three indicators that answer "is this sustainable?" */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-5">
         <h2 className="text-lg font-bold text-gray-700 dark:text-gray-200 mb-1">🩺 Can you sustain it?</h2>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+        <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
           Standard rules of thumb, not financial advice. Advanced mode shows the full set of indicators.
         </p>
 
@@ -217,7 +217,7 @@ const SimpleModeView = ({
         <button
           type="button"
           onClick={onSwitchToAdvanced}
-          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
+          className="text-blue-700 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
         >
           View details in Advanced →
         </button>

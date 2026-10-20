@@ -149,12 +149,12 @@ export function selectParetoFront(results) {
 // only's - it used to compare the ETF balance against the extra interest paid,
 // on each strategy's own payoff date.
 export const ETF_CRASH_BANDS = [
-  { min: 50, label: 'Very resilient', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: 'Still ahead of Offset only even after a 50% crash.' },
-  { min: 30, label: 'Resilient', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: 'Still ahead of Offset only after a 30% crash.' },
+  { min: 50, label: 'Very resilient', symbol: '🟢', textClass: 'text-green-700 dark:text-green-400', critical: false, action: 'Still ahead of Offset only even after a 50% crash.' },
+  { min: 30, label: 'Resilient', symbol: '🟢', textClass: 'text-green-700 dark:text-green-400', critical: false, action: 'Still ahead of Offset only after a 30% crash.' },
   // TODO-180: from 0, not 10 - a strategy that is ahead but would fall behind
   // after a 10% crash is fragile, not "already behind" as it used to read.
-  { min: 0, label: 'Fragile', symbol: '🟠', textClass: 'text-orange-600 dark:text-orange-400', critical: false, action: 'A larger crash would leave you behind where Offset only would have left you.' },
-  { min: -Infinity, label: 'Already behind', symbol: '🔴', textClass: 'text-red-600 dark:text-red-400', critical: true, action: 'Even without a crash, this strategy ends behind Offset only.' },
+  { min: 0, label: 'Fragile', symbol: '🟠', textClass: 'text-orange-700 dark:text-orange-400', critical: false, action: 'A larger crash would leave you behind where Offset only would have left you.' },
+  { min: -Infinity, label: 'Already behind', symbol: '🔴', textClass: 'text-red-700 dark:text-red-400', critical: true, action: 'Even without a crash, this strategy ends behind Offset only.' },
 ];
 
 // netWorthLead = this strategy's term-end net worth minus Offset only's.

@@ -28,9 +28,9 @@ const IMPACT_TRACK_CLASSES = {
 // already established in src/calculations/ui.js and the Health Check bands
 // (purchaseHealthCheck.js) - same shade numbers, not a new palette.
 const IMPACT_TEXT_CLASSES = {
-  negative: 'text-orange-600 dark:text-orange-400',
-  positive: 'text-green-600 dark:text-green-400',
-  neutral: 'text-violet-600 dark:text-violet-400',
+  negative: 'text-orange-700 dark:text-orange-400',
+  positive: 'text-green-700 dark:text-green-400',
+  neutral: 'text-violet-700 dark:text-violet-400',
 };
 // The TODO's own suggested glyphs. Deliberately NOT reusing App.jsx's
 // stabilizedArrow ↗/↘/→ - those encode a different concept (did a value
@@ -153,7 +153,7 @@ const NumberSliderField = ({
 
       <div className="relative">
         {prefix && (
-          <span className="absolute inset-y-0 left-2 flex items-center text-sm text-gray-500 dark:text-gray-400 pointer-events-none">
+          <span className="absolute inset-y-0 left-2 flex items-center text-sm text-gray-600 dark:text-gray-400 pointer-events-none">
             {prefix}
           </span>
         )}
@@ -200,26 +200,26 @@ const NumberSliderField = ({
             <div
               id={`${id}-split-legend`}
               role="group"
-              className="flex justify-between text-[11px] text-gray-500 dark:text-gray-400 mt-1"
+              className="flex justify-between text-[11px] text-gray-600 dark:text-gray-400 mt-1"
               aria-label={`${splitLegend.before} and ${splitLegend.after} slider legend`}
             >
-              <span><span className="text-indigo-500 dark:text-indigo-300">●</span> {splitLegend.before}</span>
-              <span>{splitLegend.after} <span className="text-purple-500 dark:text-purple-300">●</span></span>
+              <span><span className="text-indigo-700 dark:text-indigo-300">●</span> {splitLegend.before}</span>
+              <span>{splitLegend.after} <span className="text-purple-700 dark:text-purple-300">●</span></span>
             </div>
           )}
 
-          <div className="flex justify-between text-xs text-gray-400 mt-1 tabular-nums">
-            <span className={belowRange ? 'text-amber-600 dark:text-amber-400 font-medium' : undefined}>
+          <div className="flex justify-between text-xs text-gray-600 dark:text-gray-400 mt-1 tabular-nums">
+            <span className={belowRange ? 'text-amber-700 dark:text-amber-400 font-medium' : undefined}>
               {belowRange && '<'}{prefix}{showBound(sliderMin)}
             </span>
-            <span className={aboveRange ? 'text-amber-600 dark:text-amber-400 font-medium' : undefined}>
+            <span className={aboveRange ? 'text-amber-700 dark:text-amber-400 font-medium' : undefined}>
               {prefix}{showBound(safeSliderMax)}{aboveRange && '+'}
             </span>
           </div>
         </>
       )}
 
-      {children && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{children}</p>}
+      {children && <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{children}</p>}
     </div>
   );
 };

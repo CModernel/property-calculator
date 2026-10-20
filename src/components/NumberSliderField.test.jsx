@@ -67,7 +67,7 @@ describe('NumberSliderField', () => {
     render(
       <NumberSliderField label="Test" value={5} onChange={() => {}} min={0} max={100} sliderMin={10} sliderMax={90} />
     );
-    expect(screen.getByText('<10')).toHaveClass('text-amber-600');
+    expect(screen.getByText('<10')).toHaveClass('text-amber-700');
   });
 
   it('renders an opt-in, value-positioned split gradient and accessible legend', () => {
@@ -109,19 +109,19 @@ describe('NumberSliderField', () => {
       expect(slider).toHaveClass('bg-orange-200', 'dark:bg-orange-900');
       const icon = screen.getByText('⬇');
       expect(icon).toHaveAttribute('aria-hidden', 'true');
-      expect(icon).toHaveClass('text-orange-600', 'dark:text-orange-400');
+      expect(icon).toHaveClass('text-orange-700', 'dark:text-orange-400');
     });
 
     it('impact="positive" renders the green track, a hidden ⬆ icon, and its own aria-label hint', () => {
       render(<NumberSliderField label="Deposit" value={50} onChange={() => {}} min={0} max={100} impact="positive" />);
       expect(screen.getByLabelText('Deposit slider (higher improves your position)')).toHaveClass('bg-green-200', 'dark:bg-green-900');
-      expect(screen.getByText('⬆')).toHaveClass('text-green-600', 'dark:text-green-400');
+      expect(screen.getByText('⬆')).toHaveClass('text-green-700', 'dark:text-green-400');
     });
 
     it('impact="neutral" renders the violet track, a hidden ↔ icon, and its own aria-label hint', () => {
       render(<NumberSliderField label="Loan Term" value={15} onChange={() => {}} min={1} max={30} impact="neutral" />);
       expect(screen.getByLabelText('Loan Term slider (mixed or no clear financial effect)')).toHaveClass('bg-violet-200', 'dark:bg-violet-900');
-      expect(screen.getByText('↔')).toHaveClass('text-violet-600', 'dark:text-violet-400');
+      expect(screen.getByText('↔')).toHaveClass('text-violet-700', 'dark:text-violet-400');
     });
 
     it('impact takes over the track color even when a decorative color is also passed', () => {

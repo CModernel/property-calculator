@@ -41,7 +41,7 @@ const EtfReturnSensitivity = ({ summaries, offsetOnlySummary, breakEven, allocat
               <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">
                 Break-even return: <span className="text-indigo-700 dark:text-indigo-400">{breakEven.rate.toFixed(1)}% a year</span>
               </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                 Below that, sending everything to the offset would have left you better off. This is an illustrative threshold from your own inputs, not a forecast or advice - and clearing it is not guaranteed by anything.
               </p>
             </>
@@ -56,7 +56,7 @@ const EtfReturnSensitivity = ({ summaries, offsetOnlySummary, breakEven, allocat
               There's no threshold to clear here - your loan interest is low enough that this split matches the offset-only path even if the ETF earned nothing at all.
             </p>
           )}
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
             Measured at month {breakEven.horizon}, when the offset-only path would have cleared the loan - the last date both paths are genuinely running, so neither is flattered.
           </p>
         </div>
@@ -66,7 +66,7 @@ const EtfReturnSensitivity = ({ summaries, offsetOnlySummary, breakEven, allocat
         <table className="w-full text-left border-collapse text-xs">
           <caption className="sr-only">Outcome at three assumed ETF returns</caption>
           <thead>
-            <tr className="text-gray-500 dark:text-gray-400">
+            <tr className="text-gray-600 dark:text-gray-400">
               <th className={TH}>If the ETF returns</th>
               {summaries.map((s) => <th key={s.key} className={TH}>{s.label}</th>)}
             </tr>
@@ -96,8 +96,8 @@ const EtfReturnSensitivity = ({ summaries, offsetOnlySummary, breakEven, allocat
                   <td
                     key={s.key}
                     className={gap >= 0
-                      ? 'pr-2 py-1 whitespace-nowrap font-medium text-green-600 dark:text-green-400'
-                      : 'pr-2 py-1 whitespace-nowrap font-medium text-red-600 dark:text-red-400'}
+                      ? 'pr-2 py-1 whitespace-nowrap font-medium text-green-700 dark:text-green-400'
+                      : 'pr-2 py-1 whitespace-nowrap font-medium text-red-700 dark:text-red-400'}
                   >
                     {signedMoney(gap)}
                   </td>

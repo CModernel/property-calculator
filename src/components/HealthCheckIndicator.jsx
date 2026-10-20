@@ -19,10 +19,10 @@ const HealthCheckIndicator = ({ label, tooltipLabel, children, valueDisplay, sec
       </span>
     </div>
     {secondaryValueDisplay && (
-      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 text-right">{secondaryValueDisplay}</p>
+      <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 text-right">{secondaryValueDisplay}</p>
     )}
     {classification.action && (
-      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{classification.action}</p>
+      <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{classification.action}</p>
     )}
   </div>
 );

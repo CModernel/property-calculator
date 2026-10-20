@@ -7,6 +7,39 @@ optionally reuse in the commit message when you implement it.
 
 ## ✅ Completed
 
+- [x] **TODO-193: Light mode has the same kind of low-contrast text (found by the TODO-192 audit)**
+  The dark-mode audit, run on the light theme for comparison, measures 190-255
+  failing text nodes per Advanced state (25-30 in Simple), pre-existing and
+  untouched by TODO-192 beyond the muted-grey pair. Biggest groups: the
+  `text-gray-400` slider range labels and "✓ paid off mN" notes (2.4:1 on
+  white); the impact icons - orange-600 "⬇" (3.3:1) and green-600 "⬆" (3.0:1);
+  `text-red-500` negatives (3.5:1); the grey "?" tooltip buttons (4.4:1); the
+  "(higher = worse outcome)" legend text (2.3:1). Likely fixable with one shade
+  step each, but the impact colours are a deliberate palette (ImpactColorLegend,
+  TODO-47) so they want a decision, not a blind darken.
+  **Retrospective (PCALC-147):** user decisions 2026-10-20 - every visible text
+  to WCAG AA (4.5:1, 3:1 large) in light mode, as in dark; the impact icons
+  darkened one shade (tracks unchanged). Re-measured first on the current code:
+  184-201 failing texts per Advanced state, 25-30 in Simple, 33 groups. The
+  rule the numbers gave: on the white and tinted cards, light-side text needs
+  grey-600+ and colours at 700 (grey-500 is 4.4:1 on gray-100, green-600 3.0,
+  orange-600 3.3, red-500/600 3.5-4.4, the 400s 2.1-2.5). Applied as one
+  scripted rewrite of the LIGHT token only (252 tokens, 18 files, including the
+  indicator bands' textClass in purchaseHealthCheck.js / classifyLvr.js /
+  strategyComparison.js / affordabilitySummary.js / ui.js); where a class list
+  had no `dark:` partner the old token was kept as `dark:<old>`, so dark mode is
+  pixel-identical. Chart legends are neutral text in light mode too (red/blue
+  series text was 3.7:1). One case needed green-800 (green-700 on indigo-50,
+  4.49:1). `text-yellow-300` on the indigo card is an allowed exception.
+  After: 0 failing texts in all 6 light states and still 0 in the 6 dark ones
+  (5,072 texts per theme measured). Tests: `darkModeContrast.test.js` now also
+  forbids light-side grey-300/400/500 and colour 300-600 text in .js/.jsx and
+  checks the light legend colour; 17 class-pinning assertions in 5 test files
+  re-baselined to the new shades. Mutations (icon back to orange-600, slider
+  range label back to gray-400, a band back to red-600) each fail it.
+  Visible effect: secondary text and coloured figures are one shade darker in
+  light mode. Not covered: hover/focus/disabled states and SVG axis text.
+
 - [x] **TODO-194: Native controls (select lists, scrollbars, spinners) stayed light in dark mode**
   Found by the Opus review of PCALC-143/144/145 (2026-10-20); those three were
   otherwise judged correct. No `color-scheme` was declared, so the browser's own
@@ -5946,17 +5979,6 @@ gives `totalInterest` **$645,389.22**.
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
-
-- [ ] **TODO-193: Light mode has the same kind of low-contrast text (found by the TODO-192 audit)**
-  The dark-mode audit, run on the light theme for comparison, measures 190-255
-  failing text nodes per Advanced state (25-30 in Simple), pre-existing and
-  untouched by TODO-192 beyond the muted-grey pair. Biggest groups: the
-  `text-gray-400` slider range labels and "✓ paid off mN" notes (2.4:1 on
-  white); the impact icons - orange-600 "⬇" (3.3:1) and green-600 "⬆" (3.0:1);
-  `text-red-500` negatives (3.5:1); the grey "?" tooltip buttons (4.4:1); the
-  "(higher = worse outcome)" legend text (2.3:1). Likely fixable with one shade
-  step each, but the impact colours are a deliberate palette (ImpactColorLegend,
-  TODO-47) so they want a decision, not a blind darken.
 
 
 - [ ] **TODO-124 (Superseded by TODO-136/137/138 — do not implement independently): Should "Invest in ETFs" divert from Savings instead of from the Offset's own share?**

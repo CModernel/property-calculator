@@ -32,8 +32,8 @@ describe('EtfCrashStressTest', () => {
   it('shows the net-worth gap against the no-crash baseline, in red for a loss', () => {
     render(<EtfCrashStressTest summaries={SUMMARIES} crashMonth={60} />);
     // 710,000 - 750,000 = -40,000
-    expect(screen.getByText('-$40,000')).toHaveClass('text-red-600');
-    expect(screen.getByText('-$80,000')).toHaveClass('text-red-600');
+    expect(screen.getByText('-$40,000')).toHaveClass('text-red-700');
+    expect(screen.getByText('-$80,000')).toHaveClass('text-red-700');
   });
 
   it('leaves the baseline column\'s own gap cell empty rather than showing +$0', () => {
@@ -45,7 +45,7 @@ describe('EtfCrashStressTest', () => {
   it('colours a positive gap green, on the off chance a crash leaves you ahead', () => {
     const odd = [SUMMARIES[0], summary('crash20', '-20%', 160000, 760000)];
     render(<EtfCrashStressTest summaries={odd} crashMonth={60} />);
-    expect(screen.getByText('+$10,000')).toHaveClass('text-green-600');
+    expect(screen.getByText('+$10,000')).toHaveClass('text-green-700');
   });
 
   // The feature's central honest finding - must always be present, not

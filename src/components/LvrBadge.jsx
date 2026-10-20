@@ -38,7 +38,7 @@ const LvrBadge = ({ lvr }) => {
         </p>
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="text-gray-500 dark:text-gray-400">
+            <tr className="text-gray-600 dark:text-gray-400">
               <th className="pr-2 pb-1 font-medium">LVR</th>
               <th className="pr-2 pb-1 font-medium" />
               <th className="pb-1 font-medium">Summary</th>

@@ -21,7 +21,7 @@ const PROFILES = [
     rationale: 'Short time horizon, low tolerance for a market drop, or a variable-rate mortgage you\'d rather pay down first.',
     bgClass: 'bg-blue-50 dark:bg-blue-950',
     borderClass: 'border-blue-100 dark:border-blue-800',
-    textClass: 'text-blue-600 dark:text-blue-400',
+    textClass: 'text-blue-700 dark:text-blue-400',
   },
   {
     label: 'Moderate',
@@ -29,7 +29,7 @@ const PROFILES = [
     rationale: 'Medium-to-long horizon, steady income, comfortable riding out a downturn without needing to sell.',
     bgClass: 'bg-purple-50 dark:bg-purple-950',
     borderClass: 'border-purple-100 dark:border-purple-800',
-    textClass: 'text-purple-600 dark:text-purple-400',
+    textClass: 'text-purple-700 dark:text-purple-400',
   },
   {
     label: 'Aggressive',
@@ -37,7 +37,7 @@ const PROFILES = [
     rationale: 'Long horizon (10+ years), high tolerance for volatility, income secure enough that the offset isn\'t your main safety net.',
     bgClass: 'bg-indigo-50 dark:bg-indigo-950',
     borderClass: 'border-indigo-100 dark:border-indigo-800',
-    textClass: 'text-indigo-600 dark:text-indigo-400',
+    textClass: 'text-indigo-700 dark:text-indigo-400',
   },
 ];
 
@@ -53,7 +53,7 @@ const RiskToleranceProfiles = ({ emergencyBufferMonths, emergencyBufferClassific
           <div key={profile.label} className={`p-4 rounded-lg border text-center ${profile.bgClass} ${profile.borderClass}`}>
             <p className={`text-xs font-bold uppercase mb-1 ${profile.textClass}`}>{profile.label}</p>
             <p className="text-xl font-bold text-gray-800 dark:text-gray-100">{profile.range}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{profile.rationale}</p>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{profile.rationale}</p>
           </div>
         ))}
       </div>

@@ -38,7 +38,7 @@ const StrategyScenarioComparison = ({ summaries, rows, metricKey, onMetricChange
           <p className="mt-2">The offset column is the predictable one: reducing loan interest is a known, effectively tax-free saving. Every ETF figure is a projection built on the Expected ETF Return you set - it is not a forecast, and a real market can do far worse.</p>
         </InfoTooltip>
       </div>
-      <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+      <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
         Strategies finish at different times, so the table runs to whichever takes longest. One that already finished keeps going - with no repayment left, its whole surplus keeps building, and whatever stays in the offset earns your Savings Interest Rate after tax once there is no loan to save on (nothing at the 0% default). Balances are read on that shared date; interest and shortfall are counted until each strategy pays off.
       </p>
 
@@ -46,7 +46,7 @@ const StrategyScenarioComparison = ({ summaries, rows, metricKey, onMetricChange
         <table className="w-full text-left border-collapse text-xs">
           <caption className="sr-only">Where each strategy ends up</caption>
           <thead>
-            <tr className="text-gray-500 dark:text-gray-400">
+            <tr className="text-gray-600 dark:text-gray-400">
               <th className={TH}>Where you end up</th>
               {summaries.map((s) => (
                 <th key={s.key} className={TH}>
@@ -100,7 +100,7 @@ const StrategyScenarioComparison = ({ summaries, rows, metricKey, onMetricChange
                   <td
                     key={s.key}
                     className={s.totalCashShortfall > 0
-                      ? 'pr-2 py-1 whitespace-nowrap font-medium text-red-600 dark:text-red-400'
+                      ? 'pr-2 py-1 whitespace-nowrap font-medium text-red-700 dark:text-red-400'
                       : TD}
                   >
                     {s.totalCashShortfall > 0
@@ -115,7 +115,7 @@ const StrategyScenarioComparison = ({ summaries, rows, metricKey, onMetricChange
       </div>
 
       {anyShortfall && (
-        <p className="text-xs text-red-600 dark:text-red-400 mb-3">
+        <p className="text-xs text-red-700 dark:text-red-400 mb-3">
           ⚠️ A strategy above runs out of cash in some months - its expenses exceed its income once the offset is empty. Those figures assume money you don't have, so treat them as not actually achievable rather than as a better outcome.
         </p>
       )}
@@ -136,7 +136,7 @@ const StrategyScenarioComparison = ({ summaries, rows, metricKey, onMetricChange
         <table className="w-full text-left border-collapse text-xs">
           <caption className="sr-only">{metricLabel} for each strategy over time</caption>
           <thead>
-            <tr className="text-gray-500 dark:text-gray-400">
+            <tr className="text-gray-600 dark:text-gray-400">
               <th className={TH}>{monthlyStepping ? 'Month' : 'Year'}</th>
               {summaries.map((s) => <th key={s.key} className={TH}>{s.label}</th>)}
             </tr>
@@ -153,7 +153,7 @@ const StrategyScenarioComparison = ({ summaries, rows, metricKey, onMetricChange
                         INSTEAD of a frozen figure). */}
                     {money(v.value)}
                     {v.settledAtMonth && (
-                      <span className="ml-1 text-gray-500 dark:text-gray-400 italic">✓ paid off m{v.settledAtMonth}</span>
+                      <span className="ml-1 text-gray-600 dark:text-gray-400 italic">✓ paid off m{v.settledAtMonth}</span>
                     )}
                   </td>
                 ))}

@@ -3,23 +3,23 @@ import { getBalanceColor, getBalanceBgColor } from './ui';
 
 describe('getBalanceColor', () => {
   it('is green at exactly 300 (inclusive boundary)', () => {
-    expect(getBalanceColor(300)).toBe('text-green-600 dark:text-green-400');
+    expect(getBalanceColor(300)).toBe('text-green-700 dark:text-green-400');
   });
 
   it('is yellow just below 300', () => {
-    expect(getBalanceColor(299)).toBe('text-yellow-600 dark:text-yellow-400');
+    expect(getBalanceColor(299)).toBe('text-yellow-700 dark:text-yellow-400');
   });
 
   it('is yellow at exactly 0 (inclusive boundary)', () => {
-    expect(getBalanceColor(0)).toBe('text-yellow-600 dark:text-yellow-400');
+    expect(getBalanceColor(0)).toBe('text-yellow-700 dark:text-yellow-400');
   });
 
   it('is red below 0', () => {
-    expect(getBalanceColor(-1)).toBe('text-red-600 dark:text-red-400');
+    expect(getBalanceColor(-1)).toBe('text-red-700 dark:text-red-400');
   });
 
   it('falls through to the red/else branch for a NaN input (both comparisons are false)', () => {
-    expect(getBalanceColor(NaN)).toBe('text-red-600 dark:text-red-400');
+    expect(getBalanceColor(NaN)).toBe('text-red-700 dark:text-red-400');
   });
 });
 

@@ -21,7 +21,7 @@ const InfoTooltip = ({ label, children }) => {
       <button
         type="button"
         onClick={() => { remeasure(); toggle(); }}
-        className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] leading-none border cursor-pointer focus:outline-none focus:ring-2 focus:ring-gray-300 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-600"
+        className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] leading-none border cursor-pointer focus:outline-none focus:ring-2 focus:ring-gray-300 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-600"
         aria-label={label}
       >
         ?

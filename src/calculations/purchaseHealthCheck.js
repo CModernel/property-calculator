@@ -14,10 +14,10 @@ export function classifyByBands(value, bands) {
 
 // Standard "3-6 months of expenses in reserve" rule of thumb.
 export const EMERGENCY_BUFFER_BANDS = [
-  { min: 12, label: 'Excellent', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: 'Comfortable buffer - keep it up.' },
-  { min: 6, label: 'Good', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: 'Solid buffer for most emergencies.' },
-  { min: 3, label: 'Moderate', symbol: '🟠', textClass: 'text-orange-600 dark:text-orange-400', critical: false, action: 'Consider building this up before committing further.' },
-  { min: -Infinity, label: 'High risk', symbol: '🔴', textClass: 'text-red-600 dark:text-red-400', critical: true, action: 'Increase savings or reduce purchase price before proceeding.' },
+  { min: 12, label: 'Excellent', symbol: '🟢', textClass: 'text-green-700 dark:text-green-400', critical: false, action: 'Comfortable buffer - keep it up.' },
+  { min: 6, label: 'Good', symbol: '🟢', textClass: 'text-green-700 dark:text-green-400', critical: false, action: 'Solid buffer for most emergencies.' },
+  { min: 3, label: 'Moderate', symbol: '🟠', textClass: 'text-orange-700 dark:text-orange-400', critical: false, action: 'Consider building this up before committing further.' },
+  { min: -Infinity, label: 'High risk', symbol: '🔴', textClass: 'text-red-700 dark:text-red-400', critical: true, action: 'Increase savings or reduce purchase price before proceeding.' },
 ];
 
 // Remaining Savings, in months of (property + personal) expenses covered.
@@ -34,10 +34,10 @@ export function classifyEmergencyBuffer(months) {
 // sits at the LOW end (opposite direction from Emergency Buffer above,
 // same classifyByBands mechanism).
 export const HOUSING_COST_RATIO_BANDS = [
-  { min: 50, label: 'High risk', symbol: '🔴', textClass: 'text-red-600 dark:text-red-400', critical: true, action: 'Consider a cheaper property, a bigger deposit, or more income.' },
-  { min: 40, label: 'Caution', symbol: '🟠', textClass: 'text-orange-600 dark:text-orange-400', critical: false, action: 'Housing is a large share of income - watch for rate rises.' },
-  { min: 30, label: 'Good', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: 'Within a comfortable range.' },
-  { min: -Infinity, label: 'Excellent', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: 'Plenty of headroom.' },
+  { min: 50, label: 'High risk', symbol: '🔴', textClass: 'text-red-700 dark:text-red-400', critical: true, action: 'Consider a cheaper property, a bigger deposit, or more income.' },
+  { min: 40, label: 'Caution', symbol: '🟠', textClass: 'text-orange-700 dark:text-orange-400', critical: false, action: 'Housing is a large share of income - watch for rate rises.' },
+  { min: 30, label: 'Good', symbol: '🟢', textClass: 'text-green-700 dark:text-green-400', critical: false, action: 'Within a comfortable range.' },
+  { min: -Infinity, label: 'Excellent', symbol: '🟢', textClass: 'text-green-700 dark:text-green-400', critical: false, action: 'Plenty of headroom.' },
 ];
 
 export function calculateHousingCostRatio(totalPropertyCost, totalMonthlyIncome) {
@@ -53,14 +53,14 @@ export function classifyHousingCostRatio(ratioPct) {
 }
 
 export const STRESS_TEST_BANDS = [
-  { min: 3, label: 'Excellent', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: 'Cash flow survives a 3-point rate rise.' },
-  { min: 2, label: 'Good', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: 'Comfortable margin against rate rises.' },
-  { min: 1, label: 'Moderate', symbol: '🟠', textClass: 'text-orange-600 dark:text-orange-400', critical: false, action: 'A larger rate rise would put you in deficit.' },
+  { min: 3, label: 'Excellent', symbol: '🟢', textClass: 'text-green-700 dark:text-green-400', critical: false, action: 'Cash flow survives a 3-point rate rise.' },
+  { min: 2, label: 'Good', symbol: '🟢', textClass: 'text-green-700 dark:text-green-400', critical: false, action: 'Comfortable margin against rate rises.' },
+  { min: 1, label: 'Moderate', symbol: '🟠', textClass: 'text-orange-700 dark:text-orange-400', critical: false, action: 'A larger rate rise would put you in deficit.' },
   // TODO-148: this band covers two different situations - already in deficit
   // today, or only once a 1-point rise hits - and calculateStressTestSurvivedDelta
   // returns 0 for both (it never separately probes +0), so the action text has
   // to stay honest about either one rather than assert the milder of the two.
-  { min: -Infinity, label: 'High risk', symbol: '🔴', textClass: 'text-red-600 dark:text-red-400', critical: true, action: 'Already in deficit today, or a 1-point rate rise would put you there - borrow less or grow your buffer.' },
+  { min: -Infinity, label: 'High risk', symbol: '🔴', textClass: 'text-red-700 dark:text-red-400', critical: true, action: 'Already in deficit today, or a 1-point rate rise would put you there - borrow less or grow your buffer.' },
 ];
 
 // Re-amortizes the CURRENT loan balance at interestRate + 1/2/3, recomputing
@@ -87,9 +87,9 @@ export function classifyStressTest(survivedDelta) {
 }
 
 export const UPFRONT_COST_RATIO_BANDS = [
-  { min: 4, label: 'High', symbol: '🔴', textClass: 'text-red-600 dark:text-red-400', critical: false, action: 'Check for any reducible closing costs.' },
-  { min: 2, label: 'Normal', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: 'A typical upfront cost load.' },
-  { min: -Infinity, label: 'Excellent', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: 'Low upfront costs relative to price.' },
+  { min: 4, label: 'High', symbol: '🔴', textClass: 'text-red-700 dark:text-red-400', critical: false, action: 'Check for any reducible closing costs.' },
+  { min: 2, label: 'Normal', symbol: '🟢', textClass: 'text-green-700 dark:text-green-400', critical: false, action: 'A typical upfront cost load.' },
+  { min: -Infinity, label: 'Excellent', symbol: '🟢', textClass: 'text-green-700 dark:text-green-400', critical: false, action: 'Low upfront costs relative to price.' },
 ];
 
 // Everything at settlement EXCLUDING the deposit itself - just the fees
@@ -111,14 +111,14 @@ export function classifyUpfrontCostRatio(ratioPct) {
 // reminder that negative gearing needs to be affordable from other income.
 export function classifyGearing(monthlyPropertyCashflow) {
   return monthlyPropertyCashflow >= 0
-    ? { label: 'Positive gearing', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: 'The property pays for itself.' }
-    : { label: 'Negative gearing', symbol: '🟠', textClass: 'text-orange-600 dark:text-orange-400', critical: false, action: 'Make sure the shortfall is affordable from other income.' };
+    ? { label: 'Positive gearing', symbol: '🟢', textClass: 'text-green-700 dark:text-green-400', critical: false, action: 'The property pays for itself.' }
+    : { label: 'Negative gearing', symbol: '🟠', textClass: 'text-orange-700 dark:text-orange-400', critical: false, action: 'Make sure the shortfall is affordable from other income.' };
 }
 
 export const VACANCY_BUFFER_BANDS = [
-  { min: 6, label: 'Excellent', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: 'Comfortable buffer against a vacancy.' },
-  { min: 3, label: 'Good', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: 'Reasonable buffer against a vacancy.' },
-  { min: -Infinity, label: 'High risk', symbol: '🔴', textClass: 'text-red-600 dark:text-red-400', critical: true, action: 'Increase your emergency reserve to cover a vacancy.' },
+  { min: 6, label: 'Excellent', symbol: '🟢', textClass: 'text-green-700 dark:text-green-400', critical: false, action: 'Comfortable buffer against a vacancy.' },
+  { min: 3, label: 'Good', symbol: '🟢', textClass: 'text-green-700 dark:text-green-400', critical: false, action: 'Reasonable buffer against a vacancy.' },
+  { min: -Infinity, label: 'High risk', symbol: '🔴', textClass: 'text-red-700 dark:text-red-400', critical: true, action: 'Increase your emergency reserve to cover a vacancy.' },
 ];
 
 export function calculateVacancyBufferMonths(cashRemaining, monthlyPropertyCosts) {
@@ -131,9 +131,9 @@ export function classifyVacancyBuffer(months) {
 }
 
 export const RENTAL_YIELD_BANDS = [
-  { min: 5, label: 'Strong', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: 'A strong rental yield.' },
-  { min: 3, label: 'Average', symbol: '🟠', textClass: 'text-orange-600 dark:text-orange-400', critical: false, action: 'A typical rental yield.' },
-  { min: -Infinity, label: 'Weak', symbol: '🔴', textClass: 'text-red-600 dark:text-red-400', critical: false, action: 'Reconsider the purchase if the yield stays this low.' },
+  { min: 5, label: 'Strong', symbol: '🟢', textClass: 'text-green-700 dark:text-green-400', critical: false, action: 'A strong rental yield.' },
+  { min: 3, label: 'Average', symbol: '🟠', textClass: 'text-orange-700 dark:text-orange-400', critical: false, action: 'A typical rental yield.' },
+  { min: -Infinity, label: 'Weak', symbol: '🔴', textClass: 'text-red-700 dark:text-red-400', critical: false, action: 'Reconsider the purchase if the yield stays this low.' },
 ];
 
 export function calculateRentalYield(weeklyRentalIncome, propertyPrice) {
@@ -155,10 +155,10 @@ export function classifyRentalYield(yieldPct) {
 
 // Bands from the other model's own suggestion (see TODO-67's analysis).
 export const MORTGAGE_FREE_AGE_BANDS = [
-  { min: 70, label: 'Late', symbol: '🔴', textClass: 'text-red-600 dark:text-red-400', critical: false, action: 'Consider a shorter term or higher contributions.' },
-  { min: 67, label: 'Cutting it close', symbol: '🟠', textClass: 'text-orange-600 dark:text-orange-400', critical: false, action: 'Close to typical retirement age.' },
-  { min: 60, label: 'Reasonable', symbol: '🟡', textClass: 'text-yellow-600 dark:text-yellow-400', critical: false, action: 'A reasonable age to be mortgage-free.' },
-  { min: -Infinity, label: 'Early', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: 'Mortgage-free well ahead of retirement age.' },
+  { min: 70, label: 'Late', symbol: '🔴', textClass: 'text-red-700 dark:text-red-400', critical: false, action: 'Consider a shorter term or higher contributions.' },
+  { min: 67, label: 'Cutting it close', symbol: '🟠', textClass: 'text-orange-700 dark:text-orange-400', critical: false, action: 'Close to typical retirement age.' },
+  { min: 60, label: 'Reasonable', symbol: '🟡', textClass: 'text-yellow-700 dark:text-yellow-400', critical: false, action: 'A reasonable age to be mortgage-free.' },
+  { min: -Infinity, label: 'Early', symbol: '🟢', textClass: 'text-green-700 dark:text-green-400', critical: false, action: 'Mortgage-free well ahead of retirement age.' },
 ];
 
 export function calculateMortgageFreeAge(currentAge, loanSimulationYears) {
@@ -173,10 +173,10 @@ export function classifyMortgageFreeAge(age) {
 // - no longer true once a deficit month can drain the offset instead of
 // growing it. Relabeled to describe the current share only, not a trend.
 export const OFFSET_UTILISATION_BANDS = [
-  { min: 20, label: 'Strong', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: 'A large share of the loan is offset.' },
-  { min: 10, label: 'Moderate', symbol: '🟡', textClass: 'text-yellow-600 dark:text-yellow-400', critical: false, action: 'A moderate share of the loan is offset.' },
-  { min: 5, label: 'Low', symbol: '🟠', textClass: 'text-orange-600 dark:text-orange-400', critical: false, action: 'A small share of the loan is offset so far.' },
-  { min: -Infinity, label: 'Just started', symbol: '🔴', textClass: 'text-red-600 dark:text-red-400', critical: false, action: 'Offset balance is still small relative to the loan.' },
+  { min: 20, label: 'Strong', symbol: '🟢', textClass: 'text-green-700 dark:text-green-400', critical: false, action: 'A large share of the loan is offset.' },
+  { min: 10, label: 'Moderate', symbol: '🟡', textClass: 'text-yellow-700 dark:text-yellow-400', critical: false, action: 'A moderate share of the loan is offset.' },
+  { min: 5, label: 'Low', symbol: '🟠', textClass: 'text-orange-700 dark:text-orange-400', critical: false, action: 'A small share of the loan is offset so far.' },
+  { min: -Infinity, label: 'Just started', symbol: '🔴', textClass: 'text-red-700 dark:text-red-400', critical: false, action: 'Offset balance is still small relative to the loan.' },
 ];
 
 export function calculateOffsetUtilisation(offset, balance) {

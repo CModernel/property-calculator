@@ -5,7 +5,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SimpleModeView from './SimpleModeView';
 
-const GREEN = { label: 'Good', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400', critical: false, action: '' };
+const GREEN = { label: 'Good', symbol: '🟢', textClass: 'text-green-700 dark:text-green-400', critical: false, action: '' };
 
 // Mirrors useSteppedValue's return shape, same fake-object approach as
 // SteppedExpenseField.test.jsx.
@@ -23,7 +23,7 @@ function makeProps(overrides = {}) {
     loanTermYears: 30, onLoanTermYearsChange: vi.fn(),
     lvr: 63.9,
     affordability: {
-      label: 'Funded', symbol: '🟢', textClass: 'text-green-600 dark:text-green-400',
+      label: 'Funded', symbol: '🟢', textClass: 'text-green-700 dark:text-green-400',
       headline: 'Settlement and monthly costs are covered.', bindingConstraint: null,
     },
     monthlyPayment: 3301,
@@ -170,8 +170,8 @@ describe('SimpleModeView', () => {
 
   it('colours a negative cash-remaining and a negative monthly balance as losses', () => {
     render(<SimpleModeView {...makeProps({ cashRemaining: -9937, monthlyNetBalance: -1057 })} />);
-    expect(screen.getByText('-$9,937')).toHaveClass('text-red-600');
-    expect(screen.getByText('-$1,057')).toHaveClass('text-red-600');
+    expect(screen.getByText('-$9,937')).toHaveClass('text-red-700');
+    expect(screen.getByText('-$1,057')).toHaveClass('text-red-700');
   });
 
   // The sign belongs outside the dollar sign - "$-9,937" reads as a typo.

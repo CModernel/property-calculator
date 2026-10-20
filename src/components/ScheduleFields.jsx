@@ -8,9 +8,9 @@ import { MAX_MONTH } from '../calculations/recurringAmount';
 // plus an `accentColor` (the recurring half: the selected recurrence button
 // and the End Month track).
 const CHECKBOX_CLASSES = {
-  cyan: 'text-cyan-600 dark:text-cyan-400 focus:ring-cyan-500',
-  green: 'text-green-600 dark:text-green-400 focus:ring-green-500',
-  yellow: 'text-yellow-600 dark:text-yellow-400 focus:ring-yellow-500',
+  cyan: 'text-cyan-700 dark:text-cyan-400 focus:ring-cyan-500',
+  green: 'text-green-700 dark:text-green-400 focus:ring-green-500',
+  yellow: 'text-yellow-700 dark:text-yellow-400 focus:ring-yellow-500',
 };
 
 const TRACK_CLASSES = {

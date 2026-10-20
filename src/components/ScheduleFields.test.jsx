@@ -86,6 +86,6 @@ describe('ScheduleFields', () => {
     const endSlider = within(screen.getByText(/End Month:/).parentElement).getByRole('slider');
     expect(endSlider).toHaveClass('bg-orange-200', 'dark:bg-orange-900');
     expect(screen.getByRole('button', { name: 'monthly' })).toHaveClass('bg-orange-200');
-    expect(screen.getByLabelText("One-Time (occurs once, doesn't repeat)")).toHaveClass('text-yellow-600');
+    expect(screen.getByLabelText("One-Time (occurs once, doesn't repeat)")).toHaveClass('text-yellow-700');
   });
 });

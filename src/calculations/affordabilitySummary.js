@@ -30,7 +30,7 @@ export function summariseAffordability({
     return {
       label: 'Settlement not covered',
       symbol: '🔴',
-      textClass: 'text-red-600 dark:text-red-400',
+      textClass: 'text-red-700 dark:text-red-400',
       headline: "Your savings don't cover the deposit and upfront costs.",
       bindingConstraint: 'cashRemaining',
     };
@@ -40,7 +40,7 @@ export function summariseAffordability({
     return {
       label: 'Monthly shortfall',
       symbol: '🔴',
-      textClass: 'text-red-600 dark:text-red-400',
+      textClass: 'text-red-700 dark:text-red-400',
       headline: 'Your monthly costs exceed your monthly income.',
       bindingConstraint: 'monthlyNetBalance',
     };
@@ -91,7 +91,7 @@ export function summariseAffordability({
   return {
     label: 'Funded',
     symbol: '🟢',
-    textClass: 'text-green-600 dark:text-green-400',
+    textClass: 'text-green-700 dark:text-green-400',
     headline: 'Settlement and monthly costs are covered, with room in the indicators below.',
     bindingConstraint: null,
   };

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import postcss from 'postcss';
 import tailwindcss from 'tailwindcss';
 import tailwindConfig from '../tailwind.config.js';
-import { chartColors, DARK_LEGEND_TEXT } from './components/chartTheme';
+import { chartColors, DARK_LEGEND_TEXT, LIGHT_LEGEND_TEXT } from './components/chartTheme';
 
 // TODO-192: dark mode had text you could barely read - black text on dark
 // cards (anything with no colour class inherits the browser's black, because
@@ -15,29 +15,39 @@ import { chartColors, DARK_LEGEND_TEXT } from './components/chartTheme';
 // (jsdom has no layout or stylesheets, so these are source and compiled-CSS
 // rules, not renders.)
 
-function sourceFiles() {
+// TODO-193: the same audit on the light theme. Light-side text needs grey-600+
+// and the colours at their 700 shade: grey-400/500 and the 400-600 colour
+// shades measured 2.1-4.4:1 on the white and tinted cards.
+const LIGHT_TOO_PALE = /^text-(?:gray-(?:300|400|500)|(?:red|green|orange|amber|yellow|purple|indigo|violet|blue|cyan|teal|emerald|pink|rose)-(?:300|400|500|600))$/;
+// Light shades that are fine as text in BOTH themes because they sit on a
+// dark or saturated surface (the Loan Simulation card, filled buttons).
+const ON_DARK_SURFACE = /^text-(?:white|yellow-300|indigo-100|blue-100|purple-100|green-100)$/;
+
+function sourceFiles({ js = false } = {}) {
   const files = [];
   (function walk(dir) {
     for (const name of readdirSync(dir)) {
       const path = join(dir, name);
       if (statSync(path).isDirectory()) walk(path);
-      else if (/\.jsx$/.test(path) && !/\.test\./.test(path)) files.push(path);
+      else if ((js ? /\.jsx?$/ : /\.jsx$/).test(path) && !/\.test\./.test(path) && !/\/test\//.test(path)) files.push(path);
     }
   })(new URL('.', import.meta.url).pathname);
   return files;
 }
 
 // Every string literal in the app that carries Tailwind text classes.
-function classStrings({ any = false } = {}) {
+function classStrings({ any = false, js = false } = {}) {
   const found = [];
   const literal = /"([^"\n]*)"|'([^'\n]*)'|`([^`]*)`/g;
-  for (const file of sourceFiles()) {
+  for (const file of sourceFiles({ js })) {
     const source = readFileSync(file, 'utf8');
     let match;
     while ((match = literal.exec(source))) {
       const value = match[1] ?? match[2] ?? match[3];
       if (!any && !/\btext-/.test(value)) continue;
-      found.push({ file: file.split('/src/')[1], line: source.slice(0, match.index).split('\n').length, tokens: value.split(/\s+/).filter(Boolean), value });
+      // Quotes/braces split too, so the classes inside a template's
+      // ${cond ? '...' : '...'} branches are tokens of their own.
+      found.push({ file: file.split('/src/')[1], line: source.slice(0, match.index).split('\n').length, tokens: value.split(/[\s'"{}()?]+/).filter(Boolean), value });
     }
   }
   return found;
@@ -101,6 +111,13 @@ describe('dark mode text contrast (TODO-192)', () => {
     expect(describeAll(offenders)).toEqual([]);
   });
 
+  // .js too: the indicator bands (purchaseHealthCheck.js, classifyLvr.js,
+  // strategyComparison.js, ...) carry their own textClass strings.
+  it('uses no light-side text colour paler than grey-600 / a 700 shade (light theme, TODO-193)', () => {
+    const offenders = classStrings({ js: true }).filter((row) => row.tokens.some((t) => LIGHT_TOO_PALE.test(t) && !ON_DARK_SURFACE.test(t)));
+    expect(describeAll(offenders)).toEqual([]);
+  });
+
   it('sets a base text colour for both themes, so text with no colour class is not the browser black', async () => {
     const css = readFileSync(new URL('./index.css', import.meta.url), 'utf8');
     const root = (await postcss([tailwindcss(tailwindConfig)]).process(css, { from: 'src/index.css' })).root;
@@ -131,6 +148,12 @@ describe('dark mode text contrast (TODO-192)', () => {
 
     it('prints dark-mode legend text at 4.5:1 or better', () => {
       expect(contrast(DARK_LEGEND_TEXT, CARD)).toBeGreaterThanOrEqual(4.5);
+    });
+
+    // TODO-193: recharts colours legend text like its series - red-500 and
+    // blue-500 read 3.7:1 on the white card - so light mode is neutral too.
+    it('prints light-mode legend text at 4.5:1 or better on the white card', () => {
+      expect(contrast(LIGHT_LEGEND_TEXT, '#ffffff')).toBeGreaterThanOrEqual(4.5);
     });
   });
 });

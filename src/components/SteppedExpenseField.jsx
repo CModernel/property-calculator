@@ -26,7 +26,7 @@ const SteppedExpenseField = ({ field, ...numberSliderProps }) => {
       <button
         type="button"
         onClick={() => setShowAddChange(!showAddChange)}
-        className="mt-1 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+        className="mt-1 text-xs text-blue-700 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
       >
         {showAddChange ? '✕ Cancel' : '+ Schedule a change'}
       </button>
@@ -78,7 +78,7 @@ const SteppedExpenseField = ({ field, ...numberSliderProps }) => {
                   {numberSliderProps.prefix}
                   {c.amount.toLocaleString()} from month {c.startMonth}
                 </span>
-                <button type="button" onClick={() => removeChange(c.id)} className="text-red-500 dark:text-red-400 font-bold px-1">
+                <button type="button" onClick={() => removeChange(c.id)} className="text-red-700 dark:text-red-400 font-bold px-1">
                   ✕
                 </button>
               </div>

@@ -8,7 +8,9 @@ export function chartColors(isDarkMode) {
   return isDarkMode ? DARK : LIGHT;
 }
 
-// Recharts colours each legend entry's TEXT like its series, which on the dark
-// card reads as low as 2.6:1. In dark mode the text is neutral instead (the
-// swatch beside it still carries the series colour).
+// Recharts colours each legend entry's TEXT like its series, which reads as low
+// as 2.6:1 on the dark card and 3.7:1 on the white one (TODO-193). The text is
+// neutral in both themes instead (the swatch beside it still carries the
+// series colour).
 export const DARK_LEGEND_TEXT = '#e5e7eb';
+export const LIGHT_LEGEND_TEXT = '#374151';

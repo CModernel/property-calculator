@@ -1,14 +1,14 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { formatCompactMoney } from '../calculations/formatting';
 import { withMonthlyPrincipal, getYearTickMonths } from '../calculations/chartData';
-import { DARK_LEGEND_TEXT } from './chartTheme';
+import { DARK_LEGEND_TEXT, LIGHT_LEGEND_TEXT } from './chartTheme';
 
 // The classic amortization chart: per-month Principal vs. Interest,
 // stacked - shows the crossover point and how offset shifts it earlier
 // (TODO-51).
 // Same JS-level color handling as LoanBalanceChart.jsx (TODO-47) - recharts
-// props don't respond to Tailwind's `dark:` variant. TODO-192: the legend text
-// is neutral in dark mode (recharts would colour it like its series).
+// props don't respond to Tailwind's `dark:` variant. TODO-192/193: the legend text
+// is neutral in both themes (recharts would colour it like its series).
 const PrincipalInterestChart = ({ monthlyData, isDarkMode }) => (
   <ResponsiveContainer width="100%" height={200}>
     <AreaChart data={withMonthlyPrincipal(monthlyData)} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
@@ -30,7 +30,7 @@ const PrincipalInterestChart = ({ monthlyData, isDarkMode }) => (
         contentStyle={isDarkMode ? { backgroundColor: '#1f2937', border: '1px solid #374151', color: '#f3f4f6' } : undefined}
         labelStyle={isDarkMode ? { color: '#f3f4f6' } : undefined}
       />
-      <Legend formatter={isDarkMode ? (value) => <span style={{ color: DARK_LEGEND_TEXT }}>{value}</span> : undefined} />
+      <Legend formatter={(value) => <span style={{ color: isDarkMode ? DARK_LEGEND_TEXT : LIGHT_LEGEND_TEXT }}>{value}</span>} />
       <Area
         type="monotone"
         dataKey="monthlyPrincipalPaid"
