@@ -9,7 +9,8 @@ import { useTooltipViewportShift } from '../hooks/useTooltipViewportShift';
 const LvrBadge = ({ lvr }) => {
   const current = classifyLvr(lvr);
   const { isOpen, toggle, ref } = useTooltipToggle();
-  // TODO-179: keeps the popover inside the viewport near a window edge.
+  // TODO-179/186: places the fixed popover by its wrapper, inside the viewport
+  // and out of reach of any overflow container's clipping.
   const { popoverRef, remeasure } = useTooltipViewportShift();
 
   return (
@@ -31,7 +32,7 @@ const LvrBadge = ({ lvr }) => {
       <div
         role="tooltip"
         ref={popoverRef}
-        className={`${isOpen ? 'visible opacity-100' : 'invisible opacity-0'} group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 transition-opacity duration-150 absolute z-20 top-full left-1/2 -translate-x-1/2 mt-2 w-72 max-w-[90vw] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 shadow-lg text-xs`}
+        className={`${isOpen ? 'visible opacity-100' : 'invisible opacity-0'} group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 transition-opacity duration-150 fixed z-20 top-0 left-0 max-h-[calc(100vh-1rem)] overflow-y-auto w-72 max-w-[90vw] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 shadow-lg text-xs`}
       >
         <p className="text-gray-600 dark:text-gray-300 mb-2">
           The lower the LVR, the lower the risk and the greater the borrowing flexibility.

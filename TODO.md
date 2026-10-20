@@ -7,6 +7,42 @@ optionally reuse in the commit message when you implement it.
 
 ## ✅ Completed
 
+- [x] **TODO-186: Tooltips inside `overflow-x-auto` table wrappers are still clipped**
+  Known limit of TODO-179, found by its Opus review. The viewport clamp can't
+  help where the clipping edge is a scroll container's padding box rather than
+  the window: `overflow-x: auto` forces `overflow-y` to `auto` too, so a popover
+  from a `<thead>` cell that drops below the table is cut vertically (or makes
+  the wrapper scroll), and the first ~16-40px of one near the table's left edge
+  stays hidden. Places: `App.jsx` (the strategy comparison table wrapper and
+  its header tooltip), `EtfCrashStressTest.jsx`, `EtfReturnSensitivity.jsx`,
+  `StrategyScenarioComparison.jsx`. Needs a `position: fixed` / portal popover
+  or clamping to the nearest scroll container; a portal also touches the
+  hover/focus-within CSS the components rely on, so decide before coding.
+  **Retrospective (PCALC-148):** decided in plan mode: `position: fixed`,
+  placed by the existing hook, NO portal - the popover stays inside its wrapper,
+  so the CSS hover/focus-within reveal, the tap toggle's outside-click ref and
+  every `within(row)` test keep working unchanged. `useTooltipViewportShift`
+  now writes style.left/top from the wrapper's rect: centred 8px below, 8px
+  inside the viewport (left edge wins, as TODO-179), flipped above near the
+  bottom, offset by a transformed/filtered ancestor (a containing block for
+  fixed), and re-measured on a capture-phase scroll only while visible. Found
+  while verifying: tooltips taller than the room on either side (530-610px in a
+  900px window) were cut at the bottom with no way to scroll to it, so the
+  popover is clamped into the viewport and capped at `max-h-[calc(100vh-1rem)]`
+  with its own scroll. Side effect, as planned: a fixed box adds no scroll
+  overflow, so TODO-191's 78px blank strip is gone (scrollHeight now equals the
+  content). Chrome, script-measured: 28/28 tooltips at 390px and at 1280px
+  (Advanced, ETF panels open, 5 of them inside overflow-x-auto tables) and 2/2
+  in Simple are fully inside the viewport and hit-test as on top at 9 interior
+  points; an open tooltip stays 8px under its button while the page scrolls.
+  Tests: hook tests rewritten for fixed coordinates (16 cases, fake layout in
+  test/popoverLayout.js extended with an anchor and a containing block),
+  component tests pin `fixed`/no `absolute` and the height cap. Mutations (no
+  flip, no containing-block offset, measuring hidden popovers on scroll,
+  `absolute` back, no vertical clamp) each fail. Not covered: a real touch
+  device; a tall clamped popover may cover its own "?" button (tap outside
+  closes it).
+
 - [x] **TODO-193: Light mode has the same kind of low-contrast text (found by the TODO-192 audit)**
   The dark-mode audit, run on the light theme for comparison, measures 190-255
   failing text nodes per Advanced state (25-30 in Simple), pre-existing and
@@ -105,7 +141,8 @@ optionally reuse in the commit message when you implement it.
   exists (it now matches the background); removing it means a hidden popover
   must stop counting as overflow, which clipping the root would do at the
   cost of cutting off tooltips at the very end of the page. Same hidden-popover
-  family as TODO-186.
+  family as TODO-186. **Update (PCALC-148):** gone - TODO-186 made popovers
+  `position: fixed`, which adds no scroll overflow.
 
 - [x] **TODO-190: The header row overflowed a phone, so the whole page scrolled sideways**
   Found by the Chrome review of the Simple version (2026-10-20), shipped with
@@ -6735,18 +6772,6 @@ gives `totalInterest` **$645,389.22**.
   Suite 874 passing, lint and build clean.
 
 
-
-- [ ] **TODO-186: Tooltips inside `overflow-x-auto` table wrappers are still clipped**
-  Known limit of TODO-179, found by its Opus review. The viewport clamp can't
-  help where the clipping edge is a scroll container's padding box rather than
-  the window: `overflow-x: auto` forces `overflow-y` to `auto` too, so a popover
-  from a `<thead>` cell that drops below the table is cut vertically (or makes
-  the wrapper scroll), and the first ~16-40px of one near the table's left edge
-  stays hidden. Places: `App.jsx` (the strategy comparison table wrapper and
-  its header tooltip), `EtfCrashStressTest.jsx`, `EtfReturnSensitivity.jsx`,
-  `StrategyScenarioComparison.jsx`. Needs a `position: fixed` / portal popover
-  or clamping to the nearest scroll container; a portal also touches the
-  hover/focus-within CSS the components rely on, so decide before coding.
 
 ---
 
