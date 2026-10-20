@@ -7,6 +7,22 @@ optionally reuse in the commit message when you implement it.
 
 ## ✅ Completed
 
+- [x] **TODO-188: Simple and Advanced had no money-figure parity check beyond the default scenario**
+  From the calculation audit (2026-10-20). Simple mode is presentation only
+  (every figure is computed in App.jsx), but it sums income and costs itself
+  and formats them its own way; only the three Health Check indicators
+  (App.simpleModeStabilized) and two figures on the shipped default
+  (App.uiMode) were compared across modes.
+  **Retrospective (PCALC-140):** new `App.simpleAdvancedParity.test.jsx` -
+  for all 12 scenarios in `test/healthCheckScenarios.js`, Simple's income in,
+  personal expenses, total costs, left over, total cash required and cash
+  remaining must equal Advanced's Total Monthly Income, Personal Expenses,
+  Total Monthly Expenses, Net Monthly Balance, Total Cash Required and
+  Remaining Savings. All agree. Mutations (Simple dropping rent from income,
+  or personal expenses from costs) fail 6 and 12 cases. Seen, not changed:
+  Advanced's Net Monthly Balance formats a deficit as "$-1,234/month" while
+  Simple uses "-$1,234".
+
 - [x] **TODO-187: The negative-gearing tax step reads a non-monthly payment's firing month as a whole year**
   Logged from TODO-185's retrospective. On an investment property the
   simulation annualises "other income" x52 every month to find the tax
