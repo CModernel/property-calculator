@@ -13,12 +13,16 @@
    gradient is `fixed` so it covers the whole viewport however far the page
    overscrolls or overflows. */
 html {
-  @apply bg-gradient-to-br from-slate-50 to-blue-50;
+  @apply bg-gradient-to-br from-slate-50 to-blue-50 text-gray-900;
   background-attachment: fixed;
 }
 
+/* TODO-192: a base text colour for each theme. Text with no colour class of its
+   own inherits from here; without it that was the browser's black, unreadable
+   on the dark cards (the Timeline's Income Context rows, the slider range
+   labels, ...). */
 html.dark {
-  @apply from-slate-900 to-blue-950;
+  @apply from-slate-900 to-blue-950 text-gray-200;
 }
 
 /* TODO-128: the ETF slider's left side represents money staying offset-bound,

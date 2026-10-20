@@ -7,6 +7,35 @@ optionally reuse in the commit message when you implement it.
 
 ## ✅ Completed
 
+- [x] **TODO-192: Text unreadable in dark mode (black or too-dim text on the dark cards)**
+  Reported by the user: the Financial Events Log's Income Context rows
+  ("Personal Income:", "$0/mo", ...) showed black on dark green. Cause: no base
+  text colour was ever set, so any element without a colour class inherits the
+  browser's black. A Chrome audit then measured the real contrast of every text
+  node (WCAG, gradients evaluated stop by stop, hidden tooltips forced open) in
+  Advanced and Simple, across the default scenario, an investment unit with
+  rent and a rate rise, and a "can't afford it" scenario: 3,036 texts, 22+
+  failing before.
+  **Retrospective (PCALC-145):** (1) `html` gets a base text colour per theme
+  (`gray-900`, `html.dark` gray-200), which fixes every uncoloured span at once
+  (slider range labels, the Timeline rows...). (2) Muted greys were
+  `dark:text-gray-500` (3.0:1 on the dark cards): now `dark:text-gray-400`, and
+  the muted pair is `text-gray-500 dark:text-gray-400` (the old light side,
+  gray-400, is 2.4:1 on white). (3) `text-blue-900` ($543,000) got
+  `dark:text-blue-300`; `text-red-500` (3.9:1) got `dark:text-red-400`; the red
+  warning banners use `dark:text-red-200` on red-900. (4) White-on-pastel
+  buttons (Cancel/Add Income/Add Expense/Add Contribution, the clear-rate
+  button) moved to 700 shades (was 1.9-3.8:1). (5) The Loan Simulation card:
+  gradient `indigo-600 -> purple-700` and its inner panels `bg-black/20`
+  instead of `bg-white/20`, which lightened the surface under white text to
+  ~3.1:1. (6) Charts: lighter series colours in dark mode and neutral legend
+  text (`chartTheme.js`; violet was 2.6:1). After: 0 failing texts in all six
+  dark states; mutations of each rule fail `darkModeContrast.test.js` (10
+  tests: source rules plus the compiled CSS, since jsdom has no styles).
+  The audit script isn't kept in the repo; it is a browser-side check.
+  Not covered: hover/focus/disabled states, SVG text (axis ticks use fixed
+  light greys), and anything not on screen in those scenarios.
+
 - [x] **TODO-191: Dark mode showed a white strip when overscrolling and below the page**
   Reported by the user. In dark mode the page canvas was light: `html, body {
   @apply dark:bg-slate-900 }` compiles `dark:` to `.dark html`, which needs a
@@ -5904,6 +5933,18 @@ gives `totalInterest` **$645,389.22**.
 ---
 
 ## 🟡 MEDIUM PRIORITY (Important, but not blocking)
+
+- [ ] **TODO-193: Light mode has the same kind of low-contrast text (found by the TODO-192 audit)**
+  The dark-mode audit, run on the light theme for comparison, measures 190-255
+  failing text nodes per Advanced state (25-30 in Simple), pre-existing and
+  untouched by TODO-192 beyond the muted-grey pair. Biggest groups: the
+  `text-gray-400` slider range labels and "✓ paid off mN" notes (2.4:1 on
+  white); the impact icons - orange-600 "⬇" (3.3:1) and green-600 "⬆" (3.0:1);
+  `text-red-500` negatives (3.5:1); the grey "?" tooltip buttons (4.4:1); the
+  "(higher = worse outcome)" legend text (2.3:1). Likely fixable with one shade
+  step each, but the impact colours are a deliberate palette (ImpactColorLegend,
+  TODO-47) so they want a decision, not a blind darken.
+
 
 - [ ] **TODO-124 (Superseded by TODO-136/137/138 — do not implement independently): Should "Invest in ETFs" divert from Savings instead of from the Offset's own share?**
   User's proposal: instead of `etfAllocationPct` diverting a % of the

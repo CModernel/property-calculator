@@ -78,7 +78,7 @@ const SteppedExpenseField = ({ field, ...numberSliderProps }) => {
                   {numberSliderProps.prefix}
                   {c.amount.toLocaleString()} from month {c.startMonth}
                 </span>
-                <button type="button" onClick={() => removeChange(c.id)} className="text-red-500 font-bold px-1">
+                <button type="button" onClick={() => removeChange(c.id)} className="text-red-500 dark:text-red-400 font-bold px-1">
                   ✕
                 </button>
               </div>

@@ -153,7 +153,7 @@ const StrategyScenarioComparison = ({ summaries, rows, metricKey, onMetricChange
                         INSTEAD of a frozen figure). */}
                     {money(v.value)}
                     {v.settledAtMonth && (
-                      <span className="ml-1 text-gray-400 dark:text-gray-500 italic">✓ paid off m{v.settledAtMonth}</span>
+                      <span className="ml-1 text-gray-500 dark:text-gray-400 italic">✓ paid off m{v.settledAtMonth}</span>
                     )}
                   </td>
                 ))}

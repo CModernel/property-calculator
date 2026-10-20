@@ -13,10 +13,10 @@ const ImpactColorLegend = () => (
     <span className="font-medium text-gray-700 dark:text-gray-200">Slider colors:</span>
     {IMPACT_LEGEND.map((item) => (
       <span key={item.label}>
-        <span aria-hidden="true" className={item.textClass}>{item.icon}</span> {item.label} <span className="text-gray-400 dark:text-gray-500">({item.hint})</span>
+        <span aria-hidden="true" className={item.textClass}>{item.icon}</span> {item.label} <span className="text-gray-500 dark:text-gray-400">({item.hint})</span>
       </span>
     ))}
-    <span className="text-gray-400 dark:text-gray-500">Some sliders (e.g. growth-rate assumptions, your age) are left uncolored - they don't move these three outcomes.</span>
+    <span className="text-gray-500 dark:text-gray-400">Some sliders (e.g. growth-rate assumptions, your age) are left uncolored - they don't move these three outcomes.</span>
   </div>
 );
 

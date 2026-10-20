@@ -1455,7 +1455,7 @@ const PropertyInvestmentCalculator = () => {
               </div>
 
               <div>
-                <label className={`flex items-center gap-2 text-sm font-medium ${isInvestmentProperty ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-200'}`}>
+                <label className={`flex items-center gap-2 text-sm font-medium ${isInvestmentProperty ? 'text-gray-500 dark:text-gray-400' : 'text-gray-700 dark:text-gray-200'}`}>
                   <input
                     type="checkbox"
                     checked={isFirstHomeBuyer}
@@ -1477,7 +1477,7 @@ const PropertyInvestmentCalculator = () => {
               </div>
 
               <div>
-                <label className={`flex items-center gap-2 text-sm font-medium ${isFirstHomeBuyer ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-200'}`}>
+                <label className={`flex items-center gap-2 text-sm font-medium ${isFirstHomeBuyer ? 'text-gray-500 dark:text-gray-400' : 'text-gray-700 dark:text-gray-200'}`}>
                   <input
                     type="checkbox"
                     checked={isInvestmentProperty}
@@ -2009,7 +2009,7 @@ const PropertyInvestmentCalculator = () => {
               </div>
 
               <div>
-                <label className={`flex items-center gap-2 text-sm font-medium ${effectiveTaxRate === 0 ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-200'}`}>
+                <label className={`flex items-center gap-2 text-sm font-medium ${effectiveTaxRate === 0 ? 'text-gray-500 dark:text-gray-400' : 'text-gray-700 dark:text-gray-200'}`}>
                   <input
                     type="checkbox"
                     checked={useEtfInvesting}
@@ -2601,7 +2601,7 @@ const PropertyInvestmentCalculator = () => {
                   <button
                     onClick={() => setShowAddContribution(!showAddContribution)}
                     aria-expanded={showAddContribution}
-                    className="px-3 py-1 bg-cyan-500 text-white rounded-lg text-sm hover:bg-cyan-600 transition-colors"
+                    className="px-3 py-1 bg-cyan-700 text-white rounded-lg text-sm hover:bg-cyan-800 transition-colors"
                   >
                     {showAddContribution ? '✕ Cancel' : '+ Add'}
                   </button>
@@ -2625,7 +2625,7 @@ const PropertyInvestmentCalculator = () => {
 
                     <button
                       onClick={addOffsetContribution}
-                      className="w-full py-3 bg-cyan-600 text-white rounded-lg font-medium hover:bg-cyan-700 transition-colors"
+                      className="w-full py-3 bg-cyan-700 text-white rounded-lg font-medium hover:bg-cyan-800 transition-colors"
                     >
                       Add Contribution
                     </button>
@@ -2659,7 +2659,7 @@ const PropertyInvestmentCalculator = () => {
                       </div>
                       <button
                         onClick={() => removeOffsetContribution(contrib.id)}
-                        className="ml-3 px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors text-sm"
+                        className="ml-3 px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm"
                       >
                         ✕
                       </button>
@@ -3024,7 +3024,7 @@ const PropertyInvestmentCalculator = () => {
                 <button
                   onClick={() => setShowAddIncome(!showAddIncome)}
                   aria-expanded={showAddIncome}
-                  className="px-3 py-1 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600 transition-colors"
+                  className="px-3 py-1 bg-green-700 text-white rounded-lg text-sm hover:bg-green-800 transition-colors"
                 >
                   {showAddIncome ? '✕ Cancel' : '+ Add'}
                 </button>
@@ -3149,7 +3149,7 @@ const PropertyInvestmentCalculator = () => {
 
                     <button
                       onClick={addIncomeSource}
-                      className="w-full py-2 bg-green-600 text-white rounded font-bold hover:bg-green-700"
+                      className="w-full py-2 bg-green-700 text-white rounded font-bold hover:bg-green-800"
                     >
                       Add Income
                     </button>
@@ -3174,7 +3174,7 @@ const PropertyInvestmentCalculator = () => {
                         • {formatScheduleLabel(income)}
                       </p>
                     </div>
-                    <button onClick={() => removeIncomeSource(income.id)} className="text-red-500 font-bold px-2">✕</button>
+                    <button onClick={() => removeIncomeSource(income.id)} className="text-red-500 dark:text-red-400 font-bold px-2">✕</button>
                   </div>
                 ))}
               </div>
@@ -3213,7 +3213,7 @@ const PropertyInvestmentCalculator = () => {
                 <button
                   onClick={() => setShowAddExceptExp(!showAddExceptExp)}
                   aria-expanded={showAddExceptExp}
-                  className="px-3 py-1 bg-yellow-500 text-white rounded-lg text-sm hover:bg-yellow-600 transition-colors"
+                  className="px-3 py-1 bg-yellow-700 text-white rounded-lg text-sm hover:bg-yellow-800 transition-colors"
                 >
                   {showAddExceptExp ? '✕ Cancel' : '+ Add'}
                 </button>
@@ -3266,7 +3266,7 @@ const PropertyInvestmentCalculator = () => {
 
                     <button
                       onClick={addPersonalExpense}
-                      className="w-full py-2 bg-yellow-600 text-white rounded font-bold hover:bg-yellow-700"
+                      className="w-full py-2 bg-yellow-700 text-white rounded font-bold hover:bg-yellow-800"
                     >
                       Add Expense
                     </button>
@@ -3286,7 +3286,7 @@ const PropertyInvestmentCalculator = () => {
                         ${exp.amount} • {formatScheduleLabel(exp)}
                       </p>
                     </div>
-                    <button onClick={() => removePersonalExpense(exp.id)} className="text-red-500 font-bold px-2">✕</button>
+                    <button onClick={() => removePersonalExpense(exp.id)} className="text-red-500 dark:text-red-400 font-bold px-2">✕</button>
                   </div>
                 ))}
               </div>
@@ -3435,43 +3435,43 @@ const PropertyInvestmentCalculator = () => {
                       <div className="pl-4 mt-1 space-y-1 text-xs">
                         <div className="flex justify-between">
                           <span className="text-gray-500 dark:text-gray-400">Strata:</span>
-                          <span className="text-red-500">-${Math.round(monthlyStrata).toLocaleString()}</span>
+                          <span className="text-red-500 dark:text-red-400">-${Math.round(monthlyStrata).toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-500 dark:text-gray-400">Council:</span>
-                          <span className="text-red-500">-${Math.round(monthlyCouncil).toLocaleString()}</span>
+                          <span className="text-red-500 dark:text-red-400">-${Math.round(monthlyCouncil).toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-500 dark:text-gray-400">Utilities:</span>
-                          <span className="text-red-500">-${utilities.toLocaleString()}</span>
+                          <span className="text-red-500 dark:text-red-400">-${utilities.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-500 dark:text-gray-400">Insurance:</span>
-                          <span className="text-red-500">-${insurance.toLocaleString()}</span>
+                          <span className="text-red-500 dark:text-red-400">-${insurance.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-500 dark:text-gray-400">Maintenance & Repairs:</span>
-                          <span className="text-red-500">-${maintenance.toLocaleString()}</span>
+                          <span className="text-red-500 dark:text-red-400">-${maintenance.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-500 dark:text-gray-400">Water Rates:</span>
-                          <span className="text-red-500">-${Math.round(monthlyWaterRates).toLocaleString()}</span>
+                          <span className="text-red-500 dark:text-red-400">-${Math.round(monthlyWaterRates).toLocaleString()}</span>
                         </div>
                         {isInvestmentProperty && (
                           <>
                             <div className="flex justify-between">
                               <span className="text-gray-500 dark:text-gray-400">Land Tax:</span>
-                              <span className="text-red-500">-${Math.round(monthlyLandTax).toLocaleString()}</span>
+                              <span className="text-red-500 dark:text-red-400">-${Math.round(monthlyLandTax).toLocaleString()}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-gray-500 dark:text-gray-400">Property Management:</span>
-                              <span className="text-red-500">-${propertyManagement.toLocaleString()}</span>
+                              <span className="text-red-500 dark:text-red-400">-${propertyManagement.toLocaleString()}</span>
                             </div>
                           </>
                         )}
                         <div className="flex justify-between">
                           <span className="text-gray-500 dark:text-gray-400">Misc:</span>
-                          <span className="text-red-500">-${Math.round(miscPropertyExpense).toLocaleString()}</span>
+                          <span className="text-red-500 dark:text-red-400">-${Math.round(miscPropertyExpense).toLocaleString()}</span>
                         </div>
                       </div>
                     )}
@@ -3497,11 +3497,11 @@ const PropertyInvestmentCalculator = () => {
                         {personalExpenseItems.filter(item => isScheduleActive(item, 1)).map(item => (
                           <div key={item.id} className="flex justify-between">
                             <span className="text-gray-500 dark:text-gray-400">{item.name}:</span>
-                            <span className="text-red-500">-${Math.round(getAveragedAmount([item], 1)).toLocaleString()}</span>
+                            <span className="text-red-500 dark:text-red-400">-${Math.round(getAveragedAmount([item], 1)).toLocaleString()}</span>
                           </div>
                         ))}
                         {personalExpenseItems.filter(item => isScheduleActive(item, 1)).length === 0 && (
-                          <span className="italic text-gray-400 dark:text-gray-500">No personal expenses active this month</span>
+                          <span className="italic text-gray-500 dark:text-gray-400">No personal expenses active this month</span>
                         )}
                       </div>
                     )}
@@ -3624,7 +3624,7 @@ const PropertyInvestmentCalculator = () => {
               </div>
 
               {/* Status message */}
-              <p className={`text-center text-xs px-2 py-1 rounded ${(monthlyRentalIncome + monthlyIncome) >= (totalPropertyCost + monthlyPersonalExpenses) ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-400' : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-400'}`}>
+              <p className={`text-center text-xs px-2 py-1 rounded ${(monthlyRentalIncome + monthlyIncome) >= (totalPropertyCost + monthlyPersonalExpenses) ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-400' : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'}`}>
                 {(monthlyRentalIncome + monthlyIncome) >= (totalPropertyCost + monthlyPersonalExpenses)
                   ? `✅ Income covers all expenses. (+$${Math.round((monthlyRentalIncome + monthlyIncome) - (totalPropertyCost + monthlyPersonalExpenses)).toLocaleString()})`
                   : `❌ Need $${Math.round((totalPropertyCost + monthlyPersonalExpenses) - (monthlyRentalIncome + monthlyIncome))}/month extra`
@@ -3659,7 +3659,7 @@ const PropertyInvestmentCalculator = () => {
                 signal anywhere on the page. The wording follows the panel's
                 state because "below" is a lie while the card is shut. */}
             {healthCheckHasCritical && (
-              <div className="mb-3 p-3 bg-red-100 dark:bg-red-900 rounded text-red-800 dark:text-red-400 text-sm font-semibold">
+              <div className="mb-3 p-3 bg-red-100 dark:bg-red-900 rounded text-red-800 dark:text-red-200 text-sm font-semibold">
                 ⚠️ One or more indicators {showHealthCheck ? 'below' : 'in this panel'} need attention - not financial advice, just standard rules of thumb.
               </div>
             )}
@@ -3766,7 +3766,7 @@ const PropertyInvestmentCalculator = () => {
                         <p className="mt-2">"Stabilizes to" reflects month {stabilizationMonth} - your last scheduled income/expense change, or year 5 if nothing's scheduled (never past the end of the loan) - with growth rates applied.</p>
                       </HealthCheckIndicator>
                     ) : (
-                      <div className="py-2 text-sm text-gray-400 dark:text-gray-500 italic">
+                      <div className="py-2 text-sm text-gray-500 dark:text-gray-400 italic">
                         Rental Yield: not enough data yet - add a House Rent/Room Rent income source.
                       </div>
                     )}
@@ -3795,7 +3795,7 @@ const PropertyInvestmentCalculator = () => {
                     <p className="mt-2">&lt;60 comfortably early, 60-67 reasonable, 67-70 cutting it close, ≥70 late - based on typical retirement age.</p>
                   </HealthCheckIndicator>
                 ) : (
-                  <div className="py-2 text-sm text-gray-400 dark:text-gray-500 italic">
+                  <div className="py-2 text-sm text-gray-500 dark:text-gray-400 italic">
                     Mortgage-Free Age: not enough data yet - add income, reduce expenses, or schedule a contribution.
                   </div>
                 ))}
@@ -3853,7 +3853,7 @@ const PropertyInvestmentCalculator = () => {
             </div>
 
             {monthlyNetBalance < 0 && (
-              <div className="mt-4 p-3 bg-red-100 dark:bg-red-900 rounded text-red-800 dark:text-red-400 text-xs">
+              <div className="mt-4 p-3 bg-red-100 dark:bg-red-900 rounded text-red-800 dark:text-red-200 text-xs">
                 ⚠️ You're in deficit. Cannot sustain this without extra savings.
               </div>
             )}
@@ -3873,7 +3873,7 @@ const PropertyInvestmentCalculator = () => {
 
           {/* Estimated time */}
           {(monthlyToOffset > 0 || totalScheduledOffset > 0) && (
-            <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg p-5 shadow-lg text-white">
+            <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-lg p-5 shadow-lg text-white">
               <h3 className="font-bold mb-3 text-lg">⏱️ Loan Simulation</h3>
               {projectionIsFlatBaseline && (
                 <p className="text-xs opacity-75 mb-3">
@@ -3916,7 +3916,7 @@ const PropertyInvestmentCalculator = () => {
                 </div>
               )}
               <div className="space-y-3">
-                <div className="bg-white/20 backdrop-blur rounded-lg p-3">
+                <div className="bg-black/20 backdrop-blur rounded-lg p-3">
                   <p className="text-sm opacity-90 mb-1">Time to pay off:</p>
                   <p className="text-3xl font-bold">
                     {loanSimulation.years < 100 ? loanSimulation.years.toFixed(1) : '30+'} years
@@ -3933,7 +3933,7 @@ const PropertyInvestmentCalculator = () => {
                   )}
                 </div>
 
-                <div className="bg-white/20 backdrop-blur rounded-lg p-3">
+                <div className="bg-black/20 backdrop-blur rounded-lg p-3">
                   <p className="text-sm opacity-90">Total interest paid:</p>
                   <p className="text-2xl font-bold">
                     ${Math.round(loanSimulation.totalInterest).toLocaleString()}
@@ -3946,7 +3946,7 @@ const PropertyInvestmentCalculator = () => {
                 </div>
 
                 {savingsInterestRate > 0 && (
-                  <div className="bg-white/20 backdrop-blur rounded-lg p-3">
+                  <div className="bg-black/20 backdrop-blur rounded-lg p-3">
                     <p className="text-sm opacity-90">Savings interest earned:</p>
                     <p className="text-2xl font-bold">
                       ${Math.round(loanSimulation.totalSavingsInterest).toLocaleString()}
@@ -3960,7 +3960,7 @@ const PropertyInvestmentCalculator = () => {
                     since this is a benefit, not a warning (unlike the red/amber
                     banners above). */}
                 {negativeGearingDisclosure && (
-                  <div className="bg-white/20 backdrop-blur rounded-lg p-3">
+                  <div className="bg-black/20 backdrop-blur rounded-lg p-3">
                     <p className="text-sm opacity-90">Negative gearing tax relief:</p>
                     <p className="text-2xl font-bold">
                       ${Math.round(negativeGearingDisclosure.totalBenefit).toLocaleString()}
@@ -3986,7 +3986,7 @@ const PropertyInvestmentCalculator = () => {
                   </div>
                 )}
 
-                <div className="bg-white/20 backdrop-blur rounded-lg p-3 text-xs">
+                <div className="bg-black/20 backdrop-blur rounded-lg p-3 text-xs">
                   <p className="font-semibold mb-1">💰 Savings vs no offset:</p>
                   <p>Without offset ({loanTermYears} years): ~${Math.round(noOffsetTotalInterest).toLocaleString()}</p>
                   <p className="text-yellow-300 font-bold">
@@ -4052,7 +4052,7 @@ const PropertyInvestmentCalculator = () => {
                 onChange={(e) => setTimelineMonth(Number(e.target.value))}
                 className="w-full h-3 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
               />
-              <div className="flex justify-between text-xs text-gray-400 dark:text-gray-500 mt-1">
+              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
                 <span>Start</span>
                 <span>Middle ({Math.round(loanSimulation.months / 2)})</span>
                 <span>End ({loanSimulation.months})</span>
@@ -4078,14 +4078,14 @@ const PropertyInvestmentCalculator = () => {
                   {/* PRIMARY STAT: NET EFFECTIVE BALANCE */}
                   <div className="bg-gradient-to-br from-gray-50 dark:from-gray-900 to-gray-100 dark:to-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 text-center shadow-sm">
                     <p className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1">Net Effective Balance</p>
-                    <p className="text-4xl font-extrabold text-blue-900 mb-2">
+                    <p className="text-4xl font-extrabold text-blue-900 dark:text-blue-300 mb-2">
                       ${snapshot.effectiveBalance.toLocaleString()}
                     </p>
                     <div className="flex justify-center gap-4 text-sm text-gray-500 dark:text-gray-400 flex-wrap">
                       <span className="flex items-center gap-1">🏦 Loan: ${snapshot.balance.toLocaleString()}</span>
-                      <span className="text-gray-300 dark:text-gray-600">|</span>
+                      <span className="text-gray-400">|</span>
                       <span className="flex items-center gap-1">💰 Offset: ${snapshot.offset.toLocaleString()}</span>
-                      <span className="text-gray-300 dark:text-gray-600">|</span>
+                      <span className="text-gray-400">|</span>
                       {/* TODO-80/136: the starting cash position, seeded from
                           cashRemaining at month 0. Since TODO-136 removed the
                           ongoing savings destination, this only ever grows by
@@ -4097,7 +4097,7 @@ const PropertyInvestmentCalculator = () => {
                           cover, which used to be silently floored to zero. */}
                       {snapshot.cashShortfall > 0 && (
                         <>
-                          <span className="text-gray-300 dark:text-gray-600">|</span>
+                          <span className="text-gray-400">|</span>
                           <span className="flex items-center gap-1 text-red-600 dark:text-red-400 font-medium">⚠️ Short: ${snapshot.cashShortfall.toLocaleString()}</span>
                         </>
                       )}
@@ -4106,7 +4106,7 @@ const PropertyInvestmentCalculator = () => {
                           would just repeat the purchase price forever. */}
                       {propertyGrowthRate !== 0 && (
                         <>
-                          <span className="text-gray-300 dark:text-gray-600">|</span>
+                          <span className="text-gray-400">|</span>
                           <span className="flex items-center gap-1">🏠 Value: ${snapshot.propertyValue.toLocaleString()}</span>
                         </>
                       )}
@@ -4115,7 +4115,7 @@ const PropertyInvestmentCalculator = () => {
                           repeating $0 row. */}
                       {etfInvestingActive && (
                         <>
-                          <span className="text-gray-300 dark:text-gray-600">|</span>
+                          <span className="text-gray-400">|</span>
                           <span className="flex items-center gap-1">📈 ETF: ${snapshot.etf.toLocaleString()}</span>
                         </>
                       )}
@@ -4199,7 +4199,7 @@ const PropertyInvestmentCalculator = () => {
                         title="Principal Paid (Direct)"
                       ></div>
                     </div>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 text-center">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 text-center">
                       (Green bar = Principal Paid + Money sitting in Offset)
                     </p>
                   </div>
@@ -4259,14 +4259,14 @@ const PropertyInvestmentCalculator = () => {
                               const status = classifyScheduleStatus(inc, timelineMonth);
                               if (status === 'future') return null;
                               return (
-                                <p key={`income-${inc.id}`} className={`truncate ${status === 'past' ? 'text-gray-400 dark:text-gray-500' : 'text-green-700 dark:text-green-400'}`}>
+                                <p key={`income-${inc.id}`} className={`truncate ${status === 'past' ? 'text-gray-500 dark:text-gray-400' : 'text-green-700 dark:text-green-400'}`}>
                                   • {inc.isShared !== undefined ? `${inc.isShared ? `Shared (${inc.numPeople} × $${Math.round(inc.amountPerPerson).toLocaleString()})` : 'Single Room'}` : inc.name}
                                   {status === 'past' && ' (Done)'}
                                 </p>
                               );
                             })}
                             {incomeSources.length === 0 && (
-                              <span className="italic text-gray-400 dark:text-gray-500">No house rent or income sources</span>
+                              <span className="italic text-gray-500 dark:text-gray-400">No house rent or income sources</span>
                             )}
                           </div>
                         </div>
@@ -4289,7 +4289,7 @@ const PropertyInvestmentCalculator = () => {
                             ))
                           }
                           {offsetContributions.filter(c => c.startMonth <= timelineMonth).length === 0 && (
-                            <span className="italic text-gray-400 dark:text-gray-500">No contributions yet</span>
+                            <span className="italic text-gray-500 dark:text-gray-400">No contributions yet</span>
                           )}
                         </div>
                       </div>
@@ -4303,14 +4303,14 @@ const PropertyInvestmentCalculator = () => {
                             if (status === 'future') return null;
 
                             return (
-                              <div key={exp.id} className={`flex justify-between items-center ${status === 'active' ? 'text-red-600 dark:text-red-400 font-bold' : 'text-gray-400 dark:text-gray-500'}`}>
+                              <div key={exp.id} className={`flex justify-between items-center ${status === 'active' ? 'text-red-600 dark:text-red-400 font-bold' : 'text-gray-500 dark:text-gray-400'}`}>
                                 <span>{exp.name} {status === 'past' && '(Done)'}</span>
                                 <span className="font-medium">${exp.amount}</span>
                               </div>
                             );
                           })}
                           {personalExpenseItems.filter(e => e.startMonth <= timelineMonth).length === 0 && (
-                            <span className="italic text-gray-400 dark:text-gray-500">No expenses recorded</span>
+                            <span className="italic text-gray-500 dark:text-gray-400">No expenses recorded</span>
                           )}
                         </div>
                       </div>
