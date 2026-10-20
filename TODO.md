@@ -7,6 +7,24 @@ optionally reuse in the commit message when you implement it.
 
 ## ✅ Completed
 
+- [x] **TODO-189: The scenario matrix's copy of App's wiring had fallen behind TODO-182/183/185**
+  From the calculation audit (2026-10-20). `purchaseHealthCheck.scenarios.test.js`
+  re-wires App.jsx's Day-1 and Stabilized figures by hand and its header says
+  the copy must stay identical, but it still read exact month 1
+  (`getActiveAmount`), raw per-payment income (no `toWeeklyEquivalent`) and an
+  uncapped stabilization month. No row moved because every row is
+  monthly-only, so the drift was invisible.
+  **Retrospective (PCALC-141):** `runScenario` now uses `getAveragedAmount` /
+  `getGrossAveragedAmount` over `toWeeklyEquivalent(incomeSources)` and passes
+  `maxMonth: totalMonths`, as App.jsx does; every pinned value is unchanged.
+  New test with no hand-derived figure: a yearly $1,200 bill plus a quarterly
+  $600 dividend must read exactly like $100/mo plus $200/mo on Day 1 and
+  Stabilized. Mutation: restoring the old wiring fails it (net balance off by
+  $1,300). The pinned numbers keep their origin as documented in the file
+  header (2026-08-17 audit, TODO-151 re-pin, per-row TODO notes). The copy
+  itself remains a known risk: extracting App's Day-1 block into a pure
+  function both could call would remove it.
+
 - [x] **TODO-188: Simple and Advanced had no money-figure parity check beyond the default scenario**
   From the calculation audit (2026-10-20). Simple mode is presentation only
   (every figure is computed in App.jsx), but it sums income and costs itself

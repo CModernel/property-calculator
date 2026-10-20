@@ -47,7 +47,8 @@ import {
   calculateMonthlyLandTax, calculateMonthlyPropertyExpenses,
   calculateTotalPropertyCost, calculateMonthlyFromWeekly, calculateMonthlyNetBalance,
 } from './loan';
-import { getActiveAmount } from './recurringAmount';
+import { getAveragedAmount } from './recurringAmount';
+import { toWeeklyEquivalent } from './incomeDenomination';
 import { RENTAL_INCOME_CATEGORIES } from './incomeCategories';
 import { estimateLmi } from './lmi';
 import { sumClosingCosts } from './closingCosts';
@@ -55,7 +56,7 @@ import { safePercentage } from './safePercentage';
 import { getStateModule } from './states';
 import { calculateTotalCashRequired, calculateLiquidSavings } from './totalCashRequired';
 import { calculateVacancyFactor } from './vacancyFactor';
-import { getGrossActiveAmount } from './grossIncome';
+import { getGrossAveragedAmount } from './grossIncome';
 import { findStabilizationMonth, resolveProjectedFinancials, worseOf } from './projectedHealthCheck';
 import {
   calculateEmergencyBufferMonths, classifyEmergencyBuffer,
@@ -120,21 +121,24 @@ function runScenario(overrides = {}) {
   });
   const totalPropertyCost = calculateTotalPropertyCost(monthlyPayment, monthlyPropertyExpenses);
 
-  const monthlyPersonalExpenses = getActiveAmount(c.personalExpenseItems, 1);
-  const weeklyIncome = getActiveAmount(c.incomeSources.filter((i) => !RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, c.effectiveTaxRate);
+  // TODO-182/185: App.jsx reads the monthly AVERAGE in force in month 1, over
+  // income converted once to weekly units (per-payment items x12/52).
+  const monthlyPersonalExpenses = getAveragedAmount(c.personalExpenseItems, 1);
+  const weeklyIncomeSources = toWeeklyEquivalent(c.incomeSources);
+  const weeklyIncome = getAveragedAmount(weeklyIncomeSources.filter((i) => !RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, c.effectiveTaxRate);
   // TODO-150: mirrors App.jsx's vacancy haircut. config.default.json has no
   // vacancyWeeksPerYear key at all - App.jsx supplies the default itself - so
   // this must fall back the same way or the factor is NaN and every row in the
   // MATRIX fails, rental income or not.
-  const weeklyRentalIncomeBeforeVacancy = getActiveAmount(c.incomeSources.filter((i) => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, c.effectiveTaxRate);
+  const weeklyRentalIncomeBeforeVacancy = getAveragedAmount(weeklyIncomeSources.filter((i) => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, c.effectiveTaxRate);
   const weeklyRentalIncome = weeklyRentalIncomeBeforeVacancy * calculateVacancyFactor(c.vacancyWeeksPerYear);
   const monthlyIncome = calculateMonthlyFromWeekly(weeklyIncome);
   const monthlyRentalIncome = calculateMonthlyFromWeekly(weeklyRentalIncome);
   // TODO-151: mirrors App.jsx's before-tax figures, used ONLY by Housing Cost
   // Ratio and Rental Yield. Must stay expression-for-expression identical to
   // App.jsx or the MATRIX silently pins something the app doesn't do.
-  const weeklyIncomeBeforeTax = getGrossActiveAmount(c.incomeSources.filter((i) => !RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, c.effectiveTaxRate);
-  const weeklyRentalIncomeBeforeTaxAndVacancy = getGrossActiveAmount(c.incomeSources.filter((i) => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, c.effectiveTaxRate);
+  const weeklyIncomeBeforeTax = getGrossAveragedAmount(weeklyIncomeSources.filter((i) => !RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, c.effectiveTaxRate);
+  const weeklyRentalIncomeBeforeTaxAndVacancy = getGrossAveragedAmount(weeklyIncomeSources.filter((i) => RENTAL_INCOME_CATEGORIES.includes(i.name)), 1, c.effectiveTaxRate);
   const monthlyIncomeBeforeTax = calculateMonthlyFromWeekly(weeklyIncomeBeforeTax);
   const monthlyRentalIncomeBeforeTax = calculateMonthlyFromWeekly(weeklyRentalIncomeBeforeTaxAndVacancy * calculateVacancyFactor(c.vacancyWeeksPerYear));
 
@@ -159,6 +163,8 @@ function runScenario(overrides = {}) {
   const interestRateField = steppedField(c.interestRate, c.interestRateChanges);
   const stabilizationMonth = findStabilizationMonth({
     incomeSources: c.incomeSources, personalExpenseItems: c.personalExpenseItems, expenseFields, interestRateField,
+    // TODO-183: capped at the loan term, as App.jsx does.
+    maxMonth: totalMonths,
   });
   const projected = resolveProjectedFinancials(stabilizationMonth, {
     incomeSources: c.incomeSources, personalExpenseItems: c.personalExpenseItems, expenseFields, interestRateField,
@@ -585,5 +591,36 @@ describe('Purchase Health Check Tier-1 indicators - scenario matrix (TODO-147)',
         expect(withRent({}, 45).rentalYield).toBeCloseTo((600 * 52) / 850000 * 100, 10);
       });
     });
+  });
+});
+
+// Every MATRIX row is monthly-only, so `runScenario` could fall behind App.jsx's
+// handling of quarterly/yearly/one-time items (TODO-182's monthly average,
+// TODO-185's per-payment income) without a single row moving - which is how it
+// stayed on the exact-month helpers through both. This pins that handling with
+// no hand-derived figure: a yearly bill and a quarterly per-payment income must
+// read exactly like the monthly items they average to, on Day 1 and Stabilized.
+describe('runScenario reads non-monthly items the way App.jsx does (TODO-182/185)', () => {
+  const forever = { startMonth: 1, endMonth: 360 };
+  const salary = { id: 1, name: 'Salary/Wages', amount: 1614, recurrence: 'monthly', ...forever };
+
+  it('a yearly $1,200 bill and a quarterly $600 dividend equal $100/mo and $200/mo', () => {
+    const perPayment = runScenario({
+      personalExpenseItems: [{ id: 1, name: 'Insurance', amount: 1200, recurrence: 'yearly', ...forever }],
+      incomeSources: [salary, { id: 2, name: 'Dividends', amount: 600, recurrence: 'quarterly', ...forever }],
+    });
+    const monthly = runScenario({
+      personalExpenseItems: [{ id: 1, name: 'Insurance', amount: 100, recurrence: 'monthly', ...forever }],
+      // Monthly income is weekly-denominated: $200/mo is 200 x 12/52 a week.
+      incomeSources: [salary, { id: 2, name: 'Dividends', amount: 200 * 12 / 52, recurrence: 'monthly', ...forever }],
+    });
+
+    for (const key of [
+      'monthlyNetBalance', 'emergencyBufferMonths', 'stabilizedEmergencyBufferMonths',
+      'housingCostRatio', 'stabilizedHousingCostRatio', 'stressTestSurvivedDelta', 'stabilizedStressTestSurvivedDelta',
+    ]) {
+      expect(perPayment[key], key).toBeCloseTo(monthly[key], 8);
+    }
+    expect(perPayment.stabilizationMonth).toBe(monthly.stabilizationMonth);
   });
 });
