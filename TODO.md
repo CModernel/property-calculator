@@ -7,6 +7,22 @@ optionally reuse in the commit message when you implement it.
 
 ## ✅ Completed
 
+- [x] **TODO-190: The header row overflowed a phone, so the whole page scrolled sideways**
+  Found by the Chrome review of the Simple version (2026-10-20), shipped with
+  PCALC-99's mode button. The title block and the shrink-0 button group
+  (Simple/Advanced + theme) could not fit one row at 390px or under: measured
+  in a 390px iframe, the page was 78px wider than its viewport in Simple and
+  58px in Advanced (148px / 128px at 320px); from 768px up it was fine. The
+  header was the only offender.
+  **Retrospective (PCALC-143):** the header row is `flex-col sm:flex-row`
+  (stacked below 640px, side by side from it) and the title block is
+  `min-w-0`. Re-measured in Chrome at 320, 375, 390, 640, 768, 1024 (and 1400)
+  in both modes: no overflow anywhere, and the buttons sit beside the title
+  from 768px up as before. jsdom has no layout, so the new test
+  (`App.headerLayout.test.jsx`) pins the two classes; removing either fails
+  it. Not covered: other phone-width layout problems below the fold were not
+  looked for beyond horizontal overflow.
+
 - [x] **TODO-180: Rethink the strategy grid and the "idle cash earns 0%" assumption now that the engine runs past payoff**
   Deferred from TODO-177 by user decision. Since TODO-177 the engine keeps
   simulating after payoff, but the 441-cell grid (`strategyComparison.js`,

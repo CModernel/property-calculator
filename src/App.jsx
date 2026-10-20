@@ -1310,8 +1310,11 @@ const PropertyInvestmentCalculator = () => {
 
   return (
     <div className="w-full max-w-7xl mx-auto p-4 bg-gradient-to-br from-slate-50 dark:from-slate-900 to-blue-50 dark:to-blue-950">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 mb-6 flex items-start justify-between gap-3">
-        <div>
+      {/* TODO-190: stacked below sm. Side by side, the shrink-0 button group
+          plus the title's minimum width overflowed a phone (the page scrolled
+          sideways at 390px and under). */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 mb-6 flex flex-col sm:flex-row items-start justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100 mb-2 flex items-center gap-3">
             <Home className="text-blue-600 dark:text-blue-400" size={36} />
             {stateModule.code} Property Investment Cash Flow Calculator
