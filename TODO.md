@@ -6774,41 +6774,43 @@ gives `totalInterest` **$645,389.22**.
 
 
 
-- [ ] **TODO-195: The app should open in Simple mode**
+- [ ] **TODO-195: The app should open in Simple mode** `[Sonnet, sin plan]`
   Default `uiMode` is Advanced (TODO-135). Per user request 2026-10-22, a first
   visit should show the simplified view. Small change; `App.uiMode.test.jsx`
   "defaults to Advanced" re-baselines with a comment. Plan mode not needed.
 
-- [ ] **TODO-196: Product rule - changes land in Advanced first, Simple is a subset**
+- [ ] **TODO-196: Product rule - changes land in Advanced first, Simple is a subset** `[Opus, plan mode]`
   Per user request 2026-10-22: unless stated otherwise, new work goes into the
   Advanced version and then shows up in Simple too. Simple is Advanced with
   less data; too much data is harder to use and easier to misread. Standing
   rule for every future TODO (also saved to memory).
 
-- [ ] **TODO-197: Label the Advanced ETF option "(Experimental)"**
+- [ ] **TODO-197: Label the Advanced ETF option "(Experimental)"** `[Sonnet, sin plan]`
   The ETF investing section and its strategy comparison should say they are
   experimental. Copy only. Plan mode not needed.
 
-- [ ] **TODO-198: The ETF strategy table overflows its box and is hard to read**
+- [ ] **TODO-198: The ETF strategy table overflows its box and is hard to read** `[Opus, plan mode]`
   The columns in "Strategy Comparison" (Switch, Allocation, Net worth, Risk,
   Interest paid, Crash test, Cash shortfall) run past the card's edge and read
   poorly. Fix the layout and consider showing fewer columns or a worked example.
   Plan mode with Opus, since the columns are part of the TODO-180 design.
 
-- [ ] **TODO-199: Audit every Advanced figure for usefulness, realism and simplicity**
+- [ ] **TODO-199: Audit every Advanced figure for usefulness, realism and simplicity** `[Opus, plan mode]`
   Per user request 2026-10-22: not everyone knows finance. Check each Advanced
   card: is it useful, is it realistic, what can be simplified or removed. Needs
   an Opus analysis first, then one TODO per decision. Plan mode.
 
-- [ ] **TODO-200: Review how ETF returns are taxed (accountant's claim)**
+- [ ] **TODO-200: ETF tax approximation - check the offset-vs-ETF switch point** `[Opus, plan mode]`
   The model taxes the ETF return at half the effective tax rate every month
-  (`offsetSimulation.js`, TODO-96/131) and never taxes a sale. An accountant
-  said holding an ETF is better than cash because it "doesn't pay tax". That is
-  not the full picture in Australia: distributions are taxed as income each
-  year, and capital gains are taxed when sold (50% discount after 12 months).
-  The offset is the tax-free one (it avoids loan interest). Needs an Opus
-  analysis of the model against those rules, with the franking and loss cases
-  listed. Plan mode.
+  (`offsetSimulation.js`, TODO-96/131) and never taxes a sale. User decision
+  2026-10-22: an average is good enough - no franking, no per-distribution
+  detail. What matters is the switch point: when to stop putting surplus into
+  the offset (tax-free) and start putting it into the ETF (taxed). The app
+  already reports a break-even return (`EtfReturnSensitivity.jsx`). Check that
+  its after-tax ETF return is a fair average, and that the switch point it
+  implies makes sense. Not in scope: the bank comparison (the bank path is not
+  modelled). Note the accountant's point: the ETF pays less tax than the bank
+  would on the same return, not zero tax.
 
 ---
 
