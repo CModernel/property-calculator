@@ -6812,6 +6812,48 @@ gives `totalInterest` **$645,389.22**.
   modelled). Note the accountant's point: the ETF pays less tax than the bank
   would on the same return, not zero tax.
 
+
+- [ ] **TODO-201: "Where am I now" snapshot - start the projection from an existing mortgage** `[Opus, plan mode]`
+  Idea from the user (2026-10-22): the app only models a purchase at month 0. Add
+  a starting state - months already elapsed, current loan balance, offset,
+  savings, ETF balance, property value - and simulate forward from it, with
+  only FUTURE events. Today the engine seeds loan, savings and property value
+  but not the offset or the ETF, and has no notion of elapsed time. Feasible
+  without touching the cash-flow maths (it is a different set of inputs to the
+  same loop); the work is the inputs, the remaining term and the UI. Decide
+  first whether the past is a form of numbers (recommended) or a replay of
+  events (much larger). Depends on TODO-204.
+
+- [ ] **TODO-202: Interest-rate path / "assume it is month X"** `[Opus, plan mode]`
+  Rates moved a lot this year and the future is unknowable. Scheduled rate
+  changes already exist (`interestRateChanges`); what is missing is a calendar
+  start so past changes can be entered as history and the projection can begin
+  "today". Same mechanism as TODO-201 (a start date plus elapsed months), so
+  plan them together. Keep the existing scheduled-change behaviour unchanged.
+
+- [ ] **TODO-203: Other uses of money - granny flat, renovation** `[Opus, plan mode, needs NSW research]`
+  Besides the ETF, model spending that creates income or a place to live rent
+  free: a granny flat (build cost, rent or avoided rent, NSW rules and tax
+  treatment of construction on a property). The tax rules must be researched
+  and checked, not assumed - they are not in the app today. Probably a new
+  kind of one-off expense plus a new income source linked to it.
+
+- [ ] **TODO-204: Architecture decision - keep the engine, or rebuild?** `[Opus, analysis only]`
+  User question 2026-10-22: given TODO-201 to 203 and 205, rebuild from zero,
+  keep the logic, or two apps (projection vs "already underway")? Working
+  recommendation, to be confirmed by the analysis: keep the engine (1177 tests,
+  reviewed maths) and add a starting-state layer; two apps would duplicate the
+  logic and drift apart (the scenario-matrix copy, TODO-189, already shows
+  how). A rebuild is only worth considering for multi-property (TODO-205).
+  Output: a written recommendation with the data-model change, no code.
+
+- [ ] **TODO-205: Second, third... property while already holding a mortgage** `[Opus, plan mode]`
+  The app assumes one property and one loan and offers First Home Buyer or
+  Investment. Someone buying their next property needs the existing loan(s),
+  equity, rent on the others, the effect on borrowing and on the offset, and
+  tax on a portfolio. Advanced-only. Needs the TODO-204 decision first because
+  it is the one item that may need a different data model.
+
 ---
 
 ## ⚪ LOW PRIORITY (Deprioritized - excluded from default TODO listings)
