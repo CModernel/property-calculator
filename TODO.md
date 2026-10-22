@@ -6854,6 +6854,52 @@ gives `totalInterest` **$645,389.22**.
   tax on a portfolio. Advanced-only. Needs the TODO-204 decision first because
   it is the one item that may need a different data model.
 
+
+- [ ] **TODO-206: Export / import a scenario as a file (backup)** `[Opus, plan mode]`
+  Today a scenario is saved only to this browser's localStorage (the 💾 Save
+  button, `scenarioStorage.js`, schema 11); clearing site data, another browser
+  or another device loses it. There is no file export/import. Add "Download
+  scenario" and "Load from file", reusing `serializeScenarioPayload` /
+  `parseScenarioPayload` and the existing schema migrations so an old file
+  still loads. Decide: one file with all scenarios or one per scenario, and what
+  an incompatible file says. Small-to-medium; likely the cheapest of the big
+  items, and it protects the user's data while everything else evolves.
+
+- [ ] **TODO-207: Mobile check and design pass** `[Opus, plan mode]`
+  Partly covered so far: the header (TODO-190) and tooltips (TODO-179/186)
+  were measured at 390px, and Tailwind responsive classes exist
+  (`sm:`/`md:`/`lg:`), but the app was never designed mobile-first and no full
+  pass was done. Review Simple, Advanced and the future wizard at 320/375/390/
+  768: tables (TODO-198), sliders, forms, tap targets, long figures. Needs the
+  visual test of TODO-209 to be worth doing.
+
+- [ ] **TODO-208: Optional friendly wizard (a third layer, after the rest is done)** `[Opus, analysis then plan mode]`
+  Idea from the user (2026-10-22), to analyse once development is finished and
+  the user is happy with the app: an OPTIONAL, very simplified wizard. One
+  question per screen, very few and easy options, nice-looking and pleasant to
+  use (good buttons and copy). At the end it shows the Simple view filled in,
+  with the option to go to Advanced. It is only another way of ENTERING data:
+  the same state and the same engine, no logic of its own and no effect on the
+  rest of the app. First decide which questions matter and which do not
+  (everything else keeps its default). Depends on TODO-195/196/199 (what Simple
+  shows) and TODO-207 (mobile).
+
+- [ ] **TODO-209: Visual test of Advanced, Simple and the wizard** `[Opus, plan mode]`
+  Per user request: once the work above lands, a visual check that each view
+  looks right, in light and dark and at phone and desktop widths. We have only
+  script-measured checks (contrast, overflow, tooltip placement), not
+  screenshots. Decide the mechanism (browser screenshots compared by eye, or an
+  automated visual-regression tool) and what is worth its quota.
+
+- [ ] **TODO-210: Review whether the tests really test what they say** `[Opus, audit]`
+  Per user request: a fresh review of the suite (1177 tests) for tests that
+  pass without checking anything or check something else (vacuous assertions,
+  mocks that hide the code under test, fixtures that cannot fail, names that no
+  longer match). Examples found along the way: TODO-183's "no Infinity/NaN"
+  test was vacuous; the scenario matrix tests a hand copy of App's wiring
+  (TODO-189). Write down every inconsistency found as its own entry; do not fix
+  in the same pass. Run on Opus (audit rule).
+
 ---
 
 ## ⚪ LOW PRIORITY (Deprioritized - excluded from default TODO listings)
